@@ -10058,8 +10058,8 @@ const CharacterSheetWrapper = ({
                     >
                       <div
                         style={{
-                          width: "80px",
-                          height: "80px",
+                          width: "150px",
+                          height: "150px",
                           borderRadius: "4px",
                           border: "2px solid #4b5563",
                           background: "#1f2937",
@@ -10080,7 +10080,7 @@ const CharacterSheetWrapper = ({
                             }}
                           />
                         ) : (
-                          <span style={{ color: "#4b5563", fontSize: "28px" }}>
+                          <span style={{ color: "#4b5563", fontSize: "48px" }}>
                             ?
                           </span>
                         )}
