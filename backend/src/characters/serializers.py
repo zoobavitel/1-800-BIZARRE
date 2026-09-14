@@ -1984,6 +1984,55 @@ class CharacterSerializer(serializers.ModelSerializer):
                         f"{budget} allowed). Take a playbook advance (+1 playbook "
                         "ability) before adding another."
                     )
+            # Post-chargen: removing XP-owned playbook abilities requires Respec.
+            from .services.sheet_patch_guard import character_in_chargen
+
+            if (
+                self.instance is not None
+                and not character_in_chargen(self.instance)
+                and new_nf < old_nf
+            ):
+                raise serializers.ValidationError(
+                    "Use Respec mode to remove XP-owned playbook abilities "
+                    "(refunds Available XP)."
+                )
+
+        # Post-chargen: clearing advancement-granted standards needs Respec.
+        if self.instance is not None and "standard_abilities" in self.initial_data:
+            from .services.sheet_patch_guard import character_in_chargen
+
+            if not character_in_chargen(self.instance):
+                old_std = set(
+                    self.instance.standard_abilities.values_list("id", flat=True)
+                )
+                new_std = set()
+                raw_std = self.initial_data.get("standard_abilities") or []
+                for item in raw_std:
+                    if hasattr(item, "pk"):
+                        new_std.add(item.pk)
+                    else:
+                        try:
+                            new_std.add(int(item))
+                        except (TypeError, ValueError):
+                            pass
+                # Also compare PrimaryKeyRelatedField resolved data when present
+                if "standard_abilities" in data:
+                    new_std = {getattr(a, "pk", a) for a in data["standard_abilities"]}
+                removed = old_std - new_std
+                if removed:
+                    grants = self.instance.advancement_ability_grants or []
+                    # Any removal of standards after chargen → Respec
+                    # (B→A grants and slot-bought standards are allocation-owned).
+                    baseline = self.instance.chargen_baseline or {}
+                    base_std = set(
+                        int(x) for x in (baseline.get("standard_ability_ids") or [])
+                    )
+                    xp_owned_removed = removed - base_std
+                    if xp_owned_removed or (removed and grants):
+                        raise serializers.ValidationError(
+                            "Use Respec mode to remove XP-owned standard abilities "
+                            "(refunds Available XP)."
+                        )
 
         heritage = data.get("heritage") or getattr(self.instance, "heritage", None)
         # Partial PATCH: merge M2M from instance when keys omitted.
@@ -2398,6 +2447,12 @@ class CharacterSerializer(serializers.ModelSerializer):
                 CharacterSpinAbility.objects.create(
                     character=character, spin_ability=sa
                 )
+
+        # Attach newly added non-foundation picks to open playbook-ability advances.
+        if hamon_ids is not None or spin_ids is not None:
+            from .services.respec import backfill_playbook_ability_picks
+
+            backfill_playbook_ability_picks(character)
 
         # Slower Recovery → 5-segment healing clock; else default 4
         try:

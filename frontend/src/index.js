@@ -55,6 +55,58 @@ const barStyles = {
     zIndex: 100,
     fontFamily: "var(--font-mono)",
     fontSize: "13px",
+    flexWrap: "wrap",
+    gap: "8px 12px",
+    width: "100%",
+    maxWidth: "100%",
+    boxSizing: "border-box",
+    minWidth: 0,
+  },
+  barLeft: {
+    display: "flex",
+    alignItems: "center",
+    gap: "12px",
+    flex: "1 1 220px",
+    minWidth: 0,
+    maxWidth: "100%",
+    flexWrap: "wrap",
+  },
+  barRight: {
+    display: "flex",
+    alignItems: "center",
+    gap: "12px",
+    flex: "0 1 auto",
+    minWidth: 0,
+    flexWrap: "wrap",
+    justifyContent: "flex-end",
+  },
+  brandLink: {
+    background: "none",
+    border: "none",
+    cursor: "pointer",
+    padding: 0,
+    fontSize: "26px",
+    fontWeight: 400,
+    color: "var(--hftf-text-cream)",
+    fontFamily: "var(--font-display)",
+    letterSpacing: "0.06em",
+    textDecoration: "none",
+    minWidth: 0,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+    maxWidth: "100%",
+  },
+  pageTitle: {
+    color: "var(--hftf-gold-muted)",
+    fontSize: "11px",
+    letterSpacing: "0.12em",
+    textTransform: "uppercase",
+    minWidth: 0,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+    maxWidth: "min(280px, 40vw)",
   },
   hamburger: {
     display: "flex",
@@ -65,6 +117,7 @@ const barStyles = {
     cursor: "pointer",
     padding: "8px",
     zIndex: 1001,
+    flexShrink: 0,
   },
   hamburgerLine: {
     display: "block",
@@ -94,6 +147,7 @@ const barStyles = {
     fontSize: "10px",
     letterSpacing: "0.1em",
     textTransform: "uppercase",
+    flexShrink: 0,
   },
   actionBtn: {
     display: "flex",
@@ -121,13 +175,14 @@ function AppBar({
 }) {
   const showRight = rightContent || onSearch || onOpenAccountMenu;
   return (
-    <header style={barStyles.bar}>
-      <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+    <header style={barStyles.bar} className="app-bar">
+      <div style={barStyles.barLeft}>
         <button
           type="button"
           onClick={onHamburgerClick}
           aria-label="Open menu"
           style={barStyles.hamburger}
+          className="appbar-hamburger"
         >
           <span
             style={{ ...barStyles.hamburgerLine, ...barStyles.hamburgerLine1 }}
@@ -147,18 +202,7 @@ function AppBar({
         <a
           href={buildRouteHref("home")}
           onClick={(e) => handleSpaNavClick(e, onHome)}
-          style={{
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-            padding: 0,
-            fontSize: "26px",
-            fontWeight: 400,
-            color: "var(--hftf-text-cream)",
-            fontFamily: "var(--font-display)",
-            letterSpacing: "0.06em",
-            textDecoration: "none",
-          }}
+          style={barStyles.brandLink}
           aria-label="Go to home"
         >
           <span style={{ color: "var(--hftf-purple)" }}>1(800)</span>
@@ -166,22 +210,15 @@ function AppBar({
         </a>
         {pageTitle && (
           <>
-            <span style={{ color: "var(--hftf-gold-muted)" }}>—</span>
-            <span
-              style={{
-                color: "var(--hftf-gold-muted)",
-                fontSize: "11px",
-                letterSpacing: "0.12em",
-                textTransform: "uppercase",
-              }}
-            >
-              {pageTitle}
+            <span style={{ color: "var(--hftf-gold-muted)", flexShrink: 0 }}>
+              —
             </span>
+            <span style={barStyles.pageTitle}>{pageTitle}</span>
           </>
         )}
       </div>
       {showRight && (
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+        <div style={barStyles.barRight}>
           {rightContent}
           {onSearch && (
             <button type="button" className="appbar-search-btn" onClick={onSearch}>
