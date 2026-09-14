@@ -43,6 +43,9 @@ const HomeFactionInlineEditor = ({
     notes: faction.notes || "",
   });
   const [imageFile, setImageFile] = useState(null);
+  const [imageUrlDraft, setImageUrlDraft] = useState(
+    () => String(faction.image_url || "").trim(),
+  );
   const [clearImage, setClearImage] = useState(false);
   const [cropOpen, setCropOpen] = useState(false);
   const [previewError, setPreviewError] = useState(false);
@@ -71,7 +74,13 @@ const HomeFactionInlineEditor = ({
 
   const imagePreview =
     blobPreview ||
-    (!clearImage && faction.image ? resolveMediaUrl(faction.image) : null);
+    (!clearImage
+      ? resolveMediaUrl(
+          (String(imageUrlDraft || "").trim()
+            ? imageUrlDraft
+            : faction.image || faction.image_url) || "",
+        ) || null
+      : null);
 
   useEffect(() => {
     setPreviewError(false);
@@ -113,12 +122,14 @@ const HomeFactionInlineEditor = ({
     e.target.value = "";
     if (!file) return;
     setClearImage(false);
+    setImageUrlDraft("");
     setImageFile(file);
     setPreviewError(false);
   };
 
   const handleClearImage = () => {
     setImageFile(null);
+    setImageUrlDraft("");
     setClearImage(true);
     setCropOpen(false);
     setPreviewError(false);
@@ -126,9 +137,18 @@ const HomeFactionInlineEditor = ({
 
   const handleCropApply = (file) => {
     setClearImage(false);
+    setImageUrlDraft("");
     setImageFile(file);
     setPreviewError(false);
     setCropOpen(false);
+  };
+
+  const handleImageUrlChange = (e) => {
+    const next = e.target.value;
+    setImageUrlDraft(next);
+    setImageFile(null);
+    setClearImage(false);
+    setPreviewError(false);
   };
 
   const handleSave = async () => {
@@ -150,8 +170,16 @@ const HomeFactionInlineEditor = ({
       };
       if (imageFile) {
         payload.imageFile = imageFile;
+        payload.image_url = "";
       } else if (clearImage) {
         payload.image = null;
+        payload.image_url = "";
+      } else {
+        const url = String(imageUrlDraft || "").trim();
+        const prev = String(faction.image_url || "").trim();
+        if (url !== prev || (url && faction.image)) {
+          payload.image_url = url;
+        }
       }
       const updated = await factionAPI.patchFaction(faction.id, payload);
       onSaved?.({ ...updated, npcs: npcList });
@@ -300,12 +328,23 @@ const HomeFactionInlineEditor = ({
           <button
             type="button"
             className="f-edit-photo-btn f-edit-photo-btn-clear"
-            disabled={!imagePreview && !clearImage}
+            disabled={!imagePreview && !clearImage && !imageUrlDraft}
             onClick={handleClearImage}
           >
             Clear
           </button>
         </div>
+        <label className="f-edit-field f-edit-field-wide f-edit-photo-url">
+          <span>Image URL</span>
+          <input
+            type="url"
+            inputMode="url"
+            placeholder="https://…"
+            value={imageUrlDraft}
+            onChange={handleImageUrlChange}
+            disabled={Boolean(imageFile)}
+          />
+        </label>
         {cropOpen && imagePreview && !previewError ? (
           <AvatarCropModal
             imageSrc={imagePreview}
