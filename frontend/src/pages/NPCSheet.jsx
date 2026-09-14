@@ -2497,8 +2497,8 @@ const NPCSheet = ({
                 >
                   <div
                     style={{
-                      width: "80px",
-                      height: "80px",
+                      width: "150px",
+                      height: "150px",
                       borderRadius: "50%",
                       border: "2px solid #4b2d8f",
                       background: "#1f1035",
@@ -2522,7 +2522,7 @@ const NPCSheet = ({
                         }}
                       />
                     ) : (
-                      <span style={{ color: "#4b5563", fontSize: "28px" }}>
+                      <span style={{ color: "#4b5563", fontSize: "48px" }}>
                         ?
                       </span>
                     )}

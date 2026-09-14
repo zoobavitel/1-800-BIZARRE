@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, {
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+  useRef,
+} from "react";
 import "../styles/Home.css";
 import {
   characterAPI,
@@ -27,6 +33,10 @@ import {
   isCampaignGmForUser,
   visibleFactionGroupsForHome,
 } from "../utils/homeCampaignSort";
+import {
+  HOME_CARD_GRID_FALLBACK_COLUMNS,
+  homeCardGridColumnCount,
+} from "../utils/homeCardGrid";
 import HomeSessionScatterChart from "../components/home/HomeSessionScatterChart";
 import HomeStatsBarChart from "../components/home/HomeStatsBarChart";
 import HomeStandCoin from "../components/home/HomeStandCoin";
@@ -101,6 +111,23 @@ const HomePage = ({
   const [showAllCampaigns, setShowAllCampaigns] = useState(false);
   const [showAllNpcs, setShowAllNpcs] = useState(false);
   const [showAllFactions, setShowAllFactions] = useState(false);
+  const splitLeftRef = useRef(null);
+  const [cardPreviewLimit, setCardPreviewLimit] = useState(
+    HOME_CARD_GRID_FALLBACK_COLUMNS,
+  );
+
+  useEffect(() => {
+    const el = splitLeftRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return undefined;
+
+    const update = () => {
+      setCardPreviewLimit(homeCardGridColumnCount(el.clientWidth));
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   const loadCharacters = useCallback(async () => {
     setLoading(true);
@@ -218,15 +245,17 @@ const HomePage = ({
       () =>
         visibleCharactersForHome(characters, campaigns, {
           expanded: showAllCharacters,
+          limit: cardPreviewLimit,
         }),
-      [characters, campaigns, showAllCharacters],
+      [characters, campaigns, showAllCharacters, cardPreviewLimit],
     );
   const { visible: visibleNpcs, hiddenCount: hiddenNpcCount } = useMemo(
     () =>
       visibleNpcsForHome(npcs, campaigns, {
         expanded: showAllNpcs,
+        limit: cardPreviewLimit,
       }),
-    [npcs, campaigns, showAllNpcs],
+    [npcs, campaigns, showAllNpcs, cardPreviewLimit],
   );
   const barChartRows = useMemo(() => buildBarChartRows(liveStats), [liveStats]);
   const barChartLoading = siteStatsLoading;
@@ -484,7 +513,7 @@ const HomePage = ({
       </section>
 
       <section className="split">
-        <div className="split-left">
+        <div className="split-left" ref={splitLeftRef}>
           <div className="split-label">Player</div>
           <div className="split-action-bar">
             <div className="split-title">Your Characters</div>
