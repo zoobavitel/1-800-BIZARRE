@@ -154,7 +154,7 @@ class CharacterPortraitUploadTests(TestCase):
     def test_rejects_oversized_upload(self):
         big = SimpleUploadedFile(
             "big.png",
-            b"x" * (2 * 1024 * 1024 + 1),
+            b"x" * (10 * 1024 * 1024 + 1),
             content_type="image/png",
         )
         response = self.client.patch(

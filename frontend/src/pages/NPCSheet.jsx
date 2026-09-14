@@ -24,6 +24,10 @@ import { HistoryBranchIcon } from "../components/position-effect/PositionEffectI
 import NpcsStandCoin from "../components/NpcsStandCoin";
 import AvatarCropModal from "../components/AvatarCropModal";
 import { clockWedgeFillColor } from "../features/character-sheet/utils/progressClockSegments";
+import {
+  compressImageForUpload,
+  PORTRAIT_MAX_BYTES,
+} from "../utils/compressImageForUpload";
 import "./NPCSheet.css";
 
 function clampCrewStandingValue(n) {
@@ -113,11 +117,20 @@ function npcClockIdsMatch(a, b) {
   return a === b || (a != null && b != null && Number(a) === Number(b));
 }
 
-/** Stable JSON fingerprint for NPC autosave dedupe (skip imageFile). */
+/** Stable JSON fingerprint for NPC autosave dedupe (File must affect the hash). */
 function npcAutosavePayloadFingerprint(payload) {
   try {
     const clone = { ...(payload || {}) };
-    delete clone.imageFile;
+    const file = clone.imageFile;
+    if (
+      file != null &&
+      (file instanceof File ||
+        (typeof Blob !== "undefined" && file instanceof Blob))
+    ) {
+      clone.imageFile = `pending:${file.name || "blob"}:${file.size}:${file.type || ""}`;
+    } else {
+      delete clone.imageFile;
+    }
     return JSON.stringify(clone);
   } catch {
     return `err-${Date.now()}`;
@@ -1483,17 +1496,31 @@ const NPCSheet = ({
     };
   }, [showNpcTrackingPanel, npcTrackingTab, campaignId, trackingSessionPick, name]);
 
-  const handleFileSelect = useCallback((e) => {
+  const handleFileSelect = useCallback(async (e) => {
     const file = e.target.files?.[0];
+    e.target.value = "";
     if (!file) return;
-    if (file.size > 2 * 1024 * 1024) {
-      setSaveErrorDetail("Portrait must be 2 MB or smaller.");
+    try {
+      const prepared = await compressImageForUpload(file, {
+        maxBytes: PORTRAIT_MAX_BYTES,
+      });
+      if (prepared.size > PORTRAIT_MAX_BYTES) {
+        setSaveErrorDetail(
+          `Portrait must be ${PORTRAIT_MAX_BYTES / (1024 * 1024)} MB or smaller.`,
+        );
+        setSaveStatus("error");
+        return;
+      }
+      setImageFile(prepared);
+      setImageUrl("");
+      setImagePreview(URL.createObjectURL(prepared));
+      setPortraitPreviewError(false);
+    } catch (err) {
+      setSaveErrorDetail(
+        err?.message || "Could not prepare portrait for upload.",
+      );
       setSaveStatus("error");
-      return;
     }
-    setImageFile(file);
-    setImageUrl("");
-    setImagePreview(URL.createObjectURL(file));
   }, []);
 
   const handleImageUrlPrompt = useCallback(() => {
@@ -1732,11 +1759,11 @@ const NPCSheet = ({
     }
     const payload = buildPayloadRef.current();
     const payloadHash = npcAutosavePayloadFingerprint(payload);
-    // Skip no-op PUTs (save→parent prop churn→heritage filter refs used to loop).
-    if (
+    const hashSkip =
       lastSavedPayloadHashRef.current != null &&
-      lastSavedPayloadHashRef.current === payloadHash
-    ) {
+      lastSavedPayloadHashRef.current === payloadHash;
+    // Skip no-op PUTs (save→parent prop churn→heritage filter refs used to loop).
+    if (hashSkip) {
       return;
     }
     // Don't auto-save a brand-new NPC that has never been persisted and
@@ -1763,7 +1790,14 @@ const NPCSheet = ({
         );
       }
       lastSavedPayloadHashRef.current = payloadHash;
-      if (payload.imageFile) setImageFile(null);
+      if (payload.imageFile) {
+        setImageFile(null);
+        const persisted = result?.image_url || result?.image || "";
+        if (persisted) {
+          setImagePreview(persisted);
+          setImageUrl(result?.image_url || "");
+        }
+      }
       setSaveStatus("saved");
       setSaveErrorDetail(null);
       setTimeout(
