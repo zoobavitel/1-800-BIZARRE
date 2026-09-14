@@ -1225,6 +1225,9 @@ const CharacterSheetWrapper = ({
       ? charCampaign?.active_session?.id
       : null);
   const characterId = character?.id;
+  const activeRespecCharacterIdRef = useRef(characterId);
+  const respecStatusRequestIdRef = useRef(0);
+  activeRespecCharacterIdRef.current = characterId;
 
   /** GM Session bulk editor: per-PC position/effect for this session (overrides defaults). */
   const sessionOverridePositionEffect = useMemo(() => {
@@ -3967,11 +3970,26 @@ const CharacterSheetWrapper = ({
       setRespecBlockMessage(null);
       return;
     }
+    const requestId = respecStatusRequestIdRef.current + 1;
+    respecStatusRequestIdRef.current = requestId;
+    const requestCharacterId = characterId;
     try {
-      const res = await characterAPI.respecStatus(characterId);
+      const res = await characterAPI.respecStatus(requestCharacterId);
+      if (
+        respecStatusRequestIdRef.current !== requestId ||
+        activeRespecCharacterIdRef.current !== requestCharacterId
+      ) {
+        return;
+      }
       setRespecAllowed(Boolean(res?.allowed));
       setRespecBlockMessage(res?.message || null);
     } catch {
+      if (
+        respecStatusRequestIdRef.current !== requestId ||
+        activeRespecCharacterIdRef.current !== requestCharacterId
+      ) {
+        return;
+      }
       setRespecAllowed(true);
       setRespecBlockMessage(null);
     }
