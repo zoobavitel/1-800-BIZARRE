@@ -403,6 +403,11 @@ export default function CharacterPage({
     preferNpcMode || initialNpcId != null ? MODES.NPC : MODES.CHARACTER,
   );
 
+  // Keep sheet mode aligned with #character vs #npcs without remounting the page.
+  useEffect(() => {
+    setMode(preferNpcMode ? MODES.NPC : MODES.CHARACTER);
+  }, [preferNpcMode]);
+
   // ── Character list (used by the "Open character…" dropdown) ─────────────
   const [characters, setCharacters] = useState([]);
   const [charactersLoading, setCharactersLoading] = useState(true);
@@ -1171,7 +1176,7 @@ export default function CharacterPage({
     ],
   );
 
-  // ── NPC logic: when initialNpcId is set (e.g. from #npcs/123), fetch and open that NPC
+  // ── NPC logic: when initialNpcId is set (e.g. from #npcs/123), fetch and open/focus that NPC
   useEffect(() => {
     if (initialNpcId == null || mode !== MODES.NPC) return;
     setNpcsLoading(true);
@@ -1180,14 +1185,21 @@ export default function CharacterPage({
       .then((npc) => {
         if (!npc) return;
         npcTabsInitialized.current = true;
-        const tab = {
-          tabId: nextTabId++,
-          npcId: npc.id,
-          npc,
-          label: npc.name || "New NPC",
-        };
-        setNpcTabs([tab]);
-        setActiveNpcTabId(tab.tabId);
+        setNpcTabs((prev) => {
+          const existing = prev.find((t) => t.npcId === npc.id);
+          if (existing) {
+            setActiveNpcTabId(existing.tabId);
+            return prev;
+          }
+          const tab = {
+            tabId: nextTabId++,
+            npcId: npc.id,
+            npc,
+            label: npc.name || "New NPC",
+          };
+          setActiveNpcTabId(tab.tabId);
+          return [...prev, tab];
+        });
         npcAPI
           .getNPCs(campaignId)
           .then((list) => setNpcs(list || []))

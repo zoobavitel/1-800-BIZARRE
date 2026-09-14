@@ -626,10 +626,13 @@ const App = () => {
             />
           </>
         )}
-        {currentPage === "character" && (
+        {(currentPage === "character" || currentPage === "npcs") && (
           <CharacterPage
             initialCharacterId={characterPageId}
             initialNewCampaignId={characterNewCampaignId}
+            initialNpcId={npcPageId}
+            initialNpcCampaignId={npcCampaignId}
+            preferNpcMode={currentPage === "npcs"}
             onRegisterNavigationGuard={setNavigationGuard}
           />
         )}
@@ -638,15 +641,6 @@ const App = () => {
             onNavigateToAbilities={(filter) =>
               handlePageChange("abilities", { filter })
             }
-          />
-        )}
-        {currentPage === "npcs" && (
-          <CharacterPage
-            initialCharacterId={null}
-            initialNpcId={npcPageId}
-            initialNpcCampaignId={npcCampaignId}
-            preferNpcMode
-            onRegisterNavigationGuard={setNavigationGuard}
           />
         )}
         {currentPage === "campaigns" && (
