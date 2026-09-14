@@ -4,6 +4,248 @@
  */
 export const PATCH_NOTES = [
   {
+    "date": "2026-09-13",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #151 from zoobavitel/feature/home-character-token-grid"
+        ]
+      },
+      {
+        "title": "Added",
+        "items": [
+          "show characters and NPCs as responsive token cards",
+          "full-bleed portraits on PC, NPC, and faction cards",
+          "use campaign image as full-bleed card background"
+        ]
+      },
+      {
+        "title": "Fixed",
+        "items": [
+          "show when load includes carried coin",
+          "align nav slugs with generated SRD section files",
+          "build section files from SRD_DEV"
+        ]
+      },
+      {
+        "title": "Style",
+        "items": [
+          "responsive layout for Game Rules on mobile"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-09-12",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #150 from zoobavitel/fix/rules-nav-skill-checks-slug",
+          "Merge pull request #148 from zoobavitel/fix/rules-nav-slug-alignment",
+          "Merge pull request #149 from zoobavitel/fix/rules-page-responsive-layout",
+          "Merge pull request #147 from zoobavitel/fix/rules-srd-dev-split",
+          "Merge pull request #146 from zoobavitel/feature/home-card-full-bleed-bg",
+          "Merge pull request #145 from zoobavitel/feature/home-campaign-card-bg",
+          "Merge pull request #144 from zoobavitel/feature/campaign-list-card-grid"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-09-11",
+    "version": null,
+    "sections": [
+      {
+        "title": "Fixed",
+        "items": [
+          "restore campaign card accessibility details",
+          "restore campaign card details and remove duplicate migration",
+          "add merge migration for characters app",
+          "merge 0114 campaign image and npc crew leaves",
+          "Your Factions only for GM campaigns",
+          "show site-wide counts in Live Stats and bar chart"
+        ]
+      },
+      {
+        "title": "Added",
+        "items": [
+          "show list as photo card grid",
+          "PC-style inventory, crew standing, crop, responsive",
+          "allowArmor prop for NPC kit list",
+          "crew FK, standing field, and data migrations",
+          "photos with crop upload",
+          "nest NPC cards in faction panels with crew merge"
+        ]
+      },
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #142 from zoobavitel/feature/npc-crew-standing-inventory",
+          "Merge pull request #141 from zoobavitel/feature/home-campaign-photos",
+          "Merge pull request #140 from zoobavitel/feature/home-site-wide-stats",
+          "Merge pull request #139 from zoobavitel/feature/campaign-roster-card-redesign",
+          "merge(master): resolve CampaignManagement roster conflict",
+          "Merge pull request #138 from zoobavitel/feature/home-character-preview-limit"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-09-10",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #137 from zoobavitel/fix/stand-coin-bump-after-chargen"
+        ]
+      },
+      {
+        "title": "Added",
+        "items": [
+          "preview first 3 lists and clickable roster cards",
+          "spend playbook XP via stand coin wedge click"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-09-09",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #136 from zoobavitel/feature/home-campaign-sort",
+          "Merge pull request #135 from zoobavitel/feature/clock-wedge-colors",
+          "Merge pull request #134 from zoobavitel/fix/pc-stand-coin-plan-decrease",
+          "Merge branch 'master' into fix/pc-stand-coin-plan-decrease",
+          "Merge branch 'master' into feature/clock-wedge-colors",
+          "Merge pull request #133 from zoobavitel/feature/garage-lair-upgrade",
+          "Merge pull request #132 from zoobavitel/feature/remove-character-bar",
+          "Merge pull request #131 from zoobavitel/feature/saturday-load-gate",
+          "Merge pull request #130 from zoobavitel/fix/inventory-legacy-load-zero",
+          "ci: block PRs on API/SSE performance budgets"
+        ]
+      },
+      {
+        "title": "Added",
+        "items": [
+          "sort and collapse campaign/character lists",
+          "red→green wedge colors on NPC and GM clocks",
+          "rename lair carriage upgrade to garage",
+          "move level/XP under portrait, drop character bar",
+          "Saturday-table load gate and merge SSE budgets"
+        ]
+      },
+      {
+        "title": "Fixed",
+        "items": [
+          "let GM lower PC Stand Coin grades",
+          "allow setting legacy item load to 0"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-09-08",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #129 from zoobavitel/docs/restore-swan-song",
+          "sync(srd): restore Swan Song and align hamon/spin catalogs to SRD_DEV",
+          "Merge pull request #128 from zoobavitel/fix/prod-media-serving",
+          "Merge pull request #127 from zoobavitel/feature/npc-required-heritage-defaults",
+          "Merge pull request #126 from zoobavitel/feature/close-friend-rival-fields",
+          "Merge pull request #124 from zoobavitel/feature/avatar-crop",
+          "Merge pull request #125 from zoobavitel/feature/campaign-roster-cards",
+          "Merge pull request #123 from zoobavitel/feature/inventory-item-edit",
+          "Fix prod SSE FD leak and guard action dots after XP spends."
+        ]
+      },
+      {
+        "title": "Documentation",
+        "items": [
+          "drop stale urls.py duplicate-admin note"
+        ]
+      },
+      {
+        "title": "Fixed",
+        "items": [
+          "serve uploads in prod and reject Discord CDN links"
+        ]
+      },
+      {
+        "title": "Added",
+        "items": [
+          "default-check required heritage picks",
+          "expose close friend and rival fields",
+          "roster cards, HFTF tokens, and portrait multipart fixes",
+          "add crop and zoom for profile picture"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-09-07",
+    "version": null,
+    "sections": [
+      {
+        "title": "Added",
+        "items": [
+          "allow editing inventory items after creation",
+          "upload portraits for PC, NPC, crew, faction, and user"
+        ]
+      },
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #122 from zoobavitel/feature/portrait-upload",
+          "Merge pull request #121 from zoobavitel/fix/home-avatar-portrait-fallback",
+          "Merge pull request #120 from zoobavitel/fix/home-avatar-portrait-fallback",
+          "Merge pull request #119 from zoobavitel/feature/progression-planner"
+        ]
+      },
+      {
+        "title": "Fixed",
+        "items": [
+          "resolve avatars and fall back to PC portraits",
+          "apply coin_grade from owned grade"
+        ]
+      },
+      {
+        "title": "Style",
+        "items": [
+          "wire inventory UI to HFTF theme tokens"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-09-05",
+    "version": null,
+    "sections": [
+      {
+        "title": "Fixed",
+        "items": [
+          "compact clock grid and stop tick flicker"
+        ]
+      },
+      {
+        "title": "Added",
+        "items": [
+          "plan-mode queue with B→A grants"
+        ]
+      }
+    ]
+  },
+  {
     "date": "2026-09-02",
     "version": null,
     "sections": [
@@ -473,15 +715,7 @@ export const PATCH_NOTES = [
           "ci(e2e): revert workflow to commit 7449823",
           "revert: restore files to 963a70d state",
           "ci(e2e): set Playwright install timeout to 5m",
-          "ci(e2e): lower Playwright install step timeout to 5m",
-          "ci(e2e): remove man-db before Playwright install-deps",
-          "ci(e2e): use with-deps on miss, deps-only on hit",
-          "ci(e2e): fix Playwright install hang on partial cache",
-          "ci(e2e): fix Playwright cache key and install gating",
-          "ci(e2e): serve prod build and fix Playwright base path",
-          "Enhance CI workflow by adding Playwright browser caching and OS dependencies installation. Updated Playwright installation command to avoid unnecessary dependencies. Increased timeout for UI smoke tests.",
-          "Remove SECURITY.md and temp_xp_script.py files; update README and frontend documentation for clarity and alignment with SRD UI touchpoints.",
-          "Remove MVP.md file and reorganize patch notes sections for clarity. Swapped \"Added\" and \"Other\" titles in patch notes to better reflect content. Consolidated merge requests under appropriate sections."
+          "ci(e2e): lower Playwright install step timeout to 5m"
         ]
       },
       {
@@ -489,287 +723,7 @@ export const PATCH_NOTES = [
         "items": [
           "align smoke test navigation with playwright baseURL",
           "navigate smoke test via PLAYWRIGHT_BASE_URL",
-          "resolve smoke URL relative to baseURL path",
-          "bump @playwright/test to 1.60.0 for Node 24.16+"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-05-14",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #86 from zoobavitel/feature/xp-trigger-toggle",
-          "Massive README sweep, revising Durability armor charge pool",
-          "Merge branch 'master' into feature/xp-trigger-toggle"
-        ]
-      },
-      {
-        "title": "Added",
-        "items": [
-          "0-dot desperate +2; drop encoded col"
-        ]
-      },
-      {
-        "title": "Tests",
-        "items": [
-          "expect STRUGGLE encode on complete, not Abilities roll"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-05-13",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #85 from zoobavitel/feature/xp-trigger-toggle",
-          "Merge pull request #84 from zoobavitel/feature/xp-trigger-toggle",
-          "Merge pull request #83 from zoobavitel/feature/xp-trigger-toggle",
-          "Merge pull request #82 from zoobavitel/feature/xp-trigger-toggle",
-          "Merge pull request #81 from zoobavitel/fix/sessions-filter-by-campaign",
-          "Merge pull request #80 from zoobavitel/fix/sessions-filter-by-campaign"
-        ]
-      },
-      {
-        "title": "Fixed",
-        "items": [
-          "hide NPC/GM 'special negate' blurb from PC sheet",
-          "remove redundant session?.id from refetchSessionPanel deps",
-          "toggle XP feeds BELIEFS/STRUGGLE/STANDOUT columns + Total",
-          "add charCampaign?.sessions to history-fetch deps",
-          "scope list endpoint to ?campaign=<id>"
-        ]
-      },
-      {
-        "title": "Documentation",
-        "items": [
-          "rename canonical SRD to 1-(800)-BIZARRE; drop root duplicates",
-          "prune obsolete AI reports and integration plans"
-        ]
-      },
-      {
-        "title": "Maintenance",
-        "items": [
-          "remove legacy root scripts and update docs"
-        ]
-      },
-      {
-        "title": "Added",
-        "items": [
-          "playbook-specific trigger + award attribution in session XP log",
-          "realtime session panel, crew autoattach, sheet fixes",
-          "attribution + delete-any on XP records; misc sheet polish",
-          "toggle end-of-session triggers from sheet + GM scorecard",
-          "inline faction editor and all-campaign roster"
-        ]
-      },
-      {
-        "title": "Refactored",
-        "items": [
-          "rename 'Manual session XP toggle' to 'Session XP trigger'"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-05-12",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #79 from zoobavitel/cursor/session-status-lifecycle",
-          "Merge pull request #78 from zoobavitel/cursor/session-status-lifecycle",
-          "Merge pull request #77 from zoobavitel/cursor/gm-xp-preview-clear-active-end-live",
-          "Merge pull request #76 from zoobavitel/feature/crew-xp-trigger-toggles",
-          "Merge pull request #75 from zoobavitel/cursor/stand-coin-srd-dev-sync"
-        ]
-      },
-      {
-        "title": "Added",
-        "items": [
-          "GM session roster and session management",
-          "GM session lifecycle from list and detail",
-          "GM live XP scorecard and Clear active end-live modal",
-          "session-end XP toggles and rep contributions",
-          "sync Session.status with campaign live slot"
-        ]
-      },
-      {
-        "title": "Style",
-        "items": [
-          "JoJo-inspired login and signup cards"
-        ]
-      },
-      {
-        "title": "Fixed",
-        "items": [
-          "refetch session list when live slot changes"
-        ]
-      },
-      {
-        "title": "Maintenance",
-        "items": [
-          "add migration 0080 for Crew JSONField help_text"
-        ]
-      },
-      {
-        "title": "Documentation",
-        "items": [
-          "add SRD dev copy and refresh patch notes"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-05-11",
-    "version": null,
-    "sections": [
-      {
-        "title": "Added",
-        "items": [
-          "session XP settle, sheet rolls, campaign GM UI",
-          "Stand recall row + stress button on Stand coin column",
-          "stand coin sync, session XP pool, collapsible GM rosters"
-        ]
-      },
-      {
-        "title": "Fixed",
-        "items": [
-          "open blank custom ability modal on + Custom",
-          "GM visible session clocks for players; set clock created_by",
-          "list all four Stand-coin roll stats in Stand pill",
-          "drop hero badge, tighten copy, readable coin hint",
-          "define new_sid after campaign save in perform_update",
-          "remove unused isRecoveryLinkedRoll (CI eslint)"
-        ]
-      },
-      {
-        "title": "Documentation",
-        "items": [
-          "SRD — Durability resist, stand recall, armor types, Stand Users",
-          "align canonical SRD with dev (stand coin, structure)"
-        ]
-      },
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #74 from zoobavitel/cursor/stand-coin-srd-dev-sync",
-          "Merge pull request #73 from zoobavitel/cursor/stand-coin-srd-dev-sync",
-          "Merge pull request #72 from zoobavitel/cursor/stand-coin-srd-dev-sync",
-          "Session GM: quick NPC create, dark selects, inline faction",
-          "Show NPC character/session history"
-        ]
-      },
-      {
-        "title": "Maintenance",
-        "items": [
-          "regenerate patch notes from git log",
-          "regenerate patch notes from git log"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-05-10",
-    "version": null,
-    "sections": [
-      {
-        "title": "Tests",
-        "items": [
-          "campaign player hits 403 not 404"
-        ]
-      },
-      {
-        "title": "Maintenance",
-        "items": [
-          "disguised_as_human migration + patch notes"
-        ]
-      },
-      {
-        "title": "Fixed",
-        "items": [
-          "GM sees hidden fortunes; manual fortune log"
-        ]
-      },
-      {
-        "title": "Added",
-        "items": [
-          "heal fortune, armor, recover-in-play UX"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-05-09",
-    "version": null,
-    "sections": [
-      {
-        "title": "Added",
-        "items": [
-          "deep-link GM session view; assist +1d pending; roll pool labels",
-          "SRD_DEV pools, durability vs stress, hero coin UI"
-        ]
-      },
-      {
-        "title": "Fixed",
-        "items": [
-          "session list captions; heuristic heal recover copy"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-05-08",
-    "version": null,
-    "sections": [
-      {
-        "title": "Maintenance",
-        "items": [
-          "sync sheet notes and SRD dev draft"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-05-07",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #71 from zoobavitel/fix/remove-character-planning-load"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-05-06",
-    "version": null,
-    "sections": [
-      {
-        "title": "Added",
-        "items": [
-          "enhance action dot budget calculations and add utility functions",
-          "per-track XP for level/minor advance; drop info cards"
-        ]
-      },
-      {
-        "title": "Fixed",
-        "items": [
-          "action dot budget includes action_dice_gained"
-        ]
-      },
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #70 from zoobavitel/cursor/session-xp-gm-sheet-history"
+          "resolve smoke URL relative to baseURL path"
         ]
       }
     ]

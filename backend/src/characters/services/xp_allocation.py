@@ -508,6 +508,9 @@ def apply_level_up(
             "'playbook_ability', or 'acquire_stand'."
         )
 
+    from characters.services.respec import ensure_chargen_baseline
+
+    ensure_chargen_baseline(character)
     before = _snapshot(character)
     track, pending = _consume_pending_or_spend(
         character,
@@ -876,6 +879,9 @@ def apply_minor_advance(character, *, xp_track, action, from_pool=False):
             "Minor advances only redeem insight, prowess, or resolve pendings."
         )
 
+    from characters.services.respec import ensure_chargen_baseline
+
+    ensure_chargen_baseline(character)
     before = _snapshot(character)
     track, pending = _consume_pending_or_spend(
         character,
@@ -924,6 +930,9 @@ def apply_buy_hp(character, *, xp_track=None, from_pool=False):
     if track != "heritage":
         raise XPAllocationError("Heritage HP advances redeem the heritage track only.")
 
+    from characters.services.respec import ensure_chargen_baseline
+
+    ensure_chargen_baseline(character)
     before = _snapshot(character)
     track, pending = _consume_pending_or_spend(
         character,
