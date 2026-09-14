@@ -43,7 +43,7 @@ export default function HomeFactionCard({
   onToggle,
   onDelete,
 }) {
-  const resolved = faction?.image ? resolveMediaUrl(faction.image) : "";
+  const resolved = resolveMediaUrl(faction?.image || faction?.image_url || "");
   const { hasImage, safeSrc, onError } = useHomeCardImage(resolved);
   const name = faction?.name || "faction";
   const rep = faction?.reputation ?? 0;

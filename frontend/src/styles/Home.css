@@ -1902,6 +1902,14 @@
   flex-wrap: wrap;
   gap: 6px;
 }
+.home-poc .f-edit-photo-url {
+  flex: 1 1 100%;
+  margin: 0;
+}
+.home-poc .f-edit-photo-url input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 .home-poc .f-edit-photo-btn {
   font-family: var(--font-mono);
   font-size: 10px;
