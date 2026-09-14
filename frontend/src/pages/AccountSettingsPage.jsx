@@ -250,6 +250,7 @@ export default function AccountSettingsPage() {
               <input
                 ref={avatarFileInputRef}
                 type="file"
+                aria-label="Avatar file"
                 accept="image/jpeg,image/png,image/webp,image/gif"
                 style={{ display: "none" }}
                 onChange={handleAvatarFileSelect}

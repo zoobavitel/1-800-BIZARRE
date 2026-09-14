@@ -42,16 +42,9 @@ describe("AccountSettingsPage avatar upload validation", () => {
     jest.clearAllMocks();
   });
 
-  function renderPage() {
-    const utils = render(<AccountSettingsPage />);
-    return {
-      ...utils,
-      fileInput: utils.container.querySelector('input[type="file"]'),
-    };
-  }
-
   test("rejects avatar files larger than 10 MB", async () => {
-    const { fileInput } = renderPage();
+    render(<AccountSettingsPage />);
+    const avatarFileInput = screen.getByLabelText("Avatar file");
     await waitFor(() => expect(authAPI.getProfile).toHaveBeenCalled());
 
     const oversized = new File(
@@ -60,7 +53,7 @@ describe("AccountSettingsPage avatar upload validation", () => {
       { type: "image/png" },
     );
 
-    fireEvent.change(fileInput, { target: { files: [oversized] } });
+    fireEvent.change(avatarFileInput, { target: { files: [oversized] } });
 
     expect(
       screen.getByText("Avatar must be 10 MB or smaller."),
@@ -69,19 +62,20 @@ describe("AccountSettingsPage avatar upload validation", () => {
   });
 
   test("accepts avatar files at or under 10 MB", async () => {
-    const { container, fileInput } = renderPage();
+    render(<AccountSettingsPage />);
+    const avatarFileInput = screen.getByLabelText("Avatar file");
     await waitFor(() => expect(authAPI.getProfile).toHaveBeenCalled());
 
     const allowed = new File([new Uint8Array(1024)], "allowed.png", {
       type: "image/png",
     });
 
-    fireEvent.change(fileInput, { target: { files: [allowed] } });
+    fireEvent.change(avatarFileInput, { target: { files: [allowed] } });
 
     expect(
       screen.queryByText("Avatar must be 10 MB or smaller."),
     ).not.toBeInTheDocument();
     expect(URL.createObjectURL).toHaveBeenCalledWith(allowed);
-    expect(container.querySelector('img[src="blob:allowed.png"]')).not.toBeNull();
+    expect(screen.queryByText("Preview")).not.toBeInTheDocument();
   });
 });

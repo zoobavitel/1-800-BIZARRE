@@ -1795,7 +1795,7 @@ const NPCSheet = ({
         const persisted = result?.image_url || result?.image || "";
         if (persisted) {
           setImagePreview(persisted);
-          setImageUrl(result?.image_url || "");
+          setImageUrl(persisted);
         }
       }
       setSaveStatus("saved");
