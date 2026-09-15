@@ -250,6 +250,46 @@ describe("mergeServerOwnedCharacterFields", () => {
     expect(next.trauma).toEqual({ COLD: false });
   });
 
+  test("overlays server coin and stash when those fields were not touched", () => {
+    const localCoin = {
+      ...local,
+      coin: [true, true, false, false],
+      coinFilled: 2,
+      stash: Array(40).fill(false).map((_, i) => i < 3),
+    };
+    const serverCoin = {
+      ...server,
+      coin: [true, true, true, true],
+      coinFilled: 4,
+      stash: Array(40).fill(false).map((_, i) => i < 5),
+    };
+    const next = mergeServerOwnedCharacterFields(localCoin, serverCoin, {});
+    expect(next.coin).toEqual([true, true, true, true]);
+    expect(next.coinFilled).toBe(4);
+    expect(next.stash.filter(Boolean).length).toBe(5);
+  });
+
+  test("keeps local coin and stash when the player touched those controls", () => {
+    const localCoin = {
+      ...local,
+      coin: [true, false, false, false],
+      coinFilled: 1,
+      stash: Array(40).fill(false).map((_, i) => i < 1),
+    };
+    const serverCoin = {
+      ...server,
+      coin: [true, true, true, true],
+      coinFilled: 4,
+      stash: Array(40).fill(false).map((_, i) => i < 5),
+    };
+    const next = mergeServerOwnedCharacterFields(localCoin, serverCoin, {
+      coin: true,
+      stash: true,
+    });
+    expect(next.coinFilled).toBe(1);
+    expect(next.stash.filter(Boolean).length).toBe(1);
+  });
+
   test("keeps local healing clock when recover roll marked healingClock touched", () => {
     const localWithHeal = {
       ...local,
@@ -280,6 +320,8 @@ describe("server-owned field hydration guards", () => {
     const { shouldSkipServerOwnedFieldHydration, SERVER_OWNED_FIELD_TOUCH_KEYS } =
       require("./characterUtils");
     expect(SERVER_OWNED_FIELD_TOUCH_KEYS).toContain("healingClock");
+    expect(SERVER_OWNED_FIELD_TOUCH_KEYS).toContain("coin");
+    expect(SERVER_OWNED_FIELD_TOUCH_KEYS).toContain("stash");
     expect(
       shouldSkipServerOwnedFieldHydration("healingClock", {
         fieldTouches: { healingClock: true },
