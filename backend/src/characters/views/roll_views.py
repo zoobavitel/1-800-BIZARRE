@@ -1,5 +1,6 @@
 """RollViewSet for dice roll history; GM can PATCH position/effect, create manual rolls, grant XP."""
 from django.db import models
+from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
@@ -26,7 +27,20 @@ class RollViewSet(viewsets.ModelViewSet):
     http_method_names = ['get', 'patch', 'post', 'delete', 'head', 'options']
 
     def get_queryset(self):
-        qs = Roll.objects.all().select_related('character', 'session', 'session__campaign')
+        xp_entries_qs = ExperienceTracker.objects.select_related(
+            "character"
+        ).order_by("pk")
+        qs = (
+            Roll.objects.all()
+            .select_related(
+                "character",
+                "session",
+                "session__campaign",
+                "rolled_by",
+                "recovery_target",
+            )
+            .prefetch_related(Prefetch("xp_entries", queryset=xp_entries_qs))
+        )
         campaign_id = self.request.query_params.get('campaign')
         session_id = self.request.query_params.get('session')
         character_id = self.request.query_params.get('character')
