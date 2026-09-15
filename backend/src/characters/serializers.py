@@ -1215,10 +1215,26 @@ class RollSerializer(serializers.ModelSerializer):
 
         return normalize_effect(value)
 
-    def get_xp_awarded(self, obj):
-        from .models import ExperienceTracker
+    def _xp_entries_for_roll(self, obj):
+        cached = getattr(obj, "_cached_xp_entries", None)
+        if cached is not None:
+            return cached
+        prefetched = getattr(obj, "_prefetched_objects_cache", {}).get("xp_entries")
+        if prefetched is not None:
+            entries = list(prefetched)
+        else:
+            from .models import ExperienceTracker
 
-        return ExperienceTracker.objects.filter(roll=obj).exists()
+            entries = list(
+                ExperienceTracker.objects.filter(roll=obj)
+                .select_related("character")
+                .order_by("pk")
+            )
+        obj._cached_xp_entries = entries
+        return entries
+
+    def get_xp_awarded(self, obj):
+        return bool(self._xp_entries_for_roll(obj))
 
     def _xp_display_track_for_trigger(self, roll, trigger: str):
         from .roll_helpers import xp_track_for_action_name
@@ -1234,24 +1250,20 @@ class RollSerializer(serializers.ModelSerializer):
 
     def _build_xp_award_details(self, obj):
         """All ExperienceTracker rows for this roll (ordered by pk); used by session UI."""
-        from .models import ExperienceTracker
+        cached = getattr(obj, "_cached_xp_award_details", None)
+        if cached is not None:
+            return cached
 
-        ets = list(
-            ExperienceTracker.objects.filter(roll=obj)
-            .select_related("character")
-            .order_by("pk")
-        )
+        ets = self._xp_entries_for_roll(obj)
         if not ets:
+            obj._cached_xp_award_details = []
             return []
+
         char_ids = {et.character_id for et in ets}
         shared_clocks = {}
         shared_all_total = 0
         if len(char_ids) == 1:
             char = ets[0].character
-            try:
-                char.refresh_from_db(fields=["xp_clocks"])
-            except Exception:
-                pass
             shared_clocks = dict(char.xp_clocks or {})
             shared_all_total = sum(int(v or 0) for v in shared_clocks.values())
 
@@ -1262,10 +1274,6 @@ class RollSerializer(serializers.ModelSerializer):
                 all_tracks_total = shared_all_total
             else:
                 c = et.character
-                try:
-                    c.refresh_from_db(fields=["xp_clocks"])
-                except Exception:
-                    pass
                 clocks = dict(c.xp_clocks or {})
                 all_tracks_total = sum(int(v or 0) for v in clocks.values())
             track = self._xp_display_track_for_trigger(obj, et.trigger)
@@ -1283,6 +1291,7 @@ class RollSerializer(serializers.ModelSerializer):
                     "description": (et.description or "")[:500],
                 }
             )
+        obj._cached_xp_award_details = out
         return out
 
     def get_xp_award_details(self, obj):
