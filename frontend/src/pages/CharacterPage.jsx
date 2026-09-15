@@ -889,6 +889,12 @@ export default function CharacterPage({
       if (!touches.trauma) {
         delete toSend.trauma;
       }
+      if (!touches.coin) {
+        delete toSend.coin_boxes;
+      }
+      if (!touches.stash) {
+        delete toSend.stash_slots;
+      }
       const withFile = {
         ...toSend,
         ...(isImageUploadPayload(frontend.imageFile)
@@ -928,6 +934,12 @@ export default function CharacterPage({
           if (!touches.trauma) {
             delete repairedBackend.trauma;
           }
+          if (!touches.coin) {
+            delete repairedBackend.coin_boxes;
+          }
+          if (!touches.stash) {
+            delete repairedBackend.stash_slots;
+          }
           const repairedWithFile = {
             ...repairedBackend,
             ...(isImageUploadPayload(frontend.imageFile)
@@ -958,7 +970,7 @@ export default function CharacterPage({
             saved.true_name || frontend.name,
           );
         let stashMerged = null;
-        if (saved?.id && Array.isArray(frontend.stash)) {
+        if (touches.stash && saved?.id && Array.isArray(frontend.stash)) {
           const crewPk =
             frontend.crewId != null && frontend.crewId !== ""
               ? parseInt(String(frontend.crewId), 10)
