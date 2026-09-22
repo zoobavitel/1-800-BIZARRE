@@ -445,6 +445,10 @@ const App = () => {
           : null;
       setCharacterPageId(characterId);
       setCharacterNewCampaignId(newCampaignId);
+      // Drop NPC route ids so CharacterPage remounts do not flash NPC mode
+      // from a leftover initialNpcId while preferNpcMode is false.
+      setNpcPageId(null);
+      setNpcCampaignId(null);
       setCampaignPageId(null);
       setCampaignSessionId(null);
       setAbilityFilter(null);
@@ -512,8 +516,10 @@ const App = () => {
       window.location.hash = buildRouteHash(page, { section });
     } else if (page === "npcs") {
       setCharacterPageId(null);
+      setCharacterNewCampaignId(null);
       setCampaignPageId(null);
       setCampaignSessionId(null);
+      setAbilityFilter(null);
       const npcId = payload?.npcId ?? null;
       const campaignId = payload?.campaignId ?? null;
       setNpcPageId(npcId);
