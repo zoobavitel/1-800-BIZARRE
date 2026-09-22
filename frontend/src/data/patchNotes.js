@@ -8,8 +8,24 @@ export const PATCH_NOTES = [
     "version": null,
     "sections": [
       {
+        "title": "Fixed",
+        "items": [
+          "enlarge SESSION Wanted label and stars",
+          "stop progress-clock tile remount on create",
+          "wrap CLOCKS in S.card like STRESS",
+          "toggle crew portrait editor on thumb click",
+          "enlarge crew portrait beside CREW NAME",
+          "stop crew portrait on faction reputation rows",
+          "hide redacted faction status, notes, and NPC count on cards",
+          "honor per-field visibility on sheet and home cards",
+          "stop PC/NPC sheet flicker from stale npc route id",
+          "SSE-safe refetch and clock create stability"
+        ]
+      },
+      {
         "title": "Added",
         "items": [
+          "move crew portrait beside CREW NAME",
           "faction reputation card grid for all campaign factions",
           "per-field GM visibility for tier, hold, rep, notes, NPCs",
           "crew portrait upload crop and clear parity",
@@ -18,16 +34,6 @@ export const PATCH_NOTES = [
           "move SESSION and CLOCKS to left column",
           "B→A standard picks use AbilityPickerPopover",
           "align Assist UI to same-crew SRD rule"
-        ]
-      },
-      {
-        "title": "Fixed",
-        "items": [
-          "stop crew portrait on faction reputation rows",
-          "hide redacted faction status, notes, and NPC count on cards",
-          "honor per-field visibility on sheet and home cards",
-          "stop PC/NPC sheet flicker from stale npc route id",
-          "SSE-safe refetch and clock create stability"
         ]
       },
       {
@@ -585,10 +591,7 @@ export const PATCH_NOTES = [
           "Merge pull request #106 from zoobavitel/feature/xp-available-pool-label",
           "Merge pull request #105 from zoobavitel/feature/xp-available-pool-label",
           "Merge pull request #101 from zoobavitel/fix/session-xp-settle-for-update-stand",
-          "Merge pull request #104 from zoobavitel/feature/npc-card-click-edit",
-          "Merge origin/master into fix/session-xp-settle-for-update-stand",
-          "Merge pull request #102 from zoobavitel/feature/xp-hybrid-rules-align",
-          "Merge pull request #103 from zoobavitel/feature/npc-clock-edit-segments"
+          "Merge pull request #104 from zoobavitel/feature/npc-card-click-edit"
         ]
       },
       {
@@ -605,15 +608,13 @@ export const PATCH_NOTES = [
           "ticks allocate from free pool",
           "expect heritage undo clamp at track cap",
           "keep Available XP usable without active session",
-          "show free-pool Available XP, not track sum",
-          "add migration for LEVEL_UP_HERITAGE / BUY_HP choices"
+          "show free-pool Available XP, not track sum"
         ]
       },
       {
         "title": "Tests",
         "items": [
-          "align XP delete test with sheet AUTO guard",
-          "expect STRUGGLE settle to free pool"
+          "align XP delete test with sheet AUTO guard"
         ]
       },
       {
@@ -628,8 +629,7 @@ export const PATCH_NOTES = [
           "untick XP tracks refunds free pool",
           "add manual XP to free pool",
           "add sheet edit undo/redo + XP/GM separation",
-          "Take advance on full XP tracks",
-          "open NPC edit on card click"
+          "Take advance on full XP tracks"
         ]
       }
     ]
