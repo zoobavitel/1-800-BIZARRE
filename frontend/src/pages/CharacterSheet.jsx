@@ -22257,8 +22257,53 @@ const CharacterSheetWrapper = ({
         {activeMode === "CREW MODE" && (
           <div>
             <div style={S.card}>
-              <div style={S.g2}>
-                <div>
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 12,
+                  alignItems: "flex-start",
+                }}
+              >
+                <div style={{ flexShrink: 0 }}>
+                  {crewPortraitSrc && !crewPortraitPreviewError ? (
+                    <img
+                      src={crewPortraitSrc}
+                      alt=""
+                      crossOrigin="anonymous"
+                      style={{
+                        width: 64,
+                        height: 64,
+                        objectFit: "cover",
+                        borderRadius: 6,
+                        border: "1px solid #4b5563",
+                        background: "#111827",
+                      }}
+                      onError={() => setCrewPortraitPreviewError(true)}
+                      onLoad={() => setCrewPortraitPreviewError(false)}
+                    />
+                  ) : (
+                    <div
+                      style={{
+                        width: 64,
+                        height: 64,
+                        borderRadius: 6,
+                        border: "1px solid #4b5563",
+                        background: "#111827",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: "#6b7280",
+                        fontSize: 22,
+                        fontWeight: "bold",
+                      }}
+                      aria-hidden="true"
+                    >
+                      {(charData.crew || "C").trim().charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                </div>
+                <div style={{ flex: "1 1 200px", minWidth: 0 }}>
                   <span style={S.lbl}>CREW NAME</span>
                   <input
                     style={S.inp}
@@ -22271,6 +22316,186 @@ const CharacterSheetWrapper = ({
                   />
                 </div>
               </div>
+              {charData.crewId && canEditSheet ? (
+                <div
+                  style={{
+                    marginTop: 10,
+                    padding: 10,
+                    borderRadius: 6,
+                    border: "1px solid #374151",
+                    background: "#0d1117",
+                  }}
+                >
+                  <span style={{ ...S.lbl, fontSize: "10px" }}>
+                    Portrait (file or HTTPS URL)
+                  </span>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: 10,
+                      alignItems: "flex-start",
+                      marginTop: 8,
+                    }}
+                  >
+                    <div style={{ flex: "1 1 200px", minWidth: 0 }}>
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/gif"
+                        style={{
+                          fontSize: 11,
+                          color: "#d1d5db",
+                          maxWidth: "100%",
+                        }}
+                        disabled={crewPortraitSaving}
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          e.target.value = "";
+                          if (!file) return;
+                          await applyCrewPortraitFile(file);
+                        }}
+                      />
+                      <div
+                        style={{
+                          display: "flex",
+                          flexWrap: "wrap",
+                          gap: 6,
+                          marginTop: 6,
+                        }}
+                      >
+                        <button
+                          type="button"
+                          disabled={
+                            crewPortraitSaving ||
+                            !crewPortraitSrc ||
+                            crewPortraitPreviewError
+                          }
+                          onClick={() => setCrewPortraitCropOpen(true)}
+                          style={{
+                            ...S.btnGhost,
+                            fontSize: 10,
+                            opacity:
+                              !crewPortraitSrc || crewPortraitPreviewError
+                                ? 0.5
+                                : 1,
+                          }}
+                        >
+                          Crop
+                        </button>
+                        <button
+                          type="button"
+                          disabled={
+                            crewPortraitSaving ||
+                            (!crewPortraitSrc && !crewPortraitUrlDraft)
+                          }
+                          onClick={() => clearCrewPortrait()}
+                          style={{ ...S.btnGhost, fontSize: 10 }}
+                        >
+                          Clear
+                        </button>
+                      </div>
+                      <div
+                        style={{
+                          display: "flex",
+                          flexWrap: "wrap",
+                          gap: 6,
+                          marginTop: 8,
+                          alignItems: "center",
+                        }}
+                      >
+                        <input
+                          type="url"
+                          style={{
+                            ...S.inp,
+                            flex: "1 1 160px",
+                            minWidth: 0,
+                            fontSize: 11,
+                          }}
+                          value={crewPortraitUrlDraft}
+                          onChange={(e) => {
+                            setCrewPortraitUrlDraft(e.target.value);
+                            setCrewPortraitMsg(null);
+                          }}
+                          placeholder="https://example.com/crew-photo.jpg"
+                          disabled={crewPortraitSaving}
+                        />
+                        <button
+                          type="button"
+                          style={{ ...S.btn, fontSize: 11 }}
+                          disabled={crewPortraitSaving}
+                          onClick={async () => {
+                            if (!charData.crewId) return;
+                            const next = String(
+                              crewPortraitUrlDraft || "",
+                            ).trim();
+                            if (!next) return;
+                            setCrewPortraitSaving(true);
+                            setCrewPortraitMsg(null);
+                            try {
+                              await crewAPI.patchCrew(charData.crewId, {
+                                image_url: next,
+                                image: null,
+                              });
+                              const d = await crewAPI.getCrew(
+                                charData.crewId,
+                              );
+                              setCrewData((p) => ({
+                                ...p,
+                                image: d.image ?? "",
+                                image_url: d.image_url ?? "",
+                              }));
+                              setCrewPortraitUrlDraft(
+                                String(d.image_url || "").trim(),
+                              );
+                              setCrewPortraitPreviewError(false);
+                              setCrewPortraitMsg({
+                                ok: true,
+                                text: "Portrait URL saved.",
+                              });
+                            } catch (err) {
+                              setCrewPortraitMsg({
+                                ok: false,
+                                text:
+                                  err?.message ||
+                                  "Could not save (HTTPS URL required).",
+                              });
+                            } finally {
+                              setCrewPortraitSaving(false);
+                            }
+                          }}
+                        >
+                          {crewPortraitSaving ? "Saving…" : "Save URL"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  {crewPortraitCropOpen &&
+                  crewPortraitSrc &&
+                  !crewPortraitPreviewError ? (
+                    <AvatarCropModal
+                      imageSrc={crewPortraitSrc}
+                      onCancel={() => setCrewPortraitCropOpen(false)}
+                      onApply={(file) => {
+                        setCrewPortraitCropOpen(false);
+                        void applyCrewPortraitFile(file, {
+                          successText: "Portrait cropped.",
+                        });
+                      }}
+                    />
+                  ) : null}
+                  {crewPortraitMsg ? (
+                    <div
+                      style={{
+                        marginTop: 6,
+                        fontSize: 10,
+                        color: crewPortraitMsg.ok ? "#34d399" : "#f87171",
+                      }}
+                    >
+                      {crewPortraitMsg.text}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
               <div
                 style={{
                   marginTop: "12px",
@@ -22290,224 +22515,6 @@ const CharacterSheetWrapper = ({
                   Standing with campaign factions (-3 hostile, 0 neutral, +3
                   allied). Hidden factions are GM-only until revealed.
                 </div>
-                {charData.crewId && canEditSheet ? (
-                  <div
-                    style={{
-                      marginBottom: 10,
-                      padding: 10,
-                      borderRadius: 6,
-                      border: "1px solid #374151",
-                      background: "#0d1117",
-                    }}
-                  >
-                    <span style={{ ...S.lbl, fontSize: "10px" }}>
-                      Crew portrait (upload or HTTPS URL)
-                    </span>
-                    <div
-                      style={{
-                        display: "flex",
-                        flexWrap: "wrap",
-                        gap: 10,
-                        alignItems: "flex-start",
-                        marginTop: 8,
-                      }}
-                    >
-                      <div style={{ flexShrink: 0 }}>
-                        {crewPortraitSrc && !crewPortraitPreviewError ? (
-                          <img
-                            src={crewPortraitSrc}
-                            alt=""
-                            crossOrigin="anonymous"
-                            style={{
-                              width: 64,
-                              height: 64,
-                              objectFit: "cover",
-                              borderRadius: 6,
-                              border: "1px solid #4b5563",
-                              background: "#111827",
-                            }}
-                            onError={() => setCrewPortraitPreviewError(true)}
-                            onLoad={() => setCrewPortraitPreviewError(false)}
-                          />
-                        ) : (
-                          <div
-                            style={{
-                              width: 64,
-                              height: 64,
-                              borderRadius: 6,
-                              border: "1px solid #4b5563",
-                              background: "#111827",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              color: "#6b7280",
-                              fontSize: 22,
-                              fontWeight: "bold",
-                            }}
-                            aria-hidden="true"
-                          >
-                            {(charData.crew || "C").trim().charAt(0).toUpperCase()}
-                          </div>
-                        )}
-                      </div>
-                      <div style={{ flex: "1 1 200px", minWidth: 0 }}>
-                        <input
-                          type="file"
-                          accept="image/jpeg,image/png,image/webp,image/gif"
-                          style={{
-                            fontSize: 11,
-                            color: "#d1d5db",
-                            maxWidth: "100%",
-                          }}
-                          disabled={crewPortraitSaving}
-                          onChange={async (e) => {
-                            const file = e.target.files?.[0];
-                            e.target.value = "";
-                            if (!file) return;
-                            await applyCrewPortraitFile(file);
-                          }}
-                        />
-                        <div
-                          style={{
-                            display: "flex",
-                            flexWrap: "wrap",
-                            gap: 6,
-                            marginTop: 6,
-                          }}
-                        >
-                          <button
-                            type="button"
-                            disabled={
-                              crewPortraitSaving ||
-                              !crewPortraitSrc ||
-                              crewPortraitPreviewError
-                            }
-                            onClick={() => setCrewPortraitCropOpen(true)}
-                            style={{
-                              ...S.btnGhost,
-                              fontSize: 10,
-                              opacity:
-                                !crewPortraitSrc || crewPortraitPreviewError
-                                  ? 0.5
-                                  : 1,
-                            }}
-                          >
-                            Crop
-                          </button>
-                          <button
-                            type="button"
-                            disabled={
-                              crewPortraitSaving ||
-                              (!crewPortraitSrc && !crewPortraitUrlDraft)
-                            }
-                            onClick={() => clearCrewPortrait()}
-                            style={{ ...S.btnGhost, fontSize: 10 }}
-                          >
-                            Clear
-                          </button>
-                        </div>
-                        <div
-                          style={{
-                            display: "flex",
-                            flexWrap: "wrap",
-                            gap: 6,
-                            marginTop: 8,
-                            alignItems: "center",
-                          }}
-                        >
-                          <input
-                            type="url"
-                            style={{
-                              ...S.inp,
-                              flex: "1 1 160px",
-                              minWidth: 0,
-                              fontSize: 11,
-                            }}
-                            value={crewPortraitUrlDraft}
-                            onChange={(e) => {
-                              setCrewPortraitUrlDraft(e.target.value);
-                              setCrewPortraitMsg(null);
-                            }}
-                            placeholder="https://example.com/crew-photo.jpg"
-                            disabled={crewPortraitSaving}
-                          />
-                          <button
-                            type="button"
-                            style={{ ...S.btn, fontSize: 11 }}
-                            disabled={crewPortraitSaving}
-                            onClick={async () => {
-                              if (!charData.crewId) return;
-                              const next = String(
-                                crewPortraitUrlDraft || "",
-                              ).trim();
-                              if (!next) return;
-                              setCrewPortraitSaving(true);
-                              setCrewPortraitMsg(null);
-                              try {
-                                await crewAPI.patchCrew(charData.crewId, {
-                                  image_url: next,
-                                  image: null,
-                                });
-                                const d = await crewAPI.getCrew(
-                                  charData.crewId,
-                                );
-                                setCrewData((p) => ({
-                                  ...p,
-                                  image: d.image ?? "",
-                                  image_url: d.image_url ?? "",
-                                }));
-                                setCrewPortraitUrlDraft(
-                                  String(d.image_url || "").trim(),
-                                );
-                                setCrewPortraitPreviewError(false);
-                                setCrewPortraitMsg({
-                                  ok: true,
-                                  text: "Portrait URL saved.",
-                                });
-                              } catch (err) {
-                                setCrewPortraitMsg({
-                                  ok: false,
-                                  text:
-                                    err?.message ||
-                                    "Could not save (HTTPS URL required).",
-                                });
-                              } finally {
-                                setCrewPortraitSaving(false);
-                              }
-                            }}
-                          >
-                            {crewPortraitSaving ? "Saving…" : "Save URL"}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                    {crewPortraitCropOpen &&
-                    crewPortraitSrc &&
-                    !crewPortraitPreviewError ? (
-                      <AvatarCropModal
-                        imageSrc={crewPortraitSrc}
-                        onCancel={() => setCrewPortraitCropOpen(false)}
-                        onApply={(file) => {
-                          setCrewPortraitCropOpen(false);
-                          void applyCrewPortraitFile(file, {
-                            successText: "Portrait cropped.",
-                          });
-                        }}
-                      />
-                    ) : null}
-                    {crewPortraitMsg ? (
-                      <div
-                        style={{
-                          marginTop: 6,
-                          fontSize: 10,
-                          color: crewPortraitMsg.ok ? "#34d399" : "#f87171",
-                        }}
-                      >
-                        {crewPortraitMsg.text}
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
                 {crewFactionRowsForDisplay.length === 0 ? (
                   <div style={{ fontSize: "12px", color: "#6b7280" }}>
                     {(crewCampaignFactions || []).length === 0 ? (
