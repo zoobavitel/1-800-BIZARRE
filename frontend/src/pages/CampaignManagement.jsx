@@ -12,6 +12,7 @@ import {
   resolveMediaUrl,
   equipmentAPI,
 } from "../features/character-sheet";
+import { normalizeListResponse } from "../features/character-sheet/services/api";
 import { EQUIPMENT_CATEGORY_OPTIONS, categoryLabel } from "../features/character-sheet/utils/loadoutUtils";
 import { isGmManagedProgressClock } from "../features/character-sheet/utils/progressClockVisibility";
 import { useAuth } from "../features/auth";
@@ -3763,24 +3764,112 @@ function ClockManager({
   const handleCreate = async () => {
     setCreating(true);
     setError(null);
+    // #region agent log
+    fetch("http://127.0.0.1:7375/ingest/a7e247cd-73b3-4e22-b7b4-93518d0cbf34", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Debug-Session-Id": "a44a5c",
+      },
+      body: JSON.stringify({
+        sessionId: "a44a5c",
+        location: "CampaignManagement.jsx:ClockManager:handleCreate:start",
+        message: "clock create started",
+        data: {
+          campaignId,
+          sessionId,
+          createName: createName.trim() || "New Clock",
+          createType,
+          createSegments,
+        },
+        timestamp: Date.now(),
+        hypothesisId: "E",
+      }),
+    }).catch(() => {});
+    // #endregion
     try {
-      await progressClockAPI.createProgressClock({
+      const created = await progressClockAPI.createProgressClock({
         campaign: campaignId,
         session: sessionId,
         name: createName.trim() || "New Clock",
         clock_type: createType,
         max_segments: createSegments,
       });
-      const list = await progressClockAPI.getProgressClocks({
-        campaign: campaignId,
-        session: sessionId,
-      });
-      setClocks(list || []);
+      // #region agent log
+      fetch("http://127.0.0.1:7375/ingest/a7e247cd-73b3-4e22-b7b4-93518d0cbf34", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Debug-Session-Id": "a44a5c",
+        },
+        body: JSON.stringify({
+          sessionId: "a44a5c",
+          location: "CampaignManagement.jsx:ClockManager:handleCreate:created",
+          message: "clock create API ok",
+          data: {
+            createdId: created?.id ?? null,
+            createdSession: created?.session ?? null,
+            createdCampaign: created?.campaign ?? null,
+          },
+          timestamp: Date.now(),
+          hypothesisId: "A",
+        }),
+      }).catch(() => {});
+      // #endregion
+      const list = normalizeListResponse(
+        await progressClockAPI.getProgressClocks({
+          campaign: campaignId,
+          session: sessionId,
+        }),
+      );
+      const merged =
+        created?.id != null && !list.some((c) => c.id === created.id)
+          ? [...list, created]
+          : list;
+      // #region agent log
+      fetch("http://127.0.0.1:7375/ingest/a7e247cd-73b3-4e22-b7b4-93518d0cbf34", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Debug-Session-Id": "a44a5c",
+        },
+        body: JSON.stringify({
+          sessionId: "a44a5c",
+          location: "CampaignManagement.jsx:ClockManager:handleCreate:list",
+          message: "clock list after create",
+          data: {
+            listCount: list.length,
+            mergedCount: merged.length,
+            createdId: created?.id ?? null,
+          },
+          timestamp: Date.now(),
+          hypothesisId: "B",
+        }),
+      }).catch(() => {});
+      // #endregion
+      setClocks(merged);
       setCreateName("");
       setCreateSegments(4);
       setCreateType("CUSTOM");
       setShowCreate(false);
     } catch (e) {
+      // #region agent log
+      fetch("http://127.0.0.1:7375/ingest/a7e247cd-73b3-4e22-b7b4-93518d0cbf34", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Debug-Session-Id": "a44a5c",
+        },
+        body: JSON.stringify({
+          sessionId: "a44a5c",
+          location: "CampaignManagement.jsx:ClockManager:handleCreate:error",
+          message: "clock create failed",
+          data: { errorMessage: e?.message ?? String(e) },
+          timestamp: Date.now(),
+          hypothesisId: "A",
+        }),
+      }).catch(() => {});
+      // #endregion
       setError(e.message);
     } finally {
       setCreating(false);
@@ -3872,6 +3961,7 @@ function ClockManager({
             </div>
             <div style={{ display: "flex", gap: "8px" }}>
               <button
+                type="button"
                 onClick={handleCreate}
                 style={S.btnPrimary}
                 disabled={creating}
@@ -3879,6 +3969,7 @@ function ClockManager({
                 {creating ? "Creating..." : "Create"}
               </button>
               <button
+                type="button"
                 onClick={() => {
                   setShowCreate(false);
                   setCreateName("");
@@ -5099,50 +5190,125 @@ function SessionDetail({
   // Used both for the initial mount/session-switch effect and for the realtime
   // campaign-events stream so any teammate's roll, clock tick, sheet save, or
   // XP toggle reflects here without a manual refresh.
-  const refetchSessionPanel = useCallback(async () => {
-    if (!session?.id) return;
-    const sid = session.id;
-    const cid = campaign?.id;
-    await Promise.all([
-      sessionAPI
-        .getSession(sid)
-        .then(setSessionData)
-        .catch(() => setSessionData(session)),
-      rollAPI
-        .getRolls({ session: sid })
-        .then(setRolls)
-        .catch(() => setRolls([])),
-      cid != null
-        ? progressClockAPI
-            .getProgressClocks({ campaign: cid, session: sid })
-            .then(setClocks)
-            .catch(() => setClocks([]))
-        : Promise.resolve(),
-      crewAPI
-        .getCrews()
-        .then((list) =>
-          setCrews(
-            cid != null
-              ? list?.filter((c) => c.campaign === cid) || []
-              : [],
-          ),
-        )
-        .catch(() => setCrews([])),
-      characterAPI
-        .getCharacters()
-        .then((list) =>
-          setCharacters(
-            cid != null
-              ? list?.filter((c) => c.campaign === cid) || []
-              : [],
-          ),
-        )
-        .catch(() => setCharacters([])),
-    ]);
-  }, [session, campaign?.id]);
+  const refetchSessionPanel = useCallback(
+    async (source = "unknown", sseReason = null) => {
+      if (!session?.id) return;
+      const sid = session.id;
+      const cid = campaign?.id;
+      const includeHeavy =
+        source === "mount" ||
+        source === "manual" ||
+        sseReason === "character" ||
+        sseReason === "crew" ||
+        sseReason === "campaign" ||
+        sseReason === "npc" ||
+        sseReason === "faction";
+      const t0 = Date.now();
+      // #region agent log
+      fetch("http://127.0.0.1:7375/ingest/a7e247cd-73b3-4e22-b7b4-93518d0cbf34", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Debug-Session-Id": "a44a5c",
+        },
+        body: JSON.stringify({
+          sessionId: "a44a5c",
+          location: "CampaignManagement.jsx:refetchSessionPanel:start",
+          message: "session panel refetch started",
+          data: { source, sseReason, includeHeavy, sid, cid },
+          timestamp: Date.now(),
+          hypothesisId: "F",
+        }),
+      }).catch(() => {});
+      // #endregion
+      let rollsRaw = null;
+      let clocksRaw = null;
+      let charsRaw = null;
+      const tasks = [
+        sessionAPI
+          .getSession(sid)
+          .then(setSessionData)
+          .catch(() => setSessionData(session)),
+        rollAPI
+          .getRolls({ session: sid })
+          .then((data) => {
+            rollsRaw = data;
+            setRolls(normalizeListResponse(data));
+          })
+          .catch(() => setRolls([])),
+        cid != null
+          ? progressClockAPI
+              .getProgressClocks({ campaign: cid, session: sid })
+              .then((data) => {
+                clocksRaw = data;
+                setClocks(normalizeListResponse(data));
+              })
+              .catch(() => setClocks([]))
+          : Promise.resolve(),
+      ];
+      if (includeHeavy) {
+        tasks.push(
+          crewAPI
+            .getCrews()
+            .then((list) =>
+              setCrews(
+                cid != null
+                  ? normalizeListResponse(list).filter(
+                      (c) => c.campaign === cid,
+                    ) || []
+                  : [],
+              ),
+            )
+            .catch(() => setCrews([])),
+          characterAPI
+            .getCharacters()
+            .then((list) => {
+              charsRaw = list;
+              setCharacters(
+                cid != null
+                  ? normalizeListResponse(list).filter(
+                      (c) => c.campaign === cid,
+                    ) || []
+                  : [],
+              );
+            })
+            .catch(() => setCharacters([])),
+        );
+      }
+      await Promise.all(tasks);
+      // #region agent log
+      fetch("http://127.0.0.1:7375/ingest/a7e247cd-73b3-4e22-b7b4-93518d0cbf34", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Debug-Session-Id": "a44a5c",
+        },
+        body: JSON.stringify({
+          sessionId: "a44a5c",
+          location: "CampaignManagement.jsx:refetchSessionPanel:done",
+          message: "session panel refetch finished",
+          data: {
+            source,
+            sseReason,
+            includeHeavy,
+            durationMs: Date.now() - t0,
+            rollsCount: normalizeListResponse(rollsRaw).length,
+            clocksCount: normalizeListResponse(clocksRaw).length,
+            charsTotal: Array.isArray(charsRaw)
+              ? normalizeListResponse(charsRaw).length
+              : null,
+          },
+          timestamp: Date.now(),
+          hypothesisId: "F",
+        }),
+      }).catch(() => {});
+      // #endregion
+    },
+    [session?.id, campaign?.id],
+  );
 
   useEffect(() => {
-    refetchSessionPanel();
+    refetchSessionPanel("mount");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.id, campaign?.id, campaign?.wanted_stars]);
 
@@ -5152,11 +5318,11 @@ function SessionDetail({
   useEffect(() => {
     if (!campaign?.id || !session?.id) return undefined;
     let pending = null;
-    const schedule = () => {
+    const schedule = (reason) => {
       if (pending) return;
       pending = setTimeout(() => {
         pending = null;
-        refetchSessionPanel();
+        refetchSessionPanel("sse", reason);
       }, 350);
     };
     const unsubscribe = subscribeCampaignEvents(campaign.id, {
@@ -5173,7 +5339,7 @@ function SessionDetail({
     if (!session?.id) return undefined;
     const onVis = () => {
       if (document.visibilityState !== "visible") return;
-      void refetchSessionPanel();
+      void refetchSessionPanel("visibility");
     };
     document.addEventListener("visibilitychange", onVis);
     return () => document.removeEventListener("visibilitychange", onVis);
@@ -5184,7 +5350,7 @@ function SessionDetail({
     if (!session?.id) return undefined;
     const id = window.setInterval(() => {
       if (document.visibilityState !== "visible") return;
-      void refetchSessionPanel();
+      void refetchSessionPanel("interval");
     }, SESSION_PANEL_SYNC_INTERVAL_MS);
     return () => window.clearInterval(id);
   }, [session?.id, refetchSessionPanel]);
@@ -5277,6 +5443,24 @@ function SessionDetail({
     }
     setSessionManualXpSyncReady(false);
     (async () => {
+      const xpT0 = Date.now();
+      // #region agent log
+      fetch("http://127.0.0.1:7375/ingest/a7e247cd-73b3-4e22-b7b4-93518d0cbf34", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Debug-Session-Id": "a44a5c",
+        },
+        body: JSON.stringify({
+          sessionId: "a44a5c",
+          location: "CampaignManagement.jsx:sessionManualXp:start",
+          message: "manual xp sync started",
+          data: { charCount: chars.length, sid },
+          timestamp: Date.now(),
+          hypothesisId: "G",
+        }),
+      }).catch(() => {});
+      // #endregion
       const pairs = await Promise.all(
         chars.map(async (ch) => {
           const raw = await experienceTrackerAPI
@@ -5289,6 +5473,23 @@ function SessionDetail({
       if (cancelled) return;
       setSessionManualXpByChar(Object.fromEntries(pairs));
       setSessionManualXpSyncReady(true);
+      // #region agent log
+      fetch("http://127.0.0.1:7375/ingest/a7e247cd-73b3-4e22-b7b4-93518d0cbf34", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Debug-Session-Id": "a44a5c",
+        },
+        body: JSON.stringify({
+          sessionId: "a44a5c",
+          location: "CampaignManagement.jsx:sessionManualXp:done",
+          message: "manual xp sync finished",
+          data: { charCount: chars.length, durationMs: Date.now() - xpT0 },
+          timestamp: Date.now(),
+          hypothesisId: "G",
+        }),
+      }).catch(() => {});
+      // #endregion
     })();
     return () => {
       cancelled = true;
@@ -5304,7 +5505,6 @@ function SessionDetail({
   const sessionXpAllocationPanelMode = useMemo(() => {
     const roster = campaignChars || [];
     if (!roster.length) return "no_roster";
-    if (!sessionManualXpSyncReady) return "loading";
     const rollList = rolls || [];
     if (
       rollList.length === 0 &&
@@ -5313,7 +5513,7 @@ function SessionDetail({
       return "empty_session";
     }
     return "table";
-  }, [campaignChars, sessionManualXpSyncReady, rolls, endLiveRowsWithManual]);
+  }, [campaignChars, rolls, endLiveRowsWithManual]);
 
   const sessionXpEntriesSortedForScorecard = useMemo(() => {
     const raw = sessionData?.xp_entries;
@@ -6264,9 +6464,10 @@ function SessionDetail({
                 No PCs in this campaign roster.
               </div>
             ) : null}
-            {sessionXpAllocationPanelMode === "loading" ? (
-              <div style={{ color: "var(--text-dim)", fontSize: "12px", marginBottom: "4px" }}>
-                Loading session XP summary…
+            {!sessionManualXpSyncReady &&
+            sessionXpAllocationPanelMode === "table" ? (
+              <div style={{ color: "var(--text-dim)", fontSize: "11px", marginBottom: "4px" }}>
+                Updating manual track XP totals…
               </div>
             ) : null}
             {sessionXpAllocationPanelMode === "empty_session" ? (
@@ -6590,7 +6791,7 @@ function SessionDetail({
         manualXpSaving={manualXpSaving}
         onManualXpGrant={handleManualXpGrant}
         onSessionCharactersRefresh={refreshSessionCharacters}
-        onSessionPanelRefresh={refetchSessionPanel}
+        onSessionPanelRefresh={() => refetchSessionPanel("manual")}
         user={user}
       />
 
@@ -6867,6 +7068,24 @@ export default function CampaignManagement({
   const loadCampaigns = useCallback(async () => {
     setLoading(true);
     setError(null);
+    const t0 = Date.now();
+    // #region agent log
+    fetch("http://127.0.0.1:7375/ingest/a7e247cd-73b3-4e22-b7b4-93518d0cbf34", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Debug-Session-Id": "a44a5c",
+      },
+      body: JSON.stringify({
+        sessionId: "a44a5c",
+        location: "CampaignManagement.jsx:loadCampaigns:start",
+        message: "load campaigns started",
+        data: {},
+        timestamp: Date.now(),
+        hypothesisId: "I",
+      }),
+    }).catch(() => {});
+    // #endregion
     try {
       const [list, invs] = await Promise.all([
         campaignAPI.getCampaigns(),
@@ -6874,6 +7093,27 @@ export default function CampaignManagement({
       ]);
       setCampaigns(list || []);
       setInvitations(invs || []);
+      // #region agent log
+      fetch("http://127.0.0.1:7375/ingest/a7e247cd-73b3-4e22-b7b4-93518d0cbf34", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Debug-Session-Id": "a44a5c",
+        },
+        body: JSON.stringify({
+          sessionId: "a44a5c",
+          location: "CampaignManagement.jsx:loadCampaigns:done",
+          message: "load campaigns finished",
+          data: {
+            durationMs: Date.now() - t0,
+            campaignCount: Array.isArray(list) ? list.length : null,
+            invitationCount: Array.isArray(invs) ? invs.length : null,
+          },
+          timestamp: Date.now(),
+          hypothesisId: "I",
+        }),
+      }).catch(() => {});
+      // #endregion
     } catch (err) {
       setError(err.message || "Failed to load campaigns");
       setCampaigns([]);
