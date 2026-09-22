@@ -21,6 +21,7 @@ import SessionGMManagementPanels from "../components/session/SessionGMManagement
 import ProgressClock from "../components/ProgressClock";
 import { buildRouteHref, handleSpaNavClick } from "../utils/spaNavigation";
 import AvatarCropModal from "../components/AvatarCropModal";
+import CampaignFactionEditor from "../components/campaign/CampaignFactionEditor";
 import HomeCardThumb from "../components/home/HomeCardThumb";
 import { compressImageForUpload } from "../utils/compressImageForUpload";
 import {
@@ -477,6 +478,7 @@ function buildCampaignRosterCards(campaign) {
   const gm = campaign?.gm;
   const gmId = gm?.id;
   const cards = [];
+  const showGmAssignCard = !!campaign?.allow_character_assignment;
 
   const gmChars = campaignCharacters.filter((ch) => ch.user_id === gmId);
   if (gm) {
@@ -489,7 +491,8 @@ function buildCampaignRosterCards(campaign) {
           character: ch,
         });
       });
-    } else {
+    } else if (showGmAssignCard) {
+      // Empty GM "No character assigned" card only when EDIT CAMPAIGN opt-in is on.
       cards.push({
         key: `gm-empty-${gmId}`,
         user: gm,
@@ -925,6 +928,8 @@ function CampaignFactionPanel({
   onDragLeavePanel,
   onDropOnPanel,
   onNpcDragEnd,
+  isEditing = false,
+  editor = null,
 }) {
   const factionId = faction?.id;
   const title = faction ? faction.name : "No faction";
@@ -966,7 +971,7 @@ function CampaignFactionPanel({
           alignItems: "center",
           gap: 10,
           flexWrap: "wrap",
-          marginBottom: collapsed ? 0 : 10,
+          marginBottom: collapsed && !isEditing ? 0 : 10,
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
@@ -1025,7 +1030,9 @@ function CampaignFactionPanel({
           </div>
         </div>
         <div style={S.row}>
-          {(npcs || []).length === 0 && typeof onToggleCollapsed === "function" ? (
+          {!isEditing &&
+          (npcs || []).length === 0 &&
+          typeof onToggleCollapsed === "function" ? (
             <button
               type="button"
               onClick={onToggleCollapsed}
@@ -1067,7 +1074,9 @@ function CampaignFactionPanel({
         </div>
       </div>
 
-      {!collapsed ? (
+      {isEditing ? (
+        editor
+      ) : !collapsed ? (
         <>
           {faction?.notes ? (
             <div
@@ -1894,11 +1903,6 @@ function CampaignDetail({
       if (f) {
         factionEditFiredRef.current = true;
         startFactionEdit(f);
-        requestAnimationFrame(() => {
-          document
-            .getElementById(`faction-panel-${f.id}`)
-            ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-        });
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2115,10 +2119,36 @@ function CampaignDetail({
       reputation: 0,
       notes: "",
       visible_to_players: true,
+      players_see_tier: true,
+      players_see_hold: true,
+      players_see_reputation: true,
+      players_see_notes: true,
+      players_see_npcs: true,
       image: null,
       imageFile: null,
     });
-  const startFactionEdit = (f) =>
+  const cancelFactionForm = () => {
+    setFactionForm(null);
+    setFactionError(null);
+    setFactionAddNpcId("");
+  };
+
+  const scrollFactionEditorIntoView = (factionId) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const editorEl = document.getElementById(
+          `faction-editor-${factionId}`,
+        );
+        const panelEl = document.getElementById(`faction-panel-${factionId}`);
+        (editorEl || panelEl)?.scrollIntoView({
+          behavior: "smooth",
+          block: "nearest",
+        });
+      });
+    });
+  };
+
+  const startFactionEdit = (f) => {
     setFactionForm({
       id: f.id,
       name: f.name,
@@ -2128,10 +2158,17 @@ function CampaignDetail({
       reputation: f.reputation,
       notes: f.notes || "",
       visible_to_players: f.visible_to_players !== false,
+      players_see_tier: f.players_see_tier !== false,
+      players_see_hold: f.players_see_hold !== false,
+      players_see_reputation: f.players_see_reputation !== false,
+      players_see_notes: f.players_see_notes !== false,
+      players_see_npcs: f.players_see_npcs !== false,
       image: f.image || null,
       imageFile: null,
       npcs: f.npcs || [],
     });
+    scrollFactionEditorIntoView(f.id);
+  };
 
   const [factionAddNpcId, setFactionAddNpcId] = useState("");
   const handleAddNpcToFaction = async () => {
@@ -2254,6 +2291,11 @@ function CampaignDetail({
       notes: f.notes || "",
       visible_to_players:
         f.visible_to_players !== undefined ? !!f.visible_to_players : true,
+      players_see_tier: f.players_see_tier !== false,
+      players_see_hold: f.players_see_hold !== false,
+      players_see_reputation: f.players_see_reputation !== false,
+      players_see_notes: f.players_see_notes !== false,
+      players_see_npcs: f.players_see_npcs !== false,
       campaign: campaign.id,
     };
     if (f.imageFile) {
@@ -2398,6 +2440,7 @@ function CampaignDetail({
       image: campaign.image || null,
       imageFile: null,
       clearImage: false,
+      allow_character_assignment: !!campaign.allow_character_assignment,
     });
 
   const handleCampaignEditSave = async () => {
@@ -2406,6 +2449,7 @@ function CampaignDetail({
       const payload = {
         name: editForm.name.trim(),
         description: editForm.description || "",
+        allow_character_assignment: !!editForm.allow_character_assignment,
       };
       if (editForm.imageFile) {
         payload.imageFile = await compressImageForUpload(editForm.imageFile);
@@ -2591,6 +2635,43 @@ function CampaignDetail({
                 }
               />
             </div>
+            <label
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                gap: 8,
+                marginBottom: 12,
+                fontSize: 12,
+                color: "var(--text-muted)",
+                cursor: "pointer",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={!!editForm.allow_character_assignment}
+                onChange={(e) =>
+                  setEditForm((p) => ({
+                    ...p,
+                    allow_character_assignment: e.target.checked,
+                  }))
+                }
+                style={{ marginTop: 2 }}
+              />
+              <span>
+                Show GM on Players &amp; Characters roster
+                <span
+                  style={{
+                    display: "block",
+                    fontSize: 11,
+                    color: "var(--text-dim)",
+                    marginTop: 2,
+                  }}
+                >
+                  When on, the GM appears as a roster card (Create new / Assign
+                  existing if none). Off by default. Player cards unchanged.
+                </span>
+              </span>
+            </label>
             <div style={S.row}>
               <button onClick={handleCampaignEditSave} style={S.btnPrimary}>
                 Save
@@ -3162,13 +3243,11 @@ function CampaignDetail({
               </div>
             )}
             {factionGroups.map(({ faction, npcs: groupNpcs }) => {
-              const npcs =
-                factionForm?.id === faction.id
-                  ? factionForm.npcs || []
-                  : groupNpcs;
+              const npcs = groupNpcs;
               const dropKey = String(faction.id);
               const collapsed =
                 npcs.length === 0 && !emptyFactionExpanded[faction.id];
+              const isEditingThis = factionForm?.id === faction.id;
               return (
                 <CampaignFactionPanel
                   key={faction.id}
@@ -3205,6 +3284,30 @@ function CampaignDetail({
                   }
                   onDropOnPanel={handleNpcFactionDrop}
                   onNpcDragEnd={() => setDragOverFactionKey(null)}
+                  isEditing={isEditingThis}
+                  editor={
+                    isEditingThis ? (
+                      <CampaignFactionEditor
+                        factionForm={factionForm}
+                        setFactionForm={setFactionForm}
+                        factionError={factionError}
+                        factionImagePreview={factionImagePreview}
+                        factionPreviewError={factionPreviewError}
+                        setFactionPreviewError={setFactionPreviewError}
+                        factionCropOpen={factionCropOpen}
+                        setFactionCropOpen={setFactionCropOpen}
+                        campaignNPCs={campaignNPCs}
+                        factionAddNpcId={factionAddNpcId}
+                        setFactionAddNpcId={setFactionAddNpcId}
+                        onSave={handleFactionSave}
+                        onCancel={cancelFactionForm}
+                        onAddNpc={handleAddNpcToFaction}
+                        onRemoveNpc={handleRemoveNpcFromFaction}
+                        embedded
+                        S={S}
+                      />
+                    ) : null
+                  }
                 />
               );
             })}
@@ -3227,362 +3330,27 @@ function CampaignDetail({
               />
             )}
 
-            {/* Faction form */}
-            {factionForm && (
-            <div
-              style={{
-                border: "1px solid var(--hftf-purple)",
-                borderRadius: "4px",
-                padding: "12px",
-                marginTop: "8px",
-                background: "var(--hftf-deep)",
-              }}
-            >
-              <span style={S.lbl}>
-                {factionForm.id ? "EDIT FACTION" : "CREATE FACTION"}
-              </span>
-              {factionError && (
-                <div style={{ ...S.err, marginBottom: "8px" }}>
-                  {factionError}
-                </div>
-              )}
-              <div
-                style={{
-                  display: "flex",
-                  flexWrap: "wrap",
-                  gap: "12px",
-                  alignItems: "flex-start",
-                  marginBottom: "10px",
-                }}
-              >
-                <div style={{ flexShrink: 0 }}>
-                    <span
-                      style={{
-                        fontSize: "11px",
-                        color: "var(--text-muted)",
-                        display: "block",
-                        marginBottom: "4px",
-                      }}
-                    >
-                      Preview
-                    </span>
-                    {factionImagePreview && !factionPreviewError ? (
-                      <img
-                        src={factionImagePreview}
-                        alt=""
-                        crossOrigin="anonymous"
-                        onError={() => setFactionPreviewError(true)}
-                        onLoad={() => setFactionPreviewError(false)}
-                        style={{
-                          width: 96,
-                          height: 96,
-                          objectFit: "cover",
-                          borderRadius: 6,
-                          border: "1px solid var(--border)",
-                          background: "var(--hftf-deep)",
-                        }}
-                      />
-                    ) : (
-                      <div
-                        style={{
-                          width: 96,
-                          height: 96,
-                          borderRadius: 6,
-                          border: "1px solid var(--border)",
-                          background: "var(--hftf-deep)",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          color: "var(--text-dim)",
-                          fontSize: 28,
-                          fontWeight: "bold",
-                        }}
-                        aria-hidden="true"
-                      >
-                        {(factionForm.name || "F").trim().charAt(0).toUpperCase()}
-                      </div>
-                    )}
-                  </div>
-                <div style={{ flex: "1 1 200px", minWidth: 0 }}>
-                  <span
-                    style={{
-                      fontSize: "11px",
-                      color: "var(--text-muted)",
-                      display: "block",
-                      marginBottom: "4px",
-                    }}
-                  >
-                    Faction image
-                  </span>
-                  <input
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp,image/gif"
-                    style={{ fontSize: "11px", color: "var(--hftf-text-cream)", maxWidth: "100%" }}
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      e.target.value = "";
-                      if (!file) return;
-                      setFactionForm((p) => ({
-                        ...p,
-                        imageFile: file,
-                      }));
-                      setFactionPreviewError(false);
-                    }}
-                  />
-                  <div style={{ ...S.row, marginTop: 6, gap: 6 }}>
-                    <button
-                      type="button"
-                      disabled={!factionImagePreview || factionPreviewError}
-                      onClick={() => setFactionCropOpen(true)}
-                      style={{
-                        ...S.btnGhost,
-                        fontSize: "10px",
-                        opacity:
-                          !factionImagePreview || factionPreviewError ? 0.5 : 1,
-                      }}
-                    >
-                      Crop
-                    </button>
-                    {(factionForm.image || factionForm.imageFile) && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setFactionForm((p) => ({
-                            ...p,
-                            image: null,
-                            imageFile: null,
-                          }))
-                        }
-                        style={{
-                          ...S.btnGhost,
-                          fontSize: "10px",
-                        }}
-                      >
-                        Clear image
-                      </button>
-                    )}
-                  </div>
-                  {factionCropOpen &&
-                  factionImagePreview &&
-                  !factionPreviewError ? (
-                    <AvatarCropModal
-                      imageSrc={factionImagePreview}
-                      onCancel={() => setFactionCropOpen(false)}
-                      onApply={(file) => {
-                        setFactionForm((p) => ({
-                          ...p,
-                          imageFile: file,
-                        }));
-                        setFactionCropOpen(false);
-                        setFactionPreviewError(false);
-                      }}
-                    />
-                  ) : null}
-                </div>
-              </div>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
-                  gap: "8px",
-                  marginBottom: "8px",
-                }}
-              >
-                <div>
-                  <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-                    Name
-                  </span>
-                  <input
-                    style={S.inp}
-                    value={factionForm.name}
-                    onChange={(e) =>
-                      setFactionForm((p) => ({ ...p, name: e.target.value }))
-                    }
-                  />
-                </div>
-                <div>
-                  <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-                    Type
-                  </span>
-                  <input
-                    style={S.inp}
-                    value={factionForm.faction_type}
-                    onChange={(e) =>
-                      setFactionForm((p) => ({
-                        ...p,
-                        faction_type: e.target.value,
-                      }))
-                    }
-                    placeholder="e.g. Criminal Syndicate"
-                  />
-                </div>
-                <div>
-                  <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-                    Tier
-                  </span>
-                  <input
-                    style={{ ...S.inp, width: "80px" }}
-                    type="number"
-                    value={factionForm.level}
-                    onChange={(e) =>
-                      setFactionForm((p) => ({
-                        ...p,
-                        level: parseInt(e.target.value, 10) || 0,
-                      }))
-                    }
-                  />
-                </div>
-                <div>
-                  <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-                    Hold
-                  </span>
-                  <select
-                    style={S.select}
-                    value={factionForm.hold}
-                    onChange={(e) =>
-                      setFactionForm((p) => ({ ...p, hold: e.target.value }))
-                    }
-                  >
-                    <option value="weak">Weak</option>
-                    <option value="strong">Strong</option>
-                  </select>
-                </div>
-                <div>
-                  <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-                    Reputation
-                  </span>
-                  <input
-                    style={{ ...S.inp, width: "80px" }}
-                    type="number"
-                    value={factionForm.reputation}
-                    onChange={(e) =>
-                      setFactionForm((p) => ({
-                        ...p,
-                        reputation: parseInt(e.target.value, 10) || 0,
-                      }))
-                    }
-                  />
-                </div>
-              </div>
-              <div style={{ marginBottom: "8px" }}>
-                <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-                  Notes
-                </span>
-                <textarea
-                  style={{
-                    ...S.inp,
-                    height: "50px",
-                    resize: "vertical",
-                    border: "1px solid var(--border)",
-                    background: "var(--hftf-deep)",
-                    padding: "6px",
-                  }}
-                  value={factionForm.notes}
-                  onChange={(e) =>
-                    setFactionForm((p) => ({ ...p, notes: e.target.value }))
-                  }
-                />
-              </div>
-              {factionForm.id && (
-                <div
-                  style={{
-                    marginBottom: "12px",
-                    padding: "8px",
-                    background: "var(--hftf-deep)",
-                    borderRadius: "4px",
-                    border: "1px solid var(--border)",
-                  }}
-                >
-                  <span
-                    style={{
-                      fontSize: "11px",
-                      color: "var(--text-muted)",
-                      display: "block",
-                      marginBottom: "6px",
-                    }}
-                  >
-                    NPCs in this faction
-                  </span>
-                  {(factionForm.npcs || []).map((n) => (
-                    <div
-                      key={n.id}
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        padding: "4px 0",
-                        fontSize: "12px",
-                      }}
-                    >
-                      <span>{n.name || n.stand_name || `NPC ${n.id}`}</span>
-                      <button
-                        onClick={() => handleRemoveNpcFromFaction(n.id)}
-                        style={{
-                          ...S.btn,
-                          fontSize: "10px",
-                          padding: "2px 6px",
-                          background: "#7f1d1d",
-                          color: "#fca5a5",
-                        }}
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  ))}
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: "8px",
-                      marginTop: "8px",
-                      alignItems: "center",
-                    }}
-                  >
-                    <select
-                      style={{ ...S.select, flex: 1 }}
-                      value={factionAddNpcId}
-                      onChange={(e) => setFactionAddNpcId(e.target.value)}
-                    >
-                      <option value="">Add an NPC...</option>
-                      {campaignNPCs
-                        .filter(
-                          (n) =>
-                            !(factionForm.npcs || []).some(
-                              (fn) => fn.id === n.id,
-                            ),
-                        )
-                        .map((n) => (
-                          <option key={n.id} value={n.id}>
-                            {n.name || n.stand_name || `NPC ${n.id}`}
-                          </option>
-                        ))}
-                    </select>
-                    <button
-                      onClick={handleAddNpcToFaction}
-                      style={S.btnPrimary}
-                      disabled={!factionAddNpcId}
-                    >
-                      Add
-                    </button>
-                  </div>
-                </div>
-              )}
-              <div style={S.row}>
-                <button onClick={handleFactionSave} style={S.btnPrimary}>
-                  Save
-                </button>
-                <button
-                  onClick={() => {
-                    setFactionForm(null);
-                    setFactionError(null);
-                    setFactionAddNpcId("");
-                  }}
-                  style={S.btnGhost}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
+            {/* Create faction form stays at list bottom (no panel to anchor under) */}
+            {factionForm && !factionForm.id && (
+              <CampaignFactionEditor
+                factionForm={factionForm}
+                setFactionForm={setFactionForm}
+                factionError={factionError}
+                factionImagePreview={factionImagePreview}
+                factionPreviewError={factionPreviewError}
+                setFactionPreviewError={setFactionPreviewError}
+                factionCropOpen={factionCropOpen}
+                setFactionCropOpen={setFactionCropOpen}
+                campaignNPCs={campaignNPCs}
+                factionAddNpcId={factionAddNpcId}
+                setFactionAddNpcId={setFactionAddNpcId}
+                onSave={handleFactionSave}
+                onCancel={cancelFactionForm}
+                onAddNpc={handleAddNpcToFaction}
+                onRemoveNpc={handleRemoveNpcFromFaction}
+                S={S}
+              />
+            )}
 
             {npcsThatCanBeAdded.length > 0 && (
               <div

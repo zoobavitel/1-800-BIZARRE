@@ -10,10 +10,37 @@ export const PATCH_NOTES = [
       {
         "title": "Added",
         "items": [
+          "split CREW MODE identity and factions",
+          "move crew portrait beside CREW NAME",
+          "faction reputation card grid for all campaign factions",
+          "per-field GM visibility for tier, hold, rep, notes, NPCs",
           "crew portrait upload crop and clear parity",
+          "inline faction editor replaces NPC grid in panel",
+          "allow_character_assignment toggle and hide GM roster card by default",
           "move SESSION and CLOCKS to left column",
           "B→A standard picks use AbilityPickerPopover",
           "align Assist UI to same-crew SRD rule"
+        ]
+      },
+      {
+        "title": "Fixed",
+        "items": [
+          "enlarge SESSION Wanted label and stars",
+          "stop progress-clock tile remount on create",
+          "wrap CLOCKS in S.card like STRESS",
+          "toggle crew portrait editor on thumb click",
+          "enlarge crew portrait beside CREW NAME",
+          "stop crew portrait on faction reputation rows",
+          "hide redacted faction status, notes, and NPC count on cards",
+          "honor per-field visibility on sheet and home cards",
+          "stop PC/NPC sheet flicker from stale npc route id",
+          "SSE-safe refetch and clock create stability"
+        ]
+      },
+      {
+        "title": "Maintenance",
+        "items": [
+          "refresh patchNotes for campaign UI polish branch"
         ]
       },
       {
@@ -23,13 +50,6 @@ export const PATCH_NOTES = [
           "Merge pull request #162 from zoobavitel/feature/ba-standard-ability-picker",
           "Merge pull request #161 from zoobavitel/fix/character-npc-mode-flicker",
           "Merge branch 'feature/ba-standard-ability-picker' into feature/sheet-session-clocks-left-column"
-        ]
-      },
-      {
-        "title": "Fixed",
-        "items": [
-          "stop PC/NPC sheet flicker from stale npc route id",
-          "SSE-safe refetch and clock create stability"
         ]
       }
     ]
@@ -571,12 +591,7 @@ export const PATCH_NOTES = [
           "Merge pull request #107 from zoobavitel/feature/sheet-history-undo-rebased",
           "Merge pull request #106 from zoobavitel/feature/xp-available-pool-label",
           "Merge pull request #105 from zoobavitel/feature/xp-available-pool-label",
-          "Merge pull request #101 from zoobavitel/fix/session-xp-settle-for-update-stand",
-          "Merge pull request #104 from zoobavitel/feature/npc-card-click-edit",
-          "Merge origin/master into fix/session-xp-settle-for-update-stand",
-          "Merge pull request #102 from zoobavitel/feature/xp-hybrid-rules-align",
-          "Merge pull request #103 from zoobavitel/feature/npc-clock-edit-segments",
-          "Merge pull request #100 from zoobavitel/feature/stand-playbook-identity"
+          "Merge pull request #101 from zoobavitel/fix/session-xp-settle-for-update-stand"
         ]
       },
       {
@@ -593,16 +608,13 @@ export const PATCH_NOTES = [
           "ticks allocate from free pool",
           "expect heritage undo clamp at track cap",
           "keep Available XP usable without active session",
-          "show free-pool Available XP, not track sum",
-          "add migration for LEVEL_UP_HERITAGE / BUY_HP choices",
-          "lock Character only when settling session XP"
+          "show free-pool Available XP, not track sum"
         ]
       },
       {
         "title": "Tests",
         "items": [
-          "align XP delete test with sheet AUTO guard",
-          "expect STRUGGLE settle to free pool"
+          "align XP delete test with sheet AUTO guard"
         ]
       },
       {
@@ -617,52 +629,7 @@ export const PATCH_NOTES = [
           "untick XP tracks refunds free pool",
           "add manual XP to free pool",
           "add sheet edit undo/redo + XP/GM separation",
-          "Take advance on full XP tracks",
-          "open NPC edit on card click",
-          "allow editing clock segments after create",
-          "hybrid free-pool scorecard and spend options"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-08-08",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #99 from zoobavitel/fix/stand-archetype-revert"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-08-07",
-    "version": null,
-    "sections": [
-      {
-        "title": "Added",
-        "items": [
-          "stand identity under PLAYBOOK"
-        ]
-      },
-      {
-        "title": "Fixed",
-        "items": [
-          "persist stand playbook XP archetypes"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-07-22",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #98 from zoobavitel/fix/xp-trigger-live-refresh"
+          "Take advance on full XP tracks"
         ]
       }
     ]

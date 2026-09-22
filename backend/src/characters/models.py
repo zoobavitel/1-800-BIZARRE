@@ -31,6 +31,15 @@ class Campaign(models.Model):
     )
     wanted_stars = models.IntegerField(default=0)
     is_active = models.BooleanField(default=True)
+    allow_character_assignment = models.BooleanField(
+        default=False,
+        help_text=(
+            "When true, show the GM as a PLAYERS & CHARACTERS roster card "
+            "(including Create new / Assign existing when the GM has no "
+            "character). When false, hide that empty GM card. Player cards "
+            "are unchanged."
+        ),
+    )
     created_at = models.DateTimeField(default=timezone.now)
     active_session = models.ForeignKey(
         "Session",
@@ -98,6 +107,26 @@ class Faction(models.Model):
     visible_to_players = models.BooleanField(
         default=False,
         help_text="When false, crew reputation with this faction is hidden from players until the GM reveals it.",
+    )
+    players_see_tier = models.BooleanField(
+        default=True,
+        help_text="When true (and visible_to_players), players may see faction tier/level.",
+    )
+    players_see_hold = models.BooleanField(
+        default=True,
+        help_text="When true (and visible_to_players), players may see faction hold.",
+    )
+    players_see_reputation = models.BooleanField(
+        default=True,
+        help_text="When true (and visible_to_players), players may see faction reputation.",
+    )
+    players_see_notes = models.BooleanField(
+        default=True,
+        help_text="When true (and visible_to_players), players may see faction notes.",
+    )
+    players_see_npcs = models.BooleanField(
+        default=True,
+        help_text="When true (and visible_to_players), players may see NPCs in this faction.",
     )
 
     # Shared faction data — all NPCs in this faction share these fields
