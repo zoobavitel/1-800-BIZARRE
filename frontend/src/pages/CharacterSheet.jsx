@@ -6806,12 +6806,13 @@ const CharacterSheetWrapper = ({
 
   const helpCandidates = useMemo(() => {
     const roster = charCampaign?.campaign_characters || [];
-    const same = roster.filter(
-      (c) =>
-        c.id !== characterId && charData.crewId && c.crewId === charData.crewId,
-    );
-    if (same.length) return same;
-    return roster.filter((c) => c.id !== characterId);
+    const myCrew = Number(charData.crewId);
+    if (!Number.isFinite(myCrew) || myCrew <= 0) return [];
+    return roster.filter((c) => {
+      if (Number(c.id) === Number(characterId)) return false;
+      const theirCrew = Number(c.crewId ?? c.crew_id ?? c.crew);
+      return Number.isFinite(theirCrew) && theirCrew === myCrew;
+    });
   }, [charCampaign?.campaign_characters, characterId, charData.crewId]);
 
   const healOtherTargets = useMemo(() => {
@@ -17112,7 +17113,7 @@ const CharacterSheetWrapper = ({
                               }}
                             >
                               <DicePoolStrip
-                                label={`Incoming crew assist from ${String(assistHelpPending.helper_name ?? assistHelpPending.helperName ?? "teammate").trim()} (not counted in subtotal)`}
+                                label={`Incoming assist from ${String(assistHelpPending.helper_name ?? assistHelpPending.helperName ?? "teammate").trim()} (not counted in subtotal)`}
                                 count={1}
                               />
                               <label
@@ -17136,7 +17137,7 @@ const CharacterSheetWrapper = ({
                                   style={{ marginTop: "2px" }}
                                 />
                                 <span>
-                                  Include this +1 crew assist die when you Roll
+                                  Include this +1 assist die when you Roll
                                   (teammate already marked stress via Assist).
                                   Uncheck if you abandon it for this action — your
                                   next ACTION roll will still clear it server-side if
@@ -17176,7 +17177,7 @@ const CharacterSheetWrapper = ({
                                 marginBottom: "4px",
                               }}
                             >
-                              0 dice from your sheet modifiers — crew assist adds{" "}
+                              0 dice from your sheet modifiers — assist adds{" "}
                               <strong>+1d</strong> only when this roll resolves (shown
                               in &quot;dice rolled&quot; below).
                             </div>
@@ -17206,7 +17207,7 @@ const CharacterSheetWrapper = ({
                                 <strong>{actionDiceTotalAtCommit}</strong>
                                 {!includePendingAssistDie
                                   ? " (assist off)"
-                                  : " (includes crew assist)"}
+                                  : " (includes assist)"}
                               </span>
                             ) : null}
                             <span>
@@ -18563,10 +18564,13 @@ const CharacterSheetWrapper = ({
                               lineHeight: 1.4,
                             }}
                           >
-                            <strong style={{ color: "#d1d5db" }}>Assist:</strong>{" "}
-                            choose which teammate spends 1 stress for your +1d on
-                            your next ACTION roll this session — at most one pending
-                            assist at a time; it applies when you press Roll below.
+                            <strong style={{ color: "#d1d5db" }}>
+                              Teamwork — Assist:
+                            </strong>{" "}
+                            pick a same-crew teammate who spends 1 stress to give
+                            you +1d on your next ACTION roll this session. Only one
+                            character may assist a given roll; it applies when you
+                            press Roll below.
                           </div>
                           {assistHelpPending ? (
                             <div
@@ -18580,7 +18584,7 @@ const CharacterSheetWrapper = ({
                                 color: "#99f6e4",
                               }}
                             >
-                              Pending crew assist: +1d from{" "}
+                              Pending assist: +1d from{" "}
                               <strong style={{ color: "#e5e7eb" }}>
                                 {String(
                                   assistHelpPending.helper_name ||
@@ -18608,8 +18612,13 @@ const CharacterSheetWrapper = ({
                               onChange={(e) => setAssistTargetId(e.target.value)}
                             >
                               <option value="">
-                                Choose teammate — they spend 1 stress
+                                Choose crewmate — they spend 1 stress
                               </option>
+                              {helpCandidates.length === 0 ? (
+                                <option value="" disabled>
+                                  No same-crew PCs available
+                                </option>
+                              ) : null}
                               {helpCandidates.map((c) => (
                                 <option key={c.id} value={String(c.id)}>
                                   {c.true_name || c.name || `PC ${c.id}`}
