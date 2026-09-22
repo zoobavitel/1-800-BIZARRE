@@ -12,6 +12,7 @@ import {
   resolveMediaUrl,
   equipmentAPI,
 } from "../features/character-sheet";
+import { normalizeListResponse } from "../features/character-sheet/services/api";
 import { EQUIPMENT_CATEGORY_OPTIONS, categoryLabel } from "../features/character-sheet/utils/loadoutUtils";
 import { isGmManagedProgressClock } from "../features/character-sheet/utils/progressClockVisibility";
 import { useAuth } from "../features/auth";
@@ -3759,29 +3760,39 @@ function ClockManager({
   const [createSegments, setCreateSegments] = useState(4);
   const [createType, setCreateType] = useState("CUSTOM");
   const [creating, setCreating] = useState(false);
+  const [localError, setLocalError] = useState(null);
 
   const handleCreate = async () => {
     setCreating(true);
     setError(null);
+    setLocalError(null);
     try {
-      await progressClockAPI.createProgressClock({
+      const created = await progressClockAPI.createProgressClock({
         campaign: campaignId,
         session: sessionId,
         name: createName.trim() || "New Clock",
         clock_type: createType,
         max_segments: createSegments,
       });
-      const list = await progressClockAPI.getProgressClocks({
-        campaign: campaignId,
-        session: sessionId,
-      });
-      setClocks(list || []);
+      const list = normalizeListResponse(
+        await progressClockAPI.getProgressClocks({
+          campaign: campaignId,
+          session: sessionId,
+        }),
+      );
+      const merged =
+        created?.id != null && !list.some((c) => c.id === created.id)
+          ? [...list, created]
+          : list;
+      setClocks(merged);
       setCreateName("");
       setCreateSegments(4);
       setCreateType("CUSTOM");
       setShowCreate(false);
     } catch (e) {
-      setError(e.message);
+      const msg = e?.message || "Could not create clock.";
+      setLocalError(msg);
+      setError(msg);
     } finally {
       setCreating(false);
     }
@@ -3790,9 +3801,19 @@ function ClockManager({
   return (
     <div style={S.card}>
       <span style={S.sectionLbl}>Clocks</span>
+      {localError ? (
+        <div style={{ ...S.err, marginBottom: "8px" }}>{localError}</div>
+      ) : null}
       <div style={{ marginBottom: "8px" }}>
         {!showCreate ? (
-          <button onClick={() => setShowCreate(true)} style={S.btnPrimary}>
+          <button
+            type="button"
+            onClick={() => {
+              setLocalError(null);
+              setShowCreate(true);
+            }}
+            style={S.btnPrimary}
+          >
             + New Clock
           </button>
         ) : (
@@ -3872,6 +3893,7 @@ function ClockManager({
             </div>
             <div style={{ display: "flex", gap: "8px" }}>
               <button
+                type="button"
                 onClick={handleCreate}
                 style={S.btnPrimary}
                 disabled={creating}
@@ -3879,9 +3901,11 @@ function ClockManager({
                 {creating ? "Creating..." : "Create"}
               </button>
               <button
+                type="button"
                 onClick={() => {
                   setShowCreate(false);
                   setCreateName("");
+                  setLocalError(null);
                 }}
                 style={S.btnGhost}
               >
@@ -3891,18 +3915,24 @@ function ClockManager({
           </div>
         )}
       </div>
-      {clocks.map((clk) => {
+      {(Array.isArray(clocks) ? clocks : []).map((clk) => {
         // Backend always sets created_by (including GM). Treat GM-created / NPC
         // clocks as GM-managed → visible_to_players (not visible_to_party).
         const isGMClock = isGmManagedProgressClock(clk, campaignGmId);
-        const updateClock = (patch) =>
-          progressClockAPI
+        const updateClock = (patch) => {
+          // Optimistic local merge so SSE refetch races cannot wipe the tick.
+          setClocks((p) =>
+            (Array.isArray(p) ? p : []).map((c) =>
+              c.id === clk.id ? { ...c, ...patch } : c,
+            ),
+          );
+          return progressClockAPI
             .updateProgressClock(clk.id, patch)
-            .then(() =>
-              setClocks((p) =>
-                p.map((c) => (c.id === clk.id ? { ...c, ...patch } : c)),
-              ),
-            );
+            .catch((e) => {
+              setLocalError(e?.message || "Could not update clock.");
+              setError(e?.message || "Could not update clock.");
+            });
+        };
         const tick = (delta) => {
           const next = Math.max(
             0,
@@ -4389,12 +4419,8 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
     ]).then(([sess, rollsData, clocksData, charsData]) => {
       if (cancelled) return;
       setClearActiveSessionDetail(sess || fallbackRow);
-      const rollList = Array.isArray(rollsData)
-        ? rollsData
-        : rollsData?.results || [];
-      const clockList = Array.isArray(clocksData)
-        ? clocksData
-        : clocksData?.results || [];
+      const rollList = normalizeListResponse(rollsData);
+      const clockList = normalizeListResponse(clocksData);
       setClearActiveRolls(rollList);
       setClearActiveClocks(clockList);
       setClearActiveChars(charsData);
@@ -5095,68 +5121,160 @@ function SessionDetail({
     }
   }, [campaign?.id]);
 
-  // Refetch every panel data source (session, rolls, clocks, crews, characters).
-  // Used both for the initial mount/session-switch effect and for the realtime
-  // campaign-events stream so any teammate's roll, clock tick, sheet save, or
-  // XP toggle reflects here without a manual refresh.
-  const refetchSessionPanel = useCallback(async () => {
-    if (!session?.id) return;
-    const sid = session.id;
-    const cid = campaign?.id;
-    await Promise.all([
-      sessionAPI
-        .getSession(sid)
-        .then(setSessionData)
-        .catch(() => setSessionData(session)),
-      rollAPI
-        .getRolls({ session: sid })
-        .then(setRolls)
-        .catch(() => setRolls([])),
-      cid != null
-        ? progressClockAPI
-            .getProgressClocks({ campaign: cid, session: sid })
-            .then(setClocks)
-            .catch(() => setClocks([]))
-        : Promise.resolve(),
-      crewAPI
-        .getCrews()
-        .then((list) =>
-          setCrews(
-            cid != null
-              ? list?.filter((c) => c.campaign === cid) || []
-              : [],
-          ),
-        )
-        .catch(() => setCrews([])),
-      characterAPI
-        .getCharacters()
-        .then((list) =>
-          setCharacters(
-            cid != null
-              ? list?.filter((c) => c.campaign === cid) || []
-              : [],
-          ),
-        )
-        .catch(() => setCharacters([])),
-    ]);
-  }, [session, campaign?.id]);
+  // Refetch session panel data. SSE reasons map to light vs heavy pulls so a
+  // clock tick cannot trigger getCharacters()+getCrews() for every open client
+  // (thundering herd → gunicorn worker timeout on the 2GiB CT).
+  const refetchSessionPanel = useCallback(
+    async (source = "unknown", sseReason = null) => {
+      if (!session?.id) return;
+      const sid = session.id;
+      const cid = campaign?.id;
+      const reason = String(sseReason || "").toLowerCase();
+
+      // Clocks-only: progress_clock SSE must not pull the full panel.
+      if (source === "sse" && reason === "progress_clock") {
+        if (cid == null) return;
+        try {
+          const data = await progressClockAPI.getProgressClocks({
+            campaign: cid,
+            session: sid,
+          });
+          setClocks(normalizeListResponse(data));
+        } catch {
+          /* keep previous clocks — never wipe on error */
+        }
+        return;
+      }
+
+      // Rolls-only: roll / group_action / experience_tracker → session + rolls.
+      const rollsOnly =
+        source === "sse" &&
+        (reason === "roll" ||
+          reason === "group_action" ||
+          reason === "experience_tracker");
+      if (rollsOnly) {
+        await Promise.all([
+          sessionAPI
+            .getSession(sid)
+            .then(setSessionData)
+            .catch(() => {}),
+          rollAPI
+            .getRolls({ session: sid })
+            .then((data) => setRolls(normalizeListResponse(data)))
+            .catch(() => {}),
+        ]);
+        return;
+      }
+
+      const includeHeavy =
+        source === "mount" ||
+        source === "manual" ||
+        source === "visibility" ||
+        (source === "sse" &&
+          (reason === "character" ||
+            reason === "crew" ||
+            reason === "campaign" ||
+            reason === "npc" ||
+            reason === "faction" ||
+            reason === "session" ||
+            reason === "update" ||
+            reason === ""));
+
+      // Interval backup: light only when SSE is the primary sync path.
+      const intervalLight = source === "interval";
+
+      const tasks = [
+        sessionAPI
+          .getSession(sid)
+          .then(setSessionData)
+          .catch(() => setSessionData(session)),
+        rollAPI
+          .getRolls({ session: sid })
+          .then((data) => setRolls(normalizeListResponse(data)))
+          .catch(() => {}),
+        cid != null
+          ? progressClockAPI
+              .getProgressClocks({ campaign: cid, session: sid })
+              .then((data) => setClocks(normalizeListResponse(data)))
+              .catch(() => {})
+          : Promise.resolve(),
+      ];
+      if (includeHeavy && !intervalLight) {
+        tasks.push(
+          crewAPI
+            .getCrews()
+            .then((list) =>
+              setCrews(
+                cid != null
+                  ? normalizeListResponse(list).filter(
+                      (c) => Number(c.campaign) === Number(cid),
+                    )
+                  : [],
+              ),
+            )
+            .catch(() => {}),
+          characterAPI
+            .getCharacters()
+            .then((list) =>
+              setCharacters(
+                cid != null
+                  ? normalizeListResponse(list).filter(
+                      (c) => Number(c.campaign) === Number(cid),
+                    )
+                  : [],
+              ),
+            )
+            .catch(() => {}),
+        );
+      }
+      await Promise.all(tasks);
+    },
+    [session, campaign?.id],
+  );
 
   useEffect(() => {
-    refetchSessionPanel();
+    refetchSessionPanel("mount");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.id, campaign?.id, campaign?.wanted_stars]);
 
   // Realtime: listen to campaign SSE stream and refetch this panel on any
   // backend-broadcast change (rolls, character saves, clocks). Coalesce bursts
   // through a short timer so a flurry of updates only triggers one refetch.
+  // Latest reason wins within the debounce window (clock-only preferred when
+  // mixed with heavier reasons in the same burst? Prefer heavy if any heavy.).
   useEffect(() => {
     if (!campaign?.id || !session?.id) return undefined;
     let pending = null;
-    const schedule = () => {
+    let pendingReasons = new Set();
+    const HEAVY = new Set([
+      "character",
+      "crew",
+      "campaign",
+      "npc",
+      "faction",
+      "session",
+      "update",
+      "",
+    ]);
+    const schedule = (reason) => {
+      pendingReasons.add(String(reason || ""));
       if (pending) return;
       pending = setTimeout(() => {
         pending = null;
-        refetchSessionPanel();
+        const reasons = [...pendingReasons];
+        pendingReasons = new Set();
+        const heavyReason = reasons.find((r) => HEAVY.has(r));
+        const chosen =
+          heavyReason != null
+            ? heavyReason
+            : reasons.includes("roll") ||
+                reasons.includes("group_action") ||
+                reasons.includes("experience_tracker")
+              ? reasons.find((r) =>
+                  ["roll", "group_action", "experience_tracker"].includes(r),
+                )
+              : reasons[0] || "progress_clock";
+        refetchSessionPanel("sse", chosen);
       }, 350);
     };
     const unsubscribe = subscribeCampaignEvents(campaign.id, {
@@ -5173,18 +5291,19 @@ function SessionDetail({
     if (!session?.id) return undefined;
     const onVis = () => {
       if (document.visibilityState !== "visible") return;
-      void refetchSessionPanel();
+      void refetchSessionPanel("visibility");
     };
     document.addEventListener("visibilitychange", onVis);
     return () => document.removeEventListener("visibilitychange", onVis);
   }, [session?.id, refetchSessionPanel]);
 
   // Interval backup while SessionDetail mounted and document visible (complements SSE).
+  // Light refetch only — SSE handles character/crew when those change.
   useEffect(() => {
     if (!session?.id) return undefined;
     const id = window.setInterval(() => {
       if (document.visibilityState !== "visible") return;
-      void refetchSessionPanel();
+      void refetchSessionPanel("interval");
     }, SESSION_PANEL_SYNC_INTERVAL_MS);
     return () => window.clearInterval(id);
   }, [session?.id, refetchSessionPanel]);
@@ -5304,7 +5423,6 @@ function SessionDetail({
   const sessionXpAllocationPanelMode = useMemo(() => {
     const roster = campaignChars || [];
     if (!roster.length) return "no_roster";
-    if (!sessionManualXpSyncReady) return "loading";
     const rollList = rolls || [];
     if (
       rollList.length === 0 &&
@@ -5313,7 +5431,7 @@ function SessionDetail({
       return "empty_session";
     }
     return "table";
-  }, [campaignChars, sessionManualXpSyncReady, rolls, endLiveRowsWithManual]);
+  }, [campaignChars, rolls, endLiveRowsWithManual]);
 
   const sessionXpEntriesSortedForScorecard = useMemo(() => {
     const raw = sessionData?.xp_entries;
@@ -6264,9 +6382,16 @@ function SessionDetail({
                 No PCs in this campaign roster.
               </div>
             ) : null}
-            {sessionXpAllocationPanelMode === "loading" ? (
-              <div style={{ color: "var(--text-dim)", fontSize: "12px", marginBottom: "4px" }}>
-                Loading session XP summary…
+            {!sessionManualXpSyncReady &&
+            sessionXpAllocationPanelMode === "table" ? (
+              <div
+                style={{
+                  color: "var(--text-dim)",
+                  fontSize: "11px",
+                  marginBottom: "4px",
+                }}
+              >
+                Updating manual track XP totals…
               </div>
             ) : null}
             {sessionXpAllocationPanelMode === "empty_session" ? (
@@ -6590,7 +6715,7 @@ function SessionDetail({
         manualXpSaving={manualXpSaving}
         onManualXpGrant={handleManualXpGrant}
         onSessionCharactersRefresh={refreshSessionCharacters}
-        onSessionPanelRefresh={refetchSessionPanel}
+        onSessionPanelRefresh={() => refetchSessionPanel("manual")}
         user={user}
       />
 
