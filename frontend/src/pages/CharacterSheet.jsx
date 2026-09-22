@@ -98,7 +98,9 @@ import {
   clampClockSegments,
   clockWedgeCount,
   isPersistedProgressClockId,
+  mergeSheetProgressClocks,
   normalizeSheetProgressClock,
+  progressClockClientKey,
 } from "../features/character-sheet/utils/progressClockSegments";
 import CharacterSheetInventoryList from "../features/character-sheet/components/CharacterSheetInventoryList";
 import CharacterSheetArmorPanel from "../features/character-sheet/components/CharacterSheetArmorPanel";
@@ -2707,8 +2709,9 @@ const CharacterSheetWrapper = ({
       ? character.clocks.map((c) => normalizeSheetProgressClock(c)).filter(Boolean)
       : [];
     setClocks((prev) => {
-      if (JSON.stringify(prev) === JSON.stringify(incoming)) return prev;
-      return incoming;
+      const merged = mergeSheetProgressClocks(prev, incoming);
+      if (JSON.stringify(prev) === JSON.stringify(merged)) return prev;
+      return merged;
     });
   }, [character?.id, character?.clocks, sheetDraftIsDirty]);
   const clockFillApiTimersRef = useRef({});
@@ -9097,18 +9100,21 @@ const CharacterSheetWrapper = ({
     const segs = Number(newClockSegments);
     if (!name || !Number.isFinite(segs)) return;
     const boundedSegments = clampClockSegments(segs);
+    const clientKey = `pc-clock-${Date.now()}`;
     markDirtyIntent();
     bumpClocksHydrateGuard();
     setClocks((p) => [
       ...p,
       {
-        id: `pc-clock-${Date.now()}`,
+        id: clientKey,
+        clientKey,
         name,
         segments: boundedSegments,
         max_segments: boundedSegments,
         filled: 0,
         filled_segments: 0,
         visible_to_party: !!newClockShared,
+        created_by: user?.id ?? null,
       },
     ]);
     setNewClockName("");
@@ -9149,18 +9155,22 @@ const CharacterSheetWrapper = ({
   const addPerfectOrganismEntityClock = useCallback((sizeLabel, segments) => {
     const segs = clampClockSegments(segments);
     const stamp = Date.now();
+    const clientKey = `po-${stamp}-${Math.random().toString(16).slice(2, 8)}`;
+    bumpClocksHydrateGuard();
     setClocks((p) => [
       ...p,
       {
-        id: `po-${stamp}-${Math.random().toString(16).slice(2, 8)}`,
+        id: clientKey,
+        clientKey,
         name: `Perfect Organism — ${sizeLabel}`,
         segments: segs,
         filled: 0,
         visible_to_party: false,
+        created_by: user?.id ?? null,
       },
     ]);
     setClocksSectionExpandedPersist(true);
-  }, [setClocksSectionExpandedPersist]);
+  }, [bumpClocksHydrateGuard, setClocksSectionExpandedPersist, user?.id]);
 
   const buildPayload = useCallback(() => {
     const backendId =
@@ -13263,7 +13273,7 @@ const CharacterSheetWrapper = ({
                           : "GM clock (private)";
                         return (
                         <div
-                          key={clk.id}
+                          key={progressClockClientKey(clk)}
                           style={{
                             background: "#374151",
                             padding: "4px",
