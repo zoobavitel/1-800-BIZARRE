@@ -123,3 +123,45 @@ class AssistHelpPendingTests(TestCase):
         )
         self.helper.refresh_from_db()
         self.assertEqual(self.helper.stress, stress_before)
+
+    def test_assist_help_rejects_helper_in_different_crew(self):
+        """SRD Teamwork Assist: same campaign + same crew required."""
+        other_crew = Crew.objects.create(
+            name="Other Crew AHP", campaign=self.campaign
+        )
+        outsider = Character.objects.create(
+            user=User.objects.create_user(username="outsider_ahp", password="pass"),
+            campaign=self.campaign,
+            crew=other_crew,
+            true_name="Outsider AHP",
+            heritage=self.hman,
+            action_dots={
+                "hunt": 1,
+                "study": 0,
+                "survey": 0,
+                "tinker": 0,
+                "finesse": 0,
+                "prowl": 0,
+                "skirmish": 0,
+                "wreck": 0,
+                "bizarre": 0,
+                "command": 0,
+                "consort": 0,
+                "sway": 0,
+            },
+            stress=0,
+        )
+        self.client.force_authenticate(user=self.user_a)
+        r = self.client.post(
+            f"/api/characters/{self.recipient.id}/assist-help/",
+            {
+                "helper_character_id": outsider.id,
+                "session_id": self.session.id,
+            },
+            format="json",
+        )
+        self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST, r.data)
+        self.assertIn("crew", str(r.data).lower())
+        self.assertEqual(AssistHelpPending.objects.count(), 0)
+        outsider.refresh_from_db()
+        self.assertEqual(outsider.stress, 0)
