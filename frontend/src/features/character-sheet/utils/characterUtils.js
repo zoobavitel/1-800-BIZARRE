@@ -782,6 +782,26 @@ export function mergeServerOwnedCharacterFields(
   return next;
 }
 
+/**
+ * Raw image path/URL for a crew–faction reputation row.
+ * Uses only faction image fields (or matching campaign faction), never crew portrait.
+ *
+ * @param {Record<string, unknown>|null|undefined} row
+ * @param {Array<Record<string, unknown>>|null|undefined} campaignFactions
+ * @returns {string}
+ */
+export function pickCrewFactionRowImage(row, campaignFactions = []) {
+  const fromRow = String(
+    row?.faction_image || row?.faction_image_url || "",
+  ).trim();
+  if (fromRow) return fromRow;
+  const fid = Number(row?.faction_id);
+  if (!Number.isFinite(fid)) return "";
+  const fac = (campaignFactions || []).find((f) => Number(f?.id) === fid);
+  if (!fac) return "";
+  return String(fac.image || fac.image_url || "").trim();
+}
+
 /** Match sheet LEVEL formula: 95 XP L1 baseline, +10 XP per level. */
 export function computePcLevelFromSheet({ standStats, actionRatings }) {
   const totalStandPoints = Object.values(standStats || {}).reduce(

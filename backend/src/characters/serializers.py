@@ -513,10 +513,18 @@ class CrewSerializer(serializers.ModelSerializer):
             see_rep = bool(getattr(fac, "players_see_reputation", True))
             see_notes = bool(getattr(fac, "players_see_notes", True))
             see_npcs = bool(getattr(fac, "players_see_npcs", True))
+            faction_image = ""
+            if getattr(fac, "image", None):
+                try:
+                    faction_image = fac.image.url or ""
+                except (ValueError, AttributeError):
+                    faction_image = ""
             row = {
                 "id": rel.id,
                 "faction_id": fac.id,
                 "faction_name": fac.name,
+                "faction_image": faction_image,
+                "faction_image_url": getattr(fac, "image_url", "") or "",
                 "reputation_value": rel.reputation_value,
                 "notes": rel.notes or "",
                 "visible_to_players": getattr(fac, "visible_to_players", False),

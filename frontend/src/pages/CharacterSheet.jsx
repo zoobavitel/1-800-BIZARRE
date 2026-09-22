@@ -71,6 +71,7 @@ import {
   computeHealingClockAfterSegments,
   normalizeCrewFromCharacter,
   resolveCrewFromCampaign,
+  pickCrewFactionRowImage,
 } from "../features/character-sheet";
 import { useAuth } from "../features/auth";
 import {
@@ -22499,7 +22500,20 @@ const CharacterSheetWrapper = ({
                       gap: "8px",
                     }}
                   >
-                    {crewFactionLinksForDisplay.map((row) => (
+                    {crewFactionLinksForDisplay.map((row) => {
+                      const factionThumbSrc = resolveMediaUrl(
+                        pickCrewFactionRowImage(
+                          row,
+                          campaignForCrewFactionAdd?.factions,
+                        ),
+                      );
+                      const factionInitial = (
+                        row.faction_name || "F"
+                      )
+                        .trim()
+                        .charAt(0)
+                        .toUpperCase();
+                      return (
                       <div
                         key={row.id}
                         style={{
@@ -22514,11 +22528,11 @@ const CharacterSheetWrapper = ({
                           border: "1px solid #374151",
                         }}
                       >
-                        {crewPortraitSrc ? (
+                        {factionThumbSrc ? (
                           <img
-                            src={crewPortraitSrc}
+                            src={factionThumbSrc}
                             alt=""
-                            title="Crew portrait"
+                            title={row.faction_name || "Faction"}
                             style={{
                               width: 36,
                               height: 36,
@@ -22526,12 +22540,33 @@ const CharacterSheetWrapper = ({
                               borderRadius: 6,
                               border: "1px solid #4b5563",
                               flexShrink: 0,
+                              background: "#111827",
                             }}
                             onError={(e) => {
                               e.currentTarget.style.display = "none";
                             }}
                           />
-                        ) : null}
+                        ) : (
+                          <div
+                            style={{
+                              width: 36,
+                              height: 36,
+                              borderRadius: 6,
+                              border: "1px solid #4b5563",
+                              flexShrink: 0,
+                              background: "#0d1117",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              color: "#6b7280",
+                              fontSize: 14,
+                              fontWeight: "bold",
+                            }}
+                            aria-hidden="true"
+                          >
+                            {factionInitial}
+                          </div>
+                        )}
                         <span style={{ fontWeight: 600, color: "#e5e7eb" }}>
                           {row.faction_name}
                         </span>
@@ -22645,7 +22680,8 @@ const CharacterSheetWrapper = ({
                           </>
                         ) : null}
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
                 {isGM && campaignId && charData.crewId ? (

@@ -98,6 +98,24 @@ class FactionPlayersSeeFieldsTests(TestCase):
         self.assertEqual(row.get("faction_notes"), "")
         self.assertFalse(row.get("players_see_reputation"))
 
+    def test_crew_relationships_expose_faction_image_not_crew(self):
+        self.crew.image_url = "https://example.com/crew-portrait.jpg"
+        self.crew.save(update_fields=["image_url"])
+        self.faction.image_url = "https://example.com/faction.png"
+        self.faction.save(update_fields=["image_url"])
+        client = APIClient()
+        client.force_authenticate(self.gm)
+        r = client.get(self.crew_url)
+        self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
+        rels = r.data.get("faction_relationships") or []
+        self.assertEqual(len(rels), 1)
+        row = rels[0]
+        self.assertEqual(row.get("faction_image_url"), "https://example.com/faction.png")
+        self.assertNotEqual(
+            row.get("faction_image_url"), self.crew.image_url
+        )
+        self.assertNotIn("crew_images", str(row.get("faction_image") or ""))
+
     def test_gm_can_patch_field_flags(self):
         client = APIClient()
         client.force_authenticate(self.gm)

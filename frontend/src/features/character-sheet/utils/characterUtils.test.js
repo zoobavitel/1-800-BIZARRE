@@ -10,6 +10,7 @@ import {
   isStandCoinChargenEditable,
   resolveCrewFromCampaign,
   normalizeCrewFromCharacter,
+  pickCrewFactionRowImage,
 } from "./characterUtils";
 
 const list = [
@@ -508,5 +509,42 @@ describe("resolveCrewFromCampaign", () => {
       crew: "Existing Crew",
       crewId: 3,
     });
+  });
+});
+
+describe("pickCrewFactionRowImage", () => {
+  test("uses faction_image / faction_image_url from row only", () => {
+    expect(
+      pickCrewFactionRowImage({
+        faction_id: 1,
+        faction_image: "/media/faction_images/a.jpg",
+        faction_image_url: "https://example.com/ignored.png",
+      }),
+    ).toBe("/media/faction_images/a.jpg");
+    expect(
+      pickCrewFactionRowImage({
+        faction_id: 1,
+        faction_image_url: "https://example.com/fac.png",
+      }),
+    ).toBe("https://example.com/fac.png");
+  });
+
+  test("falls back to campaign faction image, never invents crew image", () => {
+    expect(
+      pickCrewFactionRowImage(
+        { faction_id: 7 },
+        [
+          { id: 7, image: "/media/faction_images/b.jpg" },
+          { id: 8, image: "/media/crew_images/nope.jpg" },
+        ],
+      ),
+    ).toBe("/media/faction_images/b.jpg");
+    expect(pickCrewFactionRowImage({ faction_id: 7 }, [])).toBe("");
+    expect(
+      pickCrewFactionRowImage(
+        { faction_id: 7, crew_image: "/media/crew_images/cesna.jpg" },
+        [{ id: 7 }],
+      ),
+    ).toBe("");
   });
 });
