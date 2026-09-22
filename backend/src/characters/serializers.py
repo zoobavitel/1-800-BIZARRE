@@ -2983,6 +2983,9 @@ class CampaignSerializer(serializers.ModelSerializer):
     campaign_npcs = NPCSummarySerializer(source="npcs", many=True, read_only=True)
     pending_invitations = serializers.SerializerMethodField()
     is_active = serializers.BooleanField(required=False, default=True)
+    allow_character_assignment = serializers.BooleanField(
+        required=False, default=False
+    )
     created_at = serializers.DateTimeField(read_only=True)
     active_session = serializers.PrimaryKeyRelatedField(
         queryset=Session.objects.all(), required=False, allow_null=True
@@ -3019,6 +3022,7 @@ class CampaignSerializer(serializers.ModelSerializer):
             "image",
             "wanted_stars",
             "is_active",
+            "allow_character_assignment",
             "created_at",
             "factions",
             "crews",
