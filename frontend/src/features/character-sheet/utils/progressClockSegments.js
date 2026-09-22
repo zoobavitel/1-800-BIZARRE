@@ -75,6 +75,84 @@ export function normalizeSheetProgressClock(c) {
   };
 }
 
+/** Stable React list key — survives temp id → server id remaps after create. */
+export function progressClockClientKey(c) {
+  if (c?.clientKey != null && String(c.clientKey).trim() !== "") {
+    return String(c.clientKey);
+  }
+  if (c?.id != null && String(c.id).trim() !== "") {
+    return `id:${c.id}`;
+  }
+  return `tmp:${Date.now()}`;
+}
+
+/**
+ * Merge server clocks onto local list without remounting tiles.
+ * Temp clocks match incoming by name + segments; keep prev.clientKey.
+ */
+export function mergeSheetProgressClocks(prev, incoming) {
+  const prevList = Array.isArray(prev) ? prev : [];
+  const incList = (Array.isArray(incoming) ? incoming : [])
+    .map((c) => normalizeSheetProgressClock(c))
+    .filter(Boolean);
+
+  if (!prevList.length) {
+    return incList.map((c) => ({
+      ...c,
+      clientKey: progressClockClientKey(c),
+    }));
+  }
+
+  const usedInc = new Set();
+  const result = [];
+
+  for (const p of prevList) {
+    const pn = normalizeSheetProgressClock(p);
+    if (!pn) continue;
+    let match = null;
+    if (isPersistedProgressClockId(pn.id)) {
+      match = incList.find(
+        (i) => !usedInc.has(i.id) && Number(i.id) === Number(pn.id),
+      );
+    }
+    if (!match && !isPersistedProgressClockId(pn.id)) {
+      const name = String(pn.name || "").trim();
+      const segs = clockWedgeCount(pn.segments);
+      match = incList.find((i) => {
+        if (usedInc.has(i.id)) return false;
+        return (
+          String(i.name || "").trim() === name &&
+          clockWedgeCount(i.segments) === segs
+        );
+      });
+    }
+    if (match) {
+      usedInc.add(match.id);
+      result.push({
+        ...match,
+        clientKey: p.clientKey || progressClockClientKey(p),
+      });
+      continue;
+    }
+    if (!isPersistedProgressClockId(pn.id)) {
+      result.push({
+        ...pn,
+        clientKey: p.clientKey || progressClockClientKey(p),
+      });
+    }
+  }
+
+  for (const i of incList) {
+    if (usedInc.has(i.id)) continue;
+    result.push({
+      ...i,
+      clientKey: progressClockClientKey(i),
+    });
+  }
+
+  return result;
+}
+
 export function serializeSheetProgressClocks(clocks) {
   if (!Array.isArray(clocks)) return [];
   return clocks
