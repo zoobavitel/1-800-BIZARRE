@@ -29,6 +29,7 @@ import {
 } from "../features/character-sheet/constants/srd";
 import NpcsStandCoin from "../components/NpcsStandCoin";
 import ProgressClock from "../components/ProgressClock";
+import AvatarCropModal from "../components/AvatarCropModal";
 import AdvancementPlanStrip from "../features/character-sheet/components/AdvancementPlanStrip";
 import AdvancementPlanPanel from "../features/character-sheet/components/AdvancementPlanPanel";
 import {
@@ -2878,7 +2879,9 @@ const CharacterSheetWrapper = ({
   const [crewPortraitUrlDraft, setCrewPortraitUrlDraft] = useState("");
   const [crewPortraitSaving, setCrewPortraitSaving] = useState(false);
   const [crewPortraitMsg, setCrewPortraitMsg] = useState(null);
-  const crewPortraitFileInputRef = useRef(null);
+  const [crewPortraitCropOpen, setCrewPortraitCropOpen] = useState(false);
+  const [crewPortraitPreviewError, setCrewPortraitPreviewError] =
+    useState(false);
   const [crewFactionLinks, setCrewFactionLinks] = useState([]);
   const [crewFactionAddName, setCrewFactionAddName] = useState("");
   const [crewFactionAddExistingId, setCrewFactionAddExistingId] = useState("");
@@ -2909,6 +2912,77 @@ const CharacterSheetWrapper = ({
     () => resolveMediaUrl(crewData.image || crewData.image_url || ""),
     [crewData.image, crewData.image_url],
   );
+
+  useEffect(() => {
+    setCrewPortraitPreviewError(false);
+  }, [crewPortraitSrc]);
+
+  const applyCrewPortraitFile = useCallback(
+    async (file, { successText = "Portrait uploaded." } = {}) => {
+      if (!file || !charData.crewId) return;
+      if (file.size > 10 * 1024 * 1024) {
+        setCrewPortraitMsg({
+          ok: false,
+          text: "Portrait must be 10 MB or smaller.",
+        });
+        return;
+      }
+      setCrewPortraitSaving(true);
+      setCrewPortraitMsg(null);
+      try {
+        await crewAPI.patchCrew(charData.crewId, {
+          imageFile: file,
+          image_url: "",
+        });
+        const d = await crewAPI.getCrew(charData.crewId);
+        setCrewData((p) => ({
+          ...p,
+          image: d.image ?? "",
+          image_url: d.image_url ?? "",
+        }));
+        setCrewPortraitUrlDraft("");
+        setCrewPortraitPreviewError(false);
+        setCrewPortraitMsg({ ok: true, text: successText });
+      } catch (err) {
+        setCrewPortraitMsg({
+          ok: false,
+          text: err?.message || "Could not upload portrait.",
+        });
+      } finally {
+        setCrewPortraitSaving(false);
+      }
+    },
+    [charData.crewId],
+  );
+
+  const clearCrewPortrait = useCallback(async () => {
+    if (!charData.crewId) return;
+    setCrewPortraitSaving(true);
+    setCrewPortraitMsg(null);
+    try {
+      await crewAPI.patchCrew(charData.crewId, {
+        image: null,
+        image_url: "",
+      });
+      const d = await crewAPI.getCrew(charData.crewId);
+      setCrewData((p) => ({
+        ...p,
+        image: d.image ?? "",
+        image_url: d.image_url ?? "",
+      }));
+      setCrewPortraitUrlDraft("");
+      setCrewPortraitCropOpen(false);
+      setCrewPortraitPreviewError(false);
+      setCrewPortraitMsg({ ok: true, text: "Portrait cleared." });
+    } catch (err) {
+      setCrewPortraitMsg({
+        ok: false,
+        text: err?.message || "Could not clear portrait.",
+      });
+    } finally {
+      setCrewPortraitSaving(false);
+    }
+  }, [charData.crewId]);
 
   useEffect(() => {
     if (activeMode !== "CREW MODE" || !charData.crewId) {
@@ -22200,137 +22274,193 @@ const CharacterSheetWrapper = ({
                         display: "flex",
                         flexWrap: "wrap",
                         gap: 10,
-                        alignItems: "center",
+                        alignItems: "flex-start",
                         marginTop: 8,
                       }}
                     >
-                      {crewPortraitSrc ? (
-                        <img
-                          src={crewPortraitSrc}
-                          alt=""
+                      <div style={{ flexShrink: 0 }}>
+                        {crewPortraitSrc && !crewPortraitPreviewError ? (
+                          <img
+                            src={crewPortraitSrc}
+                            alt=""
+                            crossOrigin="anonymous"
+                            style={{
+                              width: 64,
+                              height: 64,
+                              objectFit: "cover",
+                              borderRadius: 6,
+                              border: "1px solid #4b5563",
+                              background: "#111827",
+                            }}
+                            onError={() => setCrewPortraitPreviewError(true)}
+                            onLoad={() => setCrewPortraitPreviewError(false)}
+                          />
+                        ) : (
+                          <div
+                            style={{
+                              width: 64,
+                              height: 64,
+                              borderRadius: 6,
+                              border: "1px solid #4b5563",
+                              background: "#111827",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              color: "#6b7280",
+                              fontSize: 22,
+                              fontWeight: "bold",
+                            }}
+                            aria-hidden="true"
+                          >
+                            {(charData.crew || "C").trim().charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ flex: "1 1 200px", minWidth: 0 }}>
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp,image/gif"
                           style={{
-                            width: 44,
-                            height: 44,
-                            objectFit: "cover",
-                            borderRadius: 6,
-                            border: "1px solid #4b5563",
-                            flexShrink: 0,
+                            fontSize: 11,
+                            color: "#d1d5db",
+                            maxWidth: "100%",
                           }}
-                          onError={(e) => {
-                            e.currentTarget.style.display = "none";
+                          disabled={crewPortraitSaving}
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            e.target.value = "";
+                            if (!file) return;
+                            await applyCrewPortraitFile(file);
                           }}
                         />
-                      ) : null}
-                      <input
-                        ref={crewPortraitFileInputRef}
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp,image/gif"
-                        style={{ display: "none" }}
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          e.target.value = "";
-                          if (!file || !charData.crewId) return;
-                          if (file.size > 10 * 1024 * 1024) {
-                            setCrewPortraitMsg({
-                              ok: false,
-                              text: "Portrait must be 10 MB or smaller.",
-                            });
-                            return;
-                          }
-                          setCrewPortraitSaving(true);
-                          setCrewPortraitMsg(null);
-                          try {
-                            await crewAPI.patchCrew(charData.crewId, {
-                              imageFile: file,
-                              image_url: "",
-                            });
-                            const d = await crewAPI.getCrew(charData.crewId);
-                            setCrewData((p) => ({
-                              ...p,
-                              image: d.image ?? "",
-                              image_url: d.image_url ?? "",
-                            }));
-                            setCrewPortraitUrlDraft("");
-                            setCrewPortraitMsg({
-                              ok: true,
-                              text: "Portrait uploaded.",
-                            });
-                          } catch (err) {
-                            setCrewPortraitMsg({
-                              ok: false,
-                              text: err?.message || "Could not upload portrait.",
-                            });
-                          } finally {
-                            setCrewPortraitSaving(false);
-                          }
-                        }}
-                      />
-                      <button
-                        type="button"
-                        style={{ ...S.btn, fontSize: 11 }}
-                        disabled={crewPortraitSaving}
-                        onClick={() => crewPortraitFileInputRef.current?.click()}
-                      >
-                        Upload
-                      </button>
-                      <input
-                        type="url"
-                        style={{
-                          ...S.inp,
-                          flex: "1 1 200px",
-                          minWidth: 0,
-                          fontSize: 11,
-                        }}
-                        value={crewPortraitUrlDraft}
-                        onChange={(e) => {
-                          setCrewPortraitUrlDraft(e.target.value);
-                          setCrewPortraitMsg(null);
-                        }}
-                        placeholder="https://example.com/crew-photo.jpg"
-                      />
-                      <button
-                        type="button"
-                        style={{ ...S.btn, fontSize: 11 }}
-                        disabled={crewPortraitSaving}
-                        onClick={async () => {
-                          if (!charData.crewId) return;
-                          const next = String(crewPortraitUrlDraft || "").trim();
-                          if (!next) return;
-                          setCrewPortraitSaving(true);
-                          setCrewPortraitMsg(null);
-                          try {
-                            await crewAPI.patchCrew(charData.crewId, {
-                              image_url: next,
-                              image: null,
-                            });
-                            const d = await crewAPI.getCrew(charData.crewId);
-                            setCrewData((p) => ({
-                              ...p,
-                              image: d.image ?? "",
-                              image_url: d.image_url ?? "",
-                            }));
-                            setCrewPortraitUrlDraft(
-                              String(d.image_url || "").trim(),
-                            );
-                            setCrewPortraitMsg({
-                              ok: true,
-                              text: "Portrait URL saved.",
-                            });
-                          } catch (err) {
-                            setCrewPortraitMsg({
-                              ok: false,
-                              text:
-                                err?.message ||
-                                "Could not save (HTTPS URL required).",
-                            });
-                          } finally {
-                            setCrewPortraitSaving(false);
-                          }
-                        }}
-                      >
-                        {crewPortraitSaving ? "Saving…" : "Save URL"}
-                      </button>
+                        <div
+                          style={{
+                            display: "flex",
+                            flexWrap: "wrap",
+                            gap: 6,
+                            marginTop: 6,
+                          }}
+                        >
+                          <button
+                            type="button"
+                            disabled={
+                              crewPortraitSaving ||
+                              !crewPortraitSrc ||
+                              crewPortraitPreviewError
+                            }
+                            onClick={() => setCrewPortraitCropOpen(true)}
+                            style={{
+                              ...S.btnGhost,
+                              fontSize: 10,
+                              opacity:
+                                !crewPortraitSrc || crewPortraitPreviewError
+                                  ? 0.5
+                                  : 1,
+                            }}
+                          >
+                            Crop
+                          </button>
+                          <button
+                            type="button"
+                            disabled={
+                              crewPortraitSaving ||
+                              (!crewPortraitSrc && !crewPortraitUrlDraft)
+                            }
+                            onClick={() => clearCrewPortrait()}
+                            style={{ ...S.btnGhost, fontSize: 10 }}
+                          >
+                            Clear
+                          </button>
+                        </div>
+                        <div
+                          style={{
+                            display: "flex",
+                            flexWrap: "wrap",
+                            gap: 6,
+                            marginTop: 8,
+                            alignItems: "center",
+                          }}
+                        >
+                          <input
+                            type="url"
+                            style={{
+                              ...S.inp,
+                              flex: "1 1 160px",
+                              minWidth: 0,
+                              fontSize: 11,
+                            }}
+                            value={crewPortraitUrlDraft}
+                            onChange={(e) => {
+                              setCrewPortraitUrlDraft(e.target.value);
+                              setCrewPortraitMsg(null);
+                            }}
+                            placeholder="https://example.com/crew-photo.jpg"
+                            disabled={crewPortraitSaving}
+                          />
+                          <button
+                            type="button"
+                            style={{ ...S.btn, fontSize: 11 }}
+                            disabled={crewPortraitSaving}
+                            onClick={async () => {
+                              if (!charData.crewId) return;
+                              const next = String(
+                                crewPortraitUrlDraft || "",
+                              ).trim();
+                              if (!next) return;
+                              setCrewPortraitSaving(true);
+                              setCrewPortraitMsg(null);
+                              try {
+                                await crewAPI.patchCrew(charData.crewId, {
+                                  image_url: next,
+                                  image: null,
+                                });
+                                const d = await crewAPI.getCrew(
+                                  charData.crewId,
+                                );
+                                setCrewData((p) => ({
+                                  ...p,
+                                  image: d.image ?? "",
+                                  image_url: d.image_url ?? "",
+                                }));
+                                setCrewPortraitUrlDraft(
+                                  String(d.image_url || "").trim(),
+                                );
+                                setCrewPortraitPreviewError(false);
+                                setCrewPortraitMsg({
+                                  ok: true,
+                                  text: "Portrait URL saved.",
+                                });
+                              } catch (err) {
+                                setCrewPortraitMsg({
+                                  ok: false,
+                                  text:
+                                    err?.message ||
+                                    "Could not save (HTTPS URL required).",
+                                });
+                              } finally {
+                                setCrewPortraitSaving(false);
+                              }
+                            }}
+                          >
+                            {crewPortraitSaving ? "Saving…" : "Save URL"}
+                          </button>
+                        </div>
+                      </div>
                     </div>
+                    {crewPortraitCropOpen &&
+                    crewPortraitSrc &&
+                    !crewPortraitPreviewError ? (
+                      <AvatarCropModal
+                        imageSrc={crewPortraitSrc}
+                        onCancel={() => setCrewPortraitCropOpen(false)}
+                        onApply={(file) => {
+                          setCrewPortraitCropOpen(false);
+                          void applyCrewPortraitFile(file, {
+                            successText: "Portrait cropped.",
+                          });
+                        }}
+                      />
+                    ) : null}
                     {crewPortraitMsg ? (
                       <div
                         style={{
