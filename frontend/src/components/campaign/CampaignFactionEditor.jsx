@@ -3,8 +3,8 @@ import AvatarCropModal from "../AvatarCropModal";
 
 /**
  * Inline faction create/edit form for Campaign Management.
- * Rendered below the matching CampaignFactionPanel when editing,
- * or at the list bottom when creating (no id yet).
+ * When editing: rendered inside CampaignFactionPanel body (replaces NPC grid).
+ * When creating (no id): rendered at the list bottom.
  */
 const CampaignFactionEditor = ({
   factionForm,
@@ -22,6 +22,7 @@ const CampaignFactionEditor = ({
   onCancel,
   onAddNpc,
   onRemoveNpc,
+  embedded = false,
   S,
 }) => {
   if (!factionForm) return null;
@@ -38,7 +39,7 @@ const CampaignFactionEditor = ({
         borderLeft: "4px solid var(--hftf-purple)",
         borderRadius: "4px",
         padding: "12px",
-        marginTop: "8px",
+        marginTop: embedded ? 0 : "8px",
         background: "var(--hftf-deep)",
       }}
     >
