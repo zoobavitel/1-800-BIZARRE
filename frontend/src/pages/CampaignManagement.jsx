@@ -477,6 +477,7 @@ function buildCampaignRosterCards(campaign) {
   const gm = campaign?.gm;
   const gmId = gm?.id;
   const cards = [];
+  const showGmAssignCard = !!campaign?.allow_character_assignment;
 
   const gmChars = campaignCharacters.filter((ch) => ch.user_id === gmId);
   if (gm) {
@@ -489,7 +490,8 @@ function buildCampaignRosterCards(campaign) {
           character: ch,
         });
       });
-    } else {
+    } else if (showGmAssignCard) {
+      // Empty GM "No character assigned" card only when EDIT CAMPAIGN opt-in is on.
       cards.push({
         key: `gm-empty-${gmId}`,
         user: gm,
@@ -2398,6 +2400,7 @@ function CampaignDetail({
       image: campaign.image || null,
       imageFile: null,
       clearImage: false,
+      allow_character_assignment: !!campaign.allow_character_assignment,
     });
 
   const handleCampaignEditSave = async () => {
@@ -2406,6 +2409,7 @@ function CampaignDetail({
       const payload = {
         name: editForm.name.trim(),
         description: editForm.description || "",
+        allow_character_assignment: !!editForm.allow_character_assignment,
       };
       if (editForm.imageFile) {
         payload.imageFile = await compressImageForUpload(editForm.imageFile);
@@ -2591,6 +2595,43 @@ function CampaignDetail({
                 }
               />
             </div>
+            <label
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                gap: 8,
+                marginBottom: 12,
+                fontSize: 12,
+                color: "var(--text-muted)",
+                cursor: "pointer",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={!!editForm.allow_character_assignment}
+                onChange={(e) =>
+                  setEditForm((p) => ({
+                    ...p,
+                    allow_character_assignment: e.target.checked,
+                  }))
+                }
+                style={{ marginTop: 2 }}
+              />
+              <span>
+                Show GM on Players &amp; Characters roster
+                <span
+                  style={{
+                    display: "block",
+                    fontSize: 11,
+                    color: "var(--text-dim)",
+                    marginTop: 2,
+                  }}
+                >
+                  When on, the GM appears as a roster card (Create new / Assign
+                  existing if none). Off by default. Player cards unchanged.
+                </span>
+              </span>
+            </label>
             <div style={S.row}>
               <button onClick={handleCampaignEditSave} style={S.btnPrimary}>
                 Save
