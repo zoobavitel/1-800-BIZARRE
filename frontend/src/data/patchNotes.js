@@ -4,21 +4,88 @@
  */
 export const PATCH_NOTES = [
   {
-    "date": "2026-09-13",
+    "date": "2026-09-15",
     "version": null,
     "sections": [
       {
         "title": "Other",
         "items": [
-          "Merge pull request #151 from zoobavitel/feature/home-character-token-grid"
+          "Merge pull request #158 from zoobavitel/fix/perf-dice-roll-debug"
+        ]
+      },
+      {
+        "title": "Fixed",
+        "items": [
+          "eliminate N+1 queries on session roll list"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-09-14",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #157 from zoobavitel/feature/home-faction-token-cards",
+          "Merge pull request #156 from zoobavitel/feature/favicon-visible",
+          "Merge pull request #155 from zoobavitel/fix/plan-button-active-session",
+          "Merge pull request #154 from zoobavitel/fix/plan-button-active-session",
+          "Merge pull request #153 from zoobavitel/fix/npc-image-save",
+          "Merge pull request #152 from zoobavitel/feature/xp-respec-mode"
         ]
       },
       {
         "title": "Added",
         "items": [
+          "faction image URLs and active-campaign preview",
+          "restyle faction cards as dark HFTF token grid",
+          "responsive character/NPC card grid preview",
+          "larger portraits; keep tabs across mode switch"
+        ]
+      },
+      {
+        "title": "Fixed",
+        "items": [
+          "replace favicon with white-background cracked-hand mark",
+          "keep Plan mid-session; map BIZARRE to attune",
+          "clear stale NPC portrait selections",
+          "retain saved NPC portrait source",
+          "persist portrait uploads and raise size cap",
+          "harden CharacterSheet respec gating for frontend CI path",
+          "ignore stale respec status responses",
+          "reset history loading on empty character",
+          "clear CharacterSheet build warnings"
+        ]
+      },
+      {
+        "title": "Tests",
+        "items": [
+          "cover NPC portrait state fallbacks",
+          "cover account avatar size validation",
+          "update stale campaign image size assertion"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-09-13",
+    "version": null,
+    "sections": [
+      {
+        "title": "Added",
+        "items": [
+          "add Plan-mode respec and direct XP spends",
           "show characters and NPCs as responsive token cards",
           "full-bleed portraits on PC, NPC, and faction cards",
           "use campaign image as full-bleed card background"
+        ]
+      },
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #151 from zoobavitel/feature/home-character-token-grid"
         ]
       },
       {
@@ -628,102 +695,7 @@ export const PATCH_NOTES = [
       {
         "title": "Added",
         "items": [
-          "XP undo/redo and GM history revert",
-          "lock stand coin after chargen"
-        ]
-      },
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #93 from zoobavitel/feature/stand-coin-chargen-lock"
-        ]
-      },
-      {
-        "title": "Fixed",
-        "items": [
-          "checkmark for spent stand armor charges"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-07-04",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Update ability selection rules in SRD documents and enhance patch notes with recent changes. Clarified A-grade ability options to allow for two standard abilities or one custom ability with additional features. Added multiple entries to patch notes for recent merges and fixes, improving documentation clarity."
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-06-28",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #92 from zoobavitel/feature/leveldownfix"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-06-24",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Remove unused advanceActionDot after server-side XP apply",
-          "Merge pull request #91 from zoobavitel/cursor/fix-xp-archetype-snap-back-19da",
-          "Add reversible XP allocations and Stand B→A level-up rewards",
-          "Fix XP archetype checkbox snap-back on character sheet",
-          "Merge pull request #88 from zoobavitel/cursor/character-sheet-pdf-export-e0a7",
-          "Bump greenlet floor for Python 3.14 venv installs",
-          "Merge pull request #89 from zoobavitel/feature/dual-playbook"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-06-15",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Export PC stress track as 9 boxes per SRD (not durability-based)",
-          "Export healing clock with 4 segments on PC PDF sheet",
-          "Fix playbook XP export (10 marks) and lazy PDF dependency loading",
-          "Add optional secondary playbook on character sheet",
-          "Add fillable PDF export for PC and NPC character sheets"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-05-28",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #87 from zoobavitel/fix/ci-playwright-install-hang",
-          "ci(e2e): revert workflow to commit 7449823",
-          "revert: restore files to 963a70d state",
-          "ci(e2e): set Playwright install timeout to 5m",
-          "ci(e2e): lower Playwright install step timeout to 5m"
-        ]
-      },
-      {
-        "title": "Fixed",
-        "items": [
-          "align smoke test navigation with playwright baseURL",
-          "navigate smoke test via PLAYWRIGHT_BASE_URL",
-          "resolve smoke URL relative to baseURL path"
+          "XP undo/redo and GM history revert"
         ]
       }
     ]
