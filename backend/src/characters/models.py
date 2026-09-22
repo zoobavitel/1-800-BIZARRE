@@ -108,6 +108,26 @@ class Faction(models.Model):
         default=False,
         help_text="When false, crew reputation with this faction is hidden from players until the GM reveals it.",
     )
+    players_see_tier = models.BooleanField(
+        default=True,
+        help_text="When true (and visible_to_players), players may see faction tier/level.",
+    )
+    players_see_hold = models.BooleanField(
+        default=True,
+        help_text="When true (and visible_to_players), players may see faction hold.",
+    )
+    players_see_reputation = models.BooleanField(
+        default=True,
+        help_text="When true (and visible_to_players), players may see faction reputation.",
+    )
+    players_see_notes = models.BooleanField(
+        default=True,
+        help_text="When true (and visible_to_players), players may see faction notes.",
+    )
+    players_see_npcs = models.BooleanField(
+        default=True,
+        help_text="When true (and visible_to_players), players may see NPCs in this faction.",
+    )
 
     # Shared faction data — all NPCs in this faction share these fields
     inventory = models.JSONField(

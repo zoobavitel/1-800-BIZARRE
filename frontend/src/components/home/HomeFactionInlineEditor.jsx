@@ -40,6 +40,11 @@ const HomeFactionInlineEditor = ({
     hold: faction.hold === "strong" ? "strong" : "weak",
     reputation: Number(faction.reputation) || 0,
     visible_to_players: faction.visible_to_players !== false,
+    players_see_tier: faction.players_see_tier !== false,
+    players_see_hold: faction.players_see_hold !== false,
+    players_see_reputation: faction.players_see_reputation !== false,
+    players_see_notes: faction.players_see_notes !== false,
+    players_see_npcs: faction.players_see_npcs !== false,
     notes: faction.notes || "",
   });
   const [imageFile, setImageFile] = useState(null);
@@ -166,6 +171,11 @@ const HomeFactionInlineEditor = ({
         hold: form.hold === "strong" ? "strong" : "weak",
         reputation: Number(form.reputation) || 0,
         visible_to_players: !!form.visible_to_players,
+        players_see_tier: form.players_see_tier !== false,
+        players_see_hold: form.players_see_hold !== false,
+        players_see_reputation: form.players_see_reputation !== false,
+        players_see_notes: form.players_see_notes !== false,
+        players_see_npcs: form.players_see_npcs !== false,
         notes: form.notes || "",
       };
       if (imageFile) {
@@ -431,6 +441,41 @@ const HomeFactionInlineEditor = ({
           />
           <span>Visible to players</span>
         </label>
+      </div>
+
+      <div className="f-edit-section">
+        <div className="f-edit-section-label">Players may also see</div>
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "8px 14px",
+            opacity: form.visible_to_players ? 1 : 0.5,
+          }}
+        >
+          {[
+            ["players_see_tier", "Tier"],
+            ["players_see_hold", "Hold"],
+            ["players_see_reputation", "Reputation"],
+            ["players_see_notes", "Notes"],
+            ["players_see_npcs", "NPCs"],
+          ].map(([key, label]) => (
+            <label key={key} className="f-edit-field f-edit-field-checkbox">
+              <input
+                type="checkbox"
+                disabled={!form.visible_to_players}
+                checked={form[key] !== false}
+                onChange={(e) =>
+                  setForm((p) => ({
+                    ...p,
+                    [key]: e.target.checked,
+                  }))
+                }
+              />
+              <span>{label}</span>
+            </label>
+          ))}
+        </div>
       </div>
 
       <label className="f-edit-field f-edit-field-wide f-edit-field-notes">

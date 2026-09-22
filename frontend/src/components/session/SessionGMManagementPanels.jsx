@@ -2019,6 +2019,11 @@ export default function SessionGMManagementPanels({
         notes: String(draft.notes ?? ""),
         crew_notes: String(draft.crew_notes ?? ""),
         visible_to_players: !!draft.visible_to_players,
+        players_see_tier: draft.players_see_tier !== false,
+        players_see_hold: draft.players_see_hold !== false,
+        players_see_reputation: draft.players_see_reputation !== false,
+        players_see_notes: draft.players_see_notes !== false,
+        players_see_npcs: draft.players_see_npcs !== false,
         contacts: parseJsonText(draft.contacts, []),
         inventory: parseJsonText(draft.inventory, []),
         faction_status: parseJsonText(draft.faction_status, {}),
@@ -3052,6 +3057,11 @@ export default function SessionGMManagementPanels({
               notes: String(fac.notes ?? ""),
               crew_notes: String(fac.crew_notes ?? ""),
               visible_to_players: !!fac.visible_to_players,
+              players_see_tier: fac.players_see_tier !== false,
+              players_see_hold: fac.players_see_hold !== false,
+              players_see_reputation: fac.players_see_reputation !== false,
+              players_see_notes: fac.players_see_notes !== false,
+              players_see_npcs: fac.players_see_npcs !== false,
               contacts: JSON.stringify(fac.contacts ?? [], null, 2),
               inventory: JSON.stringify(fac.inventory ?? [], null, 2),
               faction_status: JSON.stringify(fac.faction_status ?? {}, null, 2),
@@ -3193,6 +3203,41 @@ export default function SessionGMManagementPanels({
                         />
                         Visible to players
                       </label>
+                      {[
+                        ["players_see_tier", "Tier"],
+                        ["players_see_hold", "Hold"],
+                        ["players_see_reputation", "Rep"],
+                        ["players_see_notes", "Notes"],
+                        ["players_see_npcs", "NPCs"],
+                      ].map(([key, label]) => (
+                        <label
+                          key={key}
+                          style={{
+                            display: "flex",
+                            gap: 6,
+                            alignItems: "center",
+                            fontSize: 11,
+                            opacity:
+                              canToggleFactionVisibleToPlayers &&
+                              !!draft.visible_to_players
+                                ? 1
+                                : 0.55,
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            disabled={
+                              !canToggleFactionVisibleToPlayers ||
+                              !draft.visible_to_players
+                            }
+                            checked={draft[key] !== false}
+                            onChange={(e) =>
+                              setDraftField(key, e.target.checked)
+                            }
+                          />
+                          {label}
+                        </label>
+                      ))}
                     </div>
                     <div style={{ gridColumn: "1 / span 2" }}>
                       <div style={lbl}>Contacts (JSON)</div>
