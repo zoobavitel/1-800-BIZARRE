@@ -8,6 +8,21 @@ export const PATCH_NOTES = [
     "version": null,
     "sections": [
       {
+        "title": "Added",
+        "items": [
+          "split CREW MODE identity and factions",
+          "move crew portrait beside CREW NAME",
+          "faction reputation card grid for all campaign factions",
+          "per-field GM visibility for tier, hold, rep, notes, NPCs",
+          "crew portrait upload crop and clear parity",
+          "inline faction editor replaces NPC grid in panel",
+          "allow_character_assignment toggle and hide GM roster card by default",
+          "move SESSION and CLOCKS to left column",
+          "B→A standard picks use AbilityPickerPopover",
+          "align Assist UI to same-crew SRD rule"
+        ]
+      },
+      {
         "title": "Fixed",
         "items": [
           "enlarge SESSION Wanted label and stars",
@@ -20,20 +35,6 @@ export const PATCH_NOTES = [
           "honor per-field visibility on sheet and home cards",
           "stop PC/NPC sheet flicker from stale npc route id",
           "SSE-safe refetch and clock create stability"
-        ]
-      },
-      {
-        "title": "Added",
-        "items": [
-          "move crew portrait beside CREW NAME",
-          "faction reputation card grid for all campaign factions",
-          "per-field GM visibility for tier, hold, rep, notes, NPCs",
-          "crew portrait upload crop and clear parity",
-          "inline faction editor replaces NPC grid in panel",
-          "allow_character_assignment toggle and hide GM roster card by default",
-          "move SESSION and CLOCKS to left column",
-          "B→A standard picks use AbilityPickerPopover",
-          "align Assist UI to same-crew SRD rule"
         ]
       },
       {
@@ -590,8 +591,7 @@ export const PATCH_NOTES = [
           "Merge pull request #107 from zoobavitel/feature/sheet-history-undo-rebased",
           "Merge pull request #106 from zoobavitel/feature/xp-available-pool-label",
           "Merge pull request #105 from zoobavitel/feature/xp-available-pool-label",
-          "Merge pull request #101 from zoobavitel/fix/session-xp-settle-for-update-stand",
-          "Merge pull request #104 from zoobavitel/feature/npc-card-click-edit"
+          "Merge pull request #101 from zoobavitel/fix/session-xp-settle-for-update-stand"
         ]
       },
       {

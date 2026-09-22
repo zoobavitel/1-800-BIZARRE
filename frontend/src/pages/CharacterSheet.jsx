@@ -22554,6 +22554,28 @@ const CharacterSheetWrapper = ({
                   ) : null}
                 </div>
               ) : null}
+              <div style={{ marginTop: "12px" }}>
+                <span style={S.lbl}>DESCRIPTION</span>
+                <textarea
+                  value={crewData.description}
+                  onChange={(e) =>
+                    setCrewData((p) => ({ ...p, description: e.target.value }))
+                  }
+                  placeholder="A short crew description…"
+                  style={{
+                    width: "100%",
+                    height: "80px",
+                    background: "#0d1117",
+                    color: "#fff",
+                    border: "1px solid #374151",
+                    padding: "8px",
+                    fontFamily: "monospace",
+                    fontSize: "12px",
+                    resize: "none",
+                    boxSizing: "border-box",
+                  }}
+                />
+              </div>
               <div
                 style={{
                   display: "grid",
@@ -23152,7 +23174,7 @@ const CharacterSheetWrapper = ({
                 ) : null}
             </div>
             </div>
-            <div style={S.g3}>
+            <div style={S.g2}>
               <div style={S.card}>
                 <span style={S.lbl}>SPECIAL ABILITIES</span>
                 {crewData.specialAbilities.map((ab, i) => (
@@ -23187,28 +23209,6 @@ const CharacterSheetWrapper = ({
                 >
                   + Add Ability
                 </button>
-              </div>
-              <div style={S.card}>
-                <span style={S.lbl}>DESCRIPTION</span>
-                <textarea
-                  value={crewData.description}
-                  onChange={(e) =>
-                    setCrewData((p) => ({ ...p, description: e.target.value }))
-                  }
-                  placeholder="A short crew description…"
-                  style={{
-                    width: "100%",
-                    height: "80px",
-                    background: "#0d1117",
-                    color: "#fff",
-                    border: "1px solid #374151",
-                    padding: "8px",
-                    fontFamily: "monospace",
-                    fontSize: "12px",
-                    resize: "none",
-                    boxSizing: "border-box",
-                  }}
-                />
                 <div style={{ marginTop: "12px" }}>
                   <span style={S.lbl}>UPGRADES — LAIR</span>
                   <div
