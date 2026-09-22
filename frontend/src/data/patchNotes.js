@@ -10,9 +10,17 @@ export const PATCH_NOTES = [
       {
         "title": "Fixed",
         "items": [
+          "stop crew portrait on faction reputation rows",
+          "hide redacted faction status, notes, and NPC count on cards",
           "honor per-field visibility on sheet and home cards",
           "stop PC/NPC sheet flicker from stale npc route id",
           "SSE-safe refetch and clock create stability"
+        ]
+      },
+      {
+        "title": "Maintenance",
+        "items": [
+          "refresh patchNotes for campaign UI polish branch"
         ]
       },
       {
@@ -579,8 +587,7 @@ export const PATCH_NOTES = [
           "Merge pull request #104 from zoobavitel/feature/npc-card-click-edit",
           "Merge origin/master into fix/session-xp-settle-for-update-stand",
           "Merge pull request #102 from zoobavitel/feature/xp-hybrid-rules-align",
-          "Merge pull request #103 from zoobavitel/feature/npc-clock-edit-segments",
-          "Merge pull request #100 from zoobavitel/feature/stand-playbook-identity"
+          "Merge pull request #103 from zoobavitel/feature/npc-clock-edit-segments"
         ]
       },
       {
@@ -598,8 +605,7 @@ export const PATCH_NOTES = [
           "expect heritage undo clamp at track cap",
           "keep Available XP usable without active session",
           "show free-pool Available XP, not track sum",
-          "add migration for LEVEL_UP_HERITAGE / BUY_HP choices",
-          "lock Character only when settling session XP"
+          "add migration for LEVEL_UP_HERITAGE / BUY_HP choices"
         ]
       },
       {
@@ -623,8 +629,7 @@ export const PATCH_NOTES = [
           "add sheet edit undo/redo + XP/GM separation",
           "Take advance on full XP tracks",
           "open NPC edit on card click",
-          "allow editing clock segments after create",
-          "hybrid free-pool scorecard and spend options"
+          "allow editing clock segments after create"
         ]
       }
     ]
