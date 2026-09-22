@@ -12645,14 +12645,16 @@ const CharacterSheetWrapper = ({
                           marginBottom: "8px",
                         }}
                       >
-                        <span style={{ fontSize: "11px", color: "#9ca3af" }}>
+                        <span style={{ fontSize: "16px", color: "#9ca3af" }}>
                           Wanted:
                         </span>
-                        <div style={{ display: "flex", gap: "2px" }}>
+                        <div style={{ display: "flex", gap: "4px" }}>
                           {[1, 2, 3, 4, 5].map((n) => (
                             <span
                               key={n}
                               style={{
+                                fontSize: "18px",
+                                lineHeight: 1,
                                 color:
                                   n <= (charCampaign.wanted_stars ?? 0)
                                     ? "#fbbf24"
