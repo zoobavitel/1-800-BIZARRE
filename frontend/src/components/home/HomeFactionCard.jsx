@@ -99,11 +99,23 @@ export default function HomeFactionCard({
             </span>
           )}
         </div>
-        <div
-          className={`f-card-status ${factionStatusClass(faction?.reputation)}`}
-        >
-          {factionStatusLabel(faction?.reputation)}
-        </div>
+        {faction?.reputation != null && faction?.reputation !== "" ? (
+          <div
+            className={`f-card-status ${factionStatusClass(faction?.reputation)}`}
+          >
+            {factionStatusLabel(faction?.reputation)}
+          </div>
+        ) : null}
+        {faction?.notes ? (
+          <div className="f-card-notes" title={faction.notes}>
+            {faction.notes}
+          </div>
+        ) : null}
+        {Array.isArray(faction?.npcs) && faction.npcs.length > 0 ? (
+          <div className="f-card-npcs">
+            {faction.npcs.length} NPC{faction.npcs.length === 1 ? "" : "s"}
+          </div>
+        ) : null}
         <div className="f-card-actions">
           <button
             type="button"
