@@ -22269,6 +22269,7 @@ const CharacterSheetWrapper = ({
         {/* ══════════════════════════════════ CREW MODE ══════════════════════════════════ */}
         {activeMode === "CREW MODE" && (
           <div>
+            <div style={S.g2}>
             <div style={S.card}>
               <div
                 style={{
@@ -22555,12 +22556,217 @@ const CharacterSheetWrapper = ({
               ) : null}
               <div
                 style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(5,1fr)",
+                  gap: "12px",
+                  marginTop: "12px",
+                }}
+              >
+                {[
+                  ["REP", "rep", 6, "#16a34a"],
+                  ["TURF", "turf", 6, "#1d4ed8"],
+                  ["TIER", "tier", 4, "#7c3aed"],
+                  ["WANTED", "wanted", 5, "#ca8a04"],
+                  ["COIN", "coin", 4, "#ca8a04"],
+                ].map(([label, key, max, color]) => (
+                  <div key={key}>
+                    <span style={S.lbl}>{label}</span>
+                    <div
+                      style={{ display: "flex", gap: "2px", flexWrap: "wrap" }}
+                    >
+                      {Array.from({ length: max }, (_, i) => (
+                        <div
+                          key={i}
+                          onClick={() =>
+                            setCrewData((p) => ({
+                              ...p,
+                              [key]: i < p[key] ? i : i + 1,
+                            }))
+                          }
+                          style={{
+                            width: "16px",
+                            height: "16px",
+                            border: "1px solid #4b5563",
+                            cursor: "pointer",
+                            background: i < crewData[key] ? color : "#111827",
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div
+                style={{
+                  marginTop: "12px",
+                  display: "flex",
+                  gap: "16px",
+                  alignItems: "center",
+                }}
+              >
+                <span style={S.lbl}>HOLD</span>
+                {["weak", "strong"].map((h) => (
+                  <label
+                    key={h}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "4px",
+                      cursor: "pointer",
+                      fontSize: "12px",
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="hold"
+                      value={h}
+                      checked={crewData.hold === h}
+                      onChange={(e) =>
+                        setCrewData((p) => ({ ...p, hold: e.target.value }))
+                      }
+                    />
+                    <span style={{ textTransform: "uppercase" }}>{h}</span>
+                  </label>
+                ))}
+              </div>
+              <div
+                style={{
                   marginTop: "12px",
                   paddingTop: "12px",
                   borderTop: "1px solid #374151",
                 }}
               >
-                <span style={S.lbl}>FACTION REPUTATION</span>
+                <span style={S.lbl}>CREW XP TRIGGERS</span>
+                {(() => {
+                  const triggerOptions = [
+                    {
+                      key: "challenge",
+                      label: "Contend with challenges above your station",
+                    },
+                    {
+                      key: "reputation",
+                      label: "Bolster your crew's reputation",
+                    },
+                    {
+                      key: "goals",
+                      label: "Express goals, drives, or nature of the crew",
+                    },
+                  ];
+                  const row = activeSessionCrewXpRow || {};
+                  const credited = !!row.credited;
+                  const playerGate =
+                    !isGM && !crewData.activeSessionCrewXpAvailable;
+                  const disabled =
+                    !canEditSheet ||
+                    !activeSessionId ||
+                    crewXpTriggerSaving ||
+                    playerGate ||
+                    credited;
+                  const lockReason = !canEditSheet
+                    ? "Read-only: edit crew toggles on your own character sheet."
+                    : !activeSessionId
+                      ? "No active session — toggles unlock when the GM starts a session."
+                      : credited
+                        ? "Already banked into crew XP for this session."
+                        : playerGate
+                          ? "Locked until a crew PC earns XP this session (any member)."
+                          : "";
+                  let helpText = lockReason || null;
+                  if (!helpText && crewXpTriggerSaving) {
+                    helpText = "Saving…";
+                  }
+                  return (
+                    <>
+                      <div
+                        style={{
+                          fontSize: "11px",
+                          color: "#d1d5db",
+                          lineHeight: "1.7",
+                          marginTop: "6px",
+                        }}
+                      >
+                        {triggerOptions.map((opt) => (
+                          <label
+                            key={opt.key}
+                            style={{
+                              display: "flex",
+                              alignItems: "flex-start",
+                              gap: "6px",
+                              cursor: disabled ? "not-allowed" : "pointer",
+                              opacity: disabled ? 0.55 : 1,
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              title={
+                                disabled
+                                  ? lockReason || "Saving…"
+                                  : opt.label
+                              }
+                              checked={!!row[opt.key]}
+                              disabled={disabled}
+                              onChange={() =>
+                                void handleCrewXpTriggerToggle(opt.key)
+                              }
+                              style={{ marginTop: "3px" }}
+                            />
+                            <span>{opt.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                      {activeSessionRepContribLines.length > 0 ? (
+                        <div
+                          style={{
+                            fontSize: "10px",
+                            color: "#9ca3af",
+                            marginTop: "6px",
+                          }}
+                        >
+                          <span style={{ color: "#a7f3d0" }}>
+                            Bolster rep (this session, toward crew rep on settle):
+                          </span>{" "}
+                          {activeSessionRepContribLines
+                            .map((x) => `${x.label} +${x.n}`)
+                            .join(" · ")}
+                        </div>
+                      ) : null}
+                      {helpText ? (
+                        <div
+                          style={{
+                            fontSize: "10px",
+                            color: credited ? "#86efac" : "#9ca3af",
+                            marginTop: "4px",
+                          }}
+                        >
+                          {helpText}
+                        </div>
+                      ) : null}
+                      {crewXpTriggerError ? (
+                        <div
+                          style={{
+                            fontSize: "10px",
+                            color: "#f87171",
+                            marginTop: "4px",
+                          }}
+                        >
+                          {crewXpTriggerError}
+                        </div>
+                      ) : null}
+                    </>
+                  );
+                })()}
+              </div>
+            </div>
+            <div
+              style={{
+                ...S.card,
+                display: "flex",
+                flexDirection: "column",
+                minHeight: 0,
+                minWidth: 0,
+              }}
+            >
+              <span style={S.lbl}>FACTION REPUTATION</span>
                 <div
                   style={{
                     fontSize: "11px",
@@ -22572,6 +22778,15 @@ const CharacterSheetWrapper = ({
                   Standing with campaign factions (-3 hostile, 0 neutral, +3
                   allied). Hidden factions are GM-only until revealed.
                 </div>
+                <div
+                  style={{
+                    flex: 1,
+                    minHeight: 0,
+                    overflowY: "auto",
+                    maxHeight: "min(70vh, 720px)",
+                    marginTop: "4px",
+                  }}
+                >
                 {crewFactionRowsForDisplay.length === 0 ? (
                   <div style={{ fontSize: "12px", color: "#6b7280" }}>
                     {(crewCampaignFactions || []).length === 0 ? (
@@ -22592,9 +22807,8 @@ const CharacterSheetWrapper = ({
                 ) : (
                   <div
                     style={{
-                      display: "grid",
-                      gridTemplateColumns:
-                        "repeat(auto-fill, minmax(180px, 1fr))",
+                      display: "flex",
+                      flexDirection: "column",
                       gap: "10px",
                     }}
                   >
@@ -22824,6 +23038,7 @@ const CharacterSheetWrapper = ({
                     })}
                   </div>
                 )}
+                </div>
                 {isGM && campaignId && charData.crewId ? (
                   <div
                     style={{
@@ -22935,315 +23150,8 @@ const CharacterSheetWrapper = ({
                     ) : null}
                   </div>
                 ) : null}
-              </div>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(5,1fr)",
-                  gap: "12px",
-                  marginTop: "12px",
-                }}
-              >
-                {[
-                  ["REP", "rep", 6, "#16a34a"],
-                  ["TURF", "turf", 6, "#1d4ed8"],
-                  ["TIER", "tier", 4, "#7c3aed"],
-                  ["WANTED", "wanted", 5, "#ca8a04"],
-                  ["COIN", "coin", 4, "#ca8a04"],
-                ].map(([label, key, max, color]) => (
-                  <div key={key}>
-                    <span style={S.lbl}>{label}</span>
-                    <div
-                      style={{ display: "flex", gap: "2px", flexWrap: "wrap" }}
-                    >
-                      {Array.from({ length: max }, (_, i) => (
-                        <div
-                          key={i}
-                          onClick={() =>
-                            setCrewData((p) => ({
-                              ...p,
-                              [key]: i < p[key] ? i : i + 1,
-                            }))
-                          }
-                          style={{
-                            width: "16px",
-                            height: "16px",
-                            border: "1px solid #4b5563",
-                            cursor: "pointer",
-                            background: i < crewData[key] ? color : "#111827",
-                          }}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div
-                style={{
-                  marginTop: "12px",
-                  display: "flex",
-                  gap: "16px",
-                  alignItems: "center",
-                }}
-              >
-                <span style={S.lbl}>HOLD</span>
-                {["weak", "strong"].map((h) => (
-                  <label
-                    key={h}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "4px",
-                      cursor: "pointer",
-                      fontSize: "12px",
-                    }}
-                  >
-                    <input
-                      type="radio"
-                      name="hold"
-                      value={h}
-                      checked={crewData.hold === h}
-                      onChange={(e) =>
-                        setCrewData((p) => ({ ...p, hold: e.target.value }))
-                      }
-                    />
-                    <span style={{ textTransform: "uppercase" }}>{h}</span>
-                  </label>
-                ))}
-              </div>
-              <div
-                style={{
-                  marginTop: "12px",
-                  paddingTop: "12px",
-                  borderTop: "1px solid #374151",
-                }}
-              >
-                <span style={S.lbl}>CREW XP TRIGGERS</span>
-                {(() => {
-                  const triggerOptions = [
-                    {
-                      key: "challenge",
-                      label: "Contend with challenges above your station",
-                    },
-                    {
-                      key: "reputation",
-                      label: "Bolster your crew's reputation",
-                    },
-                    {
-                      key: "goals",
-                      label: "Express goals, drives, or nature of the crew",
-                    },
-                  ];
-                  const row = activeSessionCrewXpRow || {};
-                  const credited = !!row.credited;
-                  const playerGate =
-                    !isGM && !crewData.activeSessionCrewXpAvailable;
-                  const disabled =
-                    !canEditSheet ||
-                    !activeSessionId ||
-                    crewXpTriggerSaving ||
-                    playerGate ||
-                    credited;
-                  const lockReason = !canEditSheet
-                    ? "Read-only: edit crew toggles on your own character sheet."
-                    : !activeSessionId
-                      ? "No active session — toggles unlock when the GM starts a session."
-                      : credited
-                        ? "Already banked into crew XP for this session."
-                        : playerGate
-                          ? "Locked until a crew PC earns XP this session (any member)."
-                          : "";
-                  let helpText = lockReason || null;
-                  if (!helpText && crewXpTriggerSaving) {
-                    helpText = "Saving…";
-                  }
-                  return (
-                    <>
-                      <div
-                        style={{
-                          fontSize: "11px",
-                          color: "#d1d5db",
-                          lineHeight: "1.7",
-                          marginTop: "6px",
-                        }}
-                      >
-                        {triggerOptions.map((opt) => (
-                          <label
-                            key={opt.key}
-                            style={{
-                              display: "flex",
-                              alignItems: "flex-start",
-                              gap: "6px",
-                              cursor: disabled ? "not-allowed" : "pointer",
-                              opacity: disabled ? 0.55 : 1,
-                            }}
-                          >
-                            <input
-                              type="checkbox"
-                              title={
-                                disabled
-                                  ? lockReason || "Saving…"
-                                  : opt.label
-                              }
-                              checked={!!row[opt.key]}
-                              disabled={disabled}
-                              onChange={() =>
-                                void handleCrewXpTriggerToggle(opt.key)
-                              }
-                              style={{ marginTop: "3px" }}
-                            />
-                            <span>{opt.label}</span>
-                          </label>
-                        ))}
-                      </div>
-                      {activeSessionRepContribLines.length > 0 ? (
-                        <div
-                          style={{
-                            fontSize: "10px",
-                            color: "#9ca3af",
-                            marginTop: "6px",
-                          }}
-                        >
-                          <span style={{ color: "#a7f3d0" }}>
-                            Bolster rep (this session, toward crew rep on settle):
-                          </span>{" "}
-                          {activeSessionRepContribLines
-                            .map((x) => `${x.label} +${x.n}`)
-                            .join(" · ")}
-                        </div>
-                      ) : null}
-                      {helpText ? (
-                        <div
-                          style={{
-                            fontSize: "10px",
-                            color: credited ? "#86efac" : "#9ca3af",
-                            marginTop: "4px",
-                          }}
-                        >
-                          {helpText}
-                        </div>
-                      ) : null}
-                      {crewXpTriggerError ? (
-                        <div
-                          style={{
-                            fontSize: "10px",
-                            color: "#f87171",
-                            marginTop: "4px",
-                          }}
-                        >
-                          {crewXpTriggerError}
-                        </div>
-                      ) : null}
-                    </>
-                  );
-                })()}
-              </div>
             </div>
-            {charData.crewId ? (
-              <div
-                style={{
-                  ...S.card,
-                  marginBottom: "12px",
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: "8px",
-                    marginBottom: crewHistoryOpen ? "6px" : 0,
-                  }}
-                >
-                  <span style={S.lbl}>CREW MODIFICATION HISTORY</span>
-                  <button
-                    type="button"
-                    onClick={() => setCrewHistoryOpenPersist((v) => !v)}
-                    style={{
-                      ...S.btn,
-                      fontSize: "10px",
-                      padding: "2px 8px",
-                      background: "#111827",
-                      color: "#c4b5fd",
-                    }}
-                  >
-                    {crewHistoryOpen ? "Collapse" : "Expand"}
-                  </button>
-                </div>
-                {crewHistoryOpen ? (
-                  <>
-                    <div
-                      style={{
-                        fontSize: "11px",
-                        color: "#6b7280",
-                        marginTop: "4px",
-                        marginBottom: "8px",
-                      }}
-                    >
-                      Saved changes to this crew (name, rep, turf, tier, wanted,
-                      coin, notes, upgrades, etc.).
-                    </div>
-                    <div style={{ maxHeight: "220px", overflow: "auto" }}>
-                      {crewHistoryEntries.length === 0 ? (
-                        <div style={{ fontSize: "12px", color: "#6b7280" }}>
-                          No history entries yet.
-                        </div>
-                      ) : (
-                        <ul
-                          style={{
-                            margin: 0,
-                            paddingLeft: "18px",
-                            fontSize: "11px",
-                            color: "#d1d5db",
-                            lineHeight: 1.5,
-                          }}
-                        >
-                          {crewHistoryEntries.map((entry) => {
-                            const cf = entry.changed_fields || {};
-                            const keys = Object.keys(cf).filter((k) =>
-                              CREW_HISTORY_FIELD_KEYS.has(k),
-                            );
-                            if (!keys.length) return null;
-                            const when = entry.timestamp
-                              ? new Date(entry.timestamp).toLocaleString()
-                              : "";
-                            return (
-                              <li key={entry.id} style={{ marginBottom: "8px" }}>
-                                <div style={{ color: "#9ca3af" }}>
-                                  {when}
-                                  {entry.editor_username
-                                    ? ` · ${entry.editor_username}`
-                                    : ""}
-                                </div>
-                                {keys.map((k) => {
-                                  const ch = cf[k] || {};
-                                  return (
-                                    <div key={k}>
-                                      <strong>{k}</strong>:{" "}
-                                      <span style={{ color: "#fca5a5" }}>
-                                        {String(ch.old ?? "")}
-                                      </span>{" "}
-                                      →{" "}
-                                      <span style={{ color: "#86efac" }}>
-                                        {String(ch.new ?? "")}
-                                      </span>
-                                    </div>
-                                  );
-                                })}
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      )}
-                    </div>
-                  </>
-                ) : (
-                  <div style={{ fontSize: "10px", color: "#6b7280" }}>
-                    Hidden. Expand to view crew edit history.
-                  </div>
-                )}
-              </div>
-            ) : null}
+            </div>
             <div style={S.g3}>
               <div style={S.card}>
                 <span style={S.lbl}>SPECIAL ABILITIES</span>
@@ -23406,6 +23314,112 @@ const CharacterSheetWrapper = ({
                 />
               </div>
             </div>
+            {charData.crewId ? (
+              <div
+                style={{
+                  ...S.card,
+                  marginBottom: "12px",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: "8px",
+                    marginBottom: crewHistoryOpen ? "6px" : 0,
+                  }}
+                >
+                  <span style={S.lbl}>CREW MODIFICATION HISTORY</span>
+                  <button
+                    type="button"
+                    onClick={() => setCrewHistoryOpenPersist((v) => !v)}
+                    style={{
+                      ...S.btn,
+                      fontSize: "10px",
+                      padding: "2px 8px",
+                      background: "#111827",
+                      color: "#c4b5fd",
+                    }}
+                  >
+                    {crewHistoryOpen ? "Collapse" : "Expand"}
+                  </button>
+                </div>
+                {crewHistoryOpen ? (
+                  <>
+                    <div
+                      style={{
+                        fontSize: "11px",
+                        color: "#6b7280",
+                        marginTop: "4px",
+                        marginBottom: "8px",
+                      }}
+                    >
+                      Saved changes to this crew (name, rep, turf, tier, wanted,
+                      coin, notes, upgrades, etc.).
+                    </div>
+                    <div style={{ maxHeight: "220px", overflow: "auto" }}>
+                      {crewHistoryEntries.length === 0 ? (
+                        <div style={{ fontSize: "12px", color: "#6b7280" }}>
+                          No history entries yet.
+                        </div>
+                      ) : (
+                        <ul
+                          style={{
+                            margin: 0,
+                            paddingLeft: "18px",
+                            fontSize: "11px",
+                            color: "#d1d5db",
+                            lineHeight: 1.5,
+                          }}
+                        >
+                          {crewHistoryEntries.map((entry) => {
+                            const cf = entry.changed_fields || {};
+                            const keys = Object.keys(cf).filter((k) =>
+                              CREW_HISTORY_FIELD_KEYS.has(k),
+                            );
+                            if (!keys.length) return null;
+                            const when = entry.timestamp
+                              ? new Date(entry.timestamp).toLocaleString()
+                              : "";
+                            return (
+                              <li key={entry.id} style={{ marginBottom: "8px" }}>
+                                <div style={{ color: "#9ca3af" }}>
+                                  {when}
+                                  {entry.editor_username
+                                    ? ` · ${entry.editor_username}`
+                                    : ""}
+                                </div>
+                                {keys.map((k) => {
+                                  const ch = cf[k] || {};
+                                  return (
+                                    <div key={k}>
+                                      <strong>{k}</strong>:{" "}
+                                      <span style={{ color: "#fca5a5" }}>
+                                        {String(ch.old ?? "")}
+                                      </span>{" "}
+                                      →{" "}
+                                      <span style={{ color: "#86efac" }}>
+                                        {String(ch.new ?? "")}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ fontSize: "10px", color: "#6b7280" }}>
+                    Hidden. Expand to view crew edit history.
+                  </div>
+                )}
+              </div>
+            ) : null}
+
           </div>
         )}
       </div>
