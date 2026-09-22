@@ -22272,8 +22272,8 @@ const CharacterSheetWrapper = ({
                       alt=""
                       crossOrigin="anonymous"
                       style={{
-                        width: 64,
-                        height: 64,
+                        width: 112,
+                        height: 112,
                         objectFit: "cover",
                         borderRadius: 6,
                         border: "1px solid #4b5563",
@@ -22285,8 +22285,8 @@ const CharacterSheetWrapper = ({
                   ) : (
                     <div
                       style={{
-                        width: 64,
-                        height: 64,
+                        width: 112,
+                        height: 112,
                         borderRadius: 6,
                         border: "1px solid #4b5563",
                         background: "#111827",
@@ -22294,7 +22294,7 @@ const CharacterSheetWrapper = ({
                         alignItems: "center",
                         justifyContent: "center",
                         color: "#6b7280",
-                        fontSize: 22,
+                        fontSize: 36,
                         fontWeight: "bold",
                       }}
                       aria-hidden="true"
