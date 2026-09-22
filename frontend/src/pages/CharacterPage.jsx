@@ -399,8 +399,10 @@ export default function CharacterPage({
   onRegisterNavigationGuard = null,
 }) {
   const { user } = useAuth();
-  const [mode, setMode] = useState(
-    preferNpcMode || initialNpcId != null ? MODES.NPC : MODES.CHARACTER,
+  // Hash route (#character vs #npcs) owns mode — never open NPC mode solely
+  // because a leftover initialNpcId prop remains from a prior #npcs visit.
+  const [mode, setMode] = useState(() =>
+    preferNpcMode ? MODES.NPC : MODES.CHARACTER,
   );
 
   // Keep sheet mode aligned with #character vs #npcs without remounting the page.
