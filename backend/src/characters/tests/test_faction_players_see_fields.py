@@ -5,7 +5,14 @@ from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from characters.models import Campaign, Crew, CrewFactionRelationship, Faction, NPC
+from characters.models import (
+    Campaign,
+    Character,
+    Crew,
+    CrewFactionRelationship,
+    Faction,
+    NPC,
+)
 
 
 class FactionPlayersSeeFieldsTests(TestCase):
@@ -14,6 +21,12 @@ class FactionPlayersSeeFieldsTests(TestCase):
         self.player = User.objects.create_user("fps_pl", "fps_pl@test.com", "pw")
         self.campaign = Campaign.objects.create(name="Field Vis Camp", gm=self.gm)
         self.campaign.players.add(self.player)
+        # Faction/Crew querysets gate on campaign characters, not players M2M alone.
+        Character.objects.create(
+            true_name="PC",
+            user=self.player,
+            campaign=self.campaign,
+        )
         self.faction = Faction.objects.create(
             name="Hidden Bits",
             campaign=self.campaign,
@@ -32,7 +45,7 @@ class FactionPlayersSeeFieldsTests(TestCase):
             name="Secret NPC",
             campaign=self.campaign,
             faction=self.faction,
-            created_by=self.gm,
+            creator=self.gm,
         )
         self.crew = Crew.objects.create(name="Crew A", campaign=self.campaign)
         CrewFactionRelationship.objects.create(

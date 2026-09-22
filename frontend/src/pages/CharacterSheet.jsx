@@ -22535,12 +22535,33 @@ const CharacterSheetWrapper = ({
                         <span style={{ fontWeight: 600, color: "#e5e7eb" }}>
                           {row.faction_name}
                         </span>
-                        <span style={{ color: "#9ca3af" }}>
-                          {row.reputation_value}{" "}
-                          <span style={{ color: "#6b7280" }}>
-                            ({reputationTierLabel(row.reputation_value)})
+                        {isGM || row.players_see_reputation !== false ? (
+                          <span style={{ color: "#9ca3af" }}>
+                            {row.reputation_value}{" "}
+                            <span style={{ color: "#6b7280" }}>
+                              ({reputationTierLabel(row.reputation_value)})
+                            </span>
                           </span>
-                        </span>
+                        ) : null}
+                        {!isGM && row.faction_level != null ? (
+                          <span style={{ color: "#6b7280" }}>
+                            Tier {row.faction_level}
+                          </span>
+                        ) : null}
+                        {!isGM && row.faction_hold ? (
+                          <span style={{ color: "#6b7280" }}>
+                            Hold:{" "}
+                            {row.faction_hold === "strong" ? "Strong" : "Weak"}
+                          </span>
+                        ) : null}
+                        {!isGM && row.faction_notes ? (
+                          <span
+                            style={{ color: "#6b7280", maxWidth: "100%" }}
+                            title={row.faction_notes}
+                          >
+                            {row.faction_notes}
+                          </span>
+                        ) : null}
                         {isGM && charData.crewId ? (
                           <>
                             <label
