@@ -719,6 +719,8 @@ export const SERVER_OWNED_FIELD_TOUCH_KEYS = [
   "xp",
   "healingClock",
   "inventory",
+  "coin",
+  "stash",
 ];
 
 /**
@@ -765,6 +767,17 @@ export function mergeServerOwnedCharacterFields(
     typeof serverCharacter.healingClockSegments === "number"
   ) {
     next.healingClockSegments = serverCharacter.healingClockSegments;
+  }
+  if (!touches.coin) {
+    if (Array.isArray(serverCharacter.coin)) {
+      next.coin = serverCharacter.coin;
+    }
+    if (typeof serverCharacter.coinFilled === "number") {
+      next.coinFilled = serverCharacter.coinFilled;
+    }
+  }
+  if (!touches.stash && Array.isArray(serverCharacter.stash)) {
+    next.stash = serverCharacter.stash;
   }
   return next;
 }

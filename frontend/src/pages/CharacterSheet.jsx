@@ -1088,6 +1088,8 @@ const CharacterSheetWrapper = ({
     xp: false,
     healingClock: false,
     inventory: false,
+    coin: false,
+    stash: false,
   });
   const markDirtyIntent = useCallback(() => {
     dirtyIntentRef.current = true;
@@ -1401,6 +1403,8 @@ const CharacterSheetWrapper = ({
       xp: false,
       healingClock: false,
       inventory: false,
+      coin: false,
+      stash: false,
     };
   }, [character?.id]);
 
@@ -9344,6 +9348,8 @@ const CharacterSheetWrapper = ({
           if (touches.trauma) fieldTouchRef.current.trauma = false;
           if (touches.xp) fieldTouchRef.current.xp = false;
           if (touches.healingClock) fieldTouchRef.current.healingClock = false;
+          if (touches.coin) fieldTouchRef.current.coin = false;
+          if (touches.stash) fieldTouchRef.current.stash = false;
           // Re-assert only fields this save included. A clock autosave that
           // omitted stress must not push a stale truth-lock count over the
           // server echo (GM unmark / concurrent roll marks).
@@ -13466,9 +13472,10 @@ const CharacterSheetWrapper = ({
                     {Array.from({ length: 4 }, (_, i) => (
                       <div
                         key={i}
-                        onClick={() =>
-                          setCoinFilled(i < coinFilled ? i : i + 1)
-                        }
+                        onClick={() => {
+                          markFieldTouch("coin");
+                          setCoinFilled(i < coinFilled ? i : i + 1);
+                        }}
                         style={{
                           width: "24px",
                           height: "24px",
@@ -13490,11 +13497,12 @@ const CharacterSheetWrapper = ({
                     {stashBoxes.map((f, i) => (
                       <div
                         key={i}
-                        onClick={() =>
+                        onClick={() => {
+                          markFieldTouch("stash");
                           setStashBoxes((p) =>
                             p.map((v, j) => (j === i ? !v : v)),
-                          )
-                        }
+                          );
+                        }}
                         style={{
                           width: "16px",
                           height: "16px",
