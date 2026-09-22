@@ -8,27 +8,32 @@ export const PATCH_NOTES = [
     "version": null,
     "sections": [
       {
-        "title": "Other",
+        "title": "Fixed",
         "items": [
-          "Merge pull request #163 from zoobavitel/feature/sheet-session-clocks-left-column",
-          "Merge pull request #162 from zoobavitel/feature/ba-standard-ability-picker",
-          "Merge pull request #161 from zoobavitel/fix/character-npc-mode-flicker",
-          "Merge branch 'feature/ba-standard-ability-picker' into feature/sheet-session-clocks-left-column"
+          "honor per-field visibility on sheet and home cards",
+          "stop PC/NPC sheet flicker from stale npc route id",
+          "SSE-safe refetch and clock create stability"
         ]
       },
       {
         "title": "Added",
         "items": [
+          "per-field GM visibility for tier, hold, rep, notes, NPCs",
+          "crew portrait upload crop and clear parity",
+          "inline faction editor replaces NPC grid in panel",
+          "allow_character_assignment toggle and hide GM roster card by default",
           "move SESSION and CLOCKS to left column",
           "B→A standard picks use AbilityPickerPopover",
           "align Assist UI to same-crew SRD rule"
         ]
       },
       {
-        "title": "Fixed",
+        "title": "Other",
         "items": [
-          "stop PC/NPC sheet flicker from stale npc route id",
-          "SSE-safe refetch and clock create stability"
+          "Merge pull request #163 from zoobavitel/feature/sheet-session-clocks-left-column",
+          "Merge pull request #162 from zoobavitel/feature/ba-standard-ability-picker",
+          "Merge pull request #161 from zoobavitel/fix/character-npc-mode-flicker",
+          "Merge branch 'feature/ba-standard-ability-picker' into feature/sheet-session-clocks-left-column"
         ]
       }
     ]
@@ -620,54 +625,6 @@ export const PATCH_NOTES = [
           "open NPC edit on card click",
           "allow editing clock segments after create",
           "hybrid free-pool scorecard and spend options"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-08-08",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #99 from zoobavitel/fix/stand-archetype-revert"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-08-07",
-    "version": null,
-    "sections": [
-      {
-        "title": "Added",
-        "items": [
-          "stand identity under PLAYBOOK"
-        ]
-      },
-      {
-        "title": "Fixed",
-        "items": [
-          "persist stand playbook XP archetypes"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-07-22",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #98 from zoobavitel/fix/xp-trigger-live-refresh"
-        ]
-      },
-      {
-        "title": "Fixed",
-        "items": [
-          "live XP/stand refresh; player B→A"
         ]
       }
     ]
