@@ -2881,6 +2881,7 @@ const CharacterSheetWrapper = ({
   const [crewPortraitSaving, setCrewPortraitSaving] = useState(false);
   const [crewPortraitMsg, setCrewPortraitMsg] = useState(null);
   const [crewPortraitCropOpen, setCrewPortraitCropOpen] = useState(false);
+  const [crewPortraitEditorOpen, setCrewPortraitEditorOpen] = useState(false);
   const [crewPortraitPreviewError, setCrewPortraitPreviewError] =
     useState(false);
   const [crewFactionLinks, setCrewFactionLinks] = useState([]);
@@ -22266,42 +22267,85 @@ const CharacterSheetWrapper = ({
                 }}
               >
                 <div style={{ flexShrink: 0 }}>
-                  {crewPortraitSrc && !crewPortraitPreviewError ? (
-                    <img
-                      src={crewPortraitSrc}
-                      alt=""
-                      crossOrigin="anonymous"
-                      style={{
-                        width: 112,
-                        height: 112,
-                        objectFit: "cover",
-                        borderRadius: 6,
-                        border: "1px solid #4b5563",
-                        background: "#111827",
-                      }}
-                      onError={() => setCrewPortraitPreviewError(true)}
-                      onLoad={() => setCrewPortraitPreviewError(false)}
-                    />
-                  ) : (
-                    <div
-                      style={{
-                        width: 112,
-                        height: 112,
-                        borderRadius: 6,
-                        border: "1px solid #4b5563",
-                        background: "#111827",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        color: "#6b7280",
-                        fontSize: 36,
-                        fontWeight: "bold",
-                      }}
-                      aria-hidden="true"
-                    >
-                      {(charData.crew || "C").trim().charAt(0).toUpperCase()}
-                    </div>
-                  )}
+                  {(() => {
+                    const canTogglePortrait =
+                      !!charData.crewId && canEditSheet;
+                    const thumbInner =
+                      crewPortraitSrc && !crewPortraitPreviewError ? (
+                        <img
+                          src={crewPortraitSrc}
+                          alt=""
+                          crossOrigin="anonymous"
+                          style={{
+                            width: 112,
+                            height: 112,
+                            objectFit: "cover",
+                            borderRadius: 6,
+                            border: crewPortraitEditorOpen
+                              ? "2px solid var(--hftf-purple)"
+                              : "1px solid #4b5563",
+                            background: "#111827",
+                            display: "block",
+                          }}
+                          onError={() => setCrewPortraitPreviewError(true)}
+                          onLoad={() => setCrewPortraitPreviewError(false)}
+                        />
+                      ) : (
+                        <div
+                          style={{
+                            width: 112,
+                            height: 112,
+                            borderRadius: 6,
+                            border: crewPortraitEditorOpen
+                              ? "2px solid var(--hftf-purple)"
+                              : "1px solid #4b5563",
+                            background: "#111827",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            color: "#6b7280",
+                            fontSize: 36,
+                            fontWeight: "bold",
+                          }}
+                          aria-hidden="true"
+                        >
+                          {(charData.crew || "C")
+                            .trim()
+                            .charAt(0)
+                            .toUpperCase()}
+                        </div>
+                      );
+                    if (!canTogglePortrait) return thumbInner;
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCrewPortraitEditorOpen((open) => {
+                            if (open) setCrewPortraitCropOpen(false);
+                            return !open;
+                          });
+                        }}
+                        aria-expanded={crewPortraitEditorOpen}
+                        aria-controls="crew-portrait-editor"
+                        title={
+                          crewPortraitEditorOpen
+                            ? "Hide portrait controls"
+                            : "Edit crew portrait"
+                        }
+                        style={{
+                          padding: 0,
+                          margin: 0,
+                          border: "none",
+                          background: "transparent",
+                          cursor: "pointer",
+                          borderRadius: 6,
+                          lineHeight: 0,
+                        }}
+                      >
+                        {thumbInner}
+                      </button>
+                    );
+                  })()}
                 </div>
                 <div style={{ flex: "1 1 200px", minWidth: 0 }}>
                   <span style={S.lbl}>CREW NAME</span>
@@ -22316,8 +22360,9 @@ const CharacterSheetWrapper = ({
                   />
                 </div>
               </div>
-              {charData.crewId && canEditSheet ? (
+              {charData.crewId && canEditSheet && crewPortraitEditorOpen ? (
                 <div
+                  id="crew-portrait-editor"
                   style={{
                     marginTop: 10,
                     padding: 10,
