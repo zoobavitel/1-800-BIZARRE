@@ -6,7 +6,6 @@ import React, {
   useCallback,
   useMemo,
 } from "react";
-import { createPortal } from "react-dom";
 import {
   GRADE,
   GRADE_INDEX,
@@ -101,6 +100,11 @@ import {
 } from "../features/character-sheet/utils/progressClockSegments";
 import CharacterSheetInventoryList from "../features/character-sheet/components/CharacterSheetInventoryList";
 import CharacterSheetArmorPanel from "../features/character-sheet/components/CharacterSheetArmorPanel";
+import AbilityPickerPopover from "../features/character-sheet/components/AbilityPickerPopover";
+import StandardAbilityPickSlot, {
+  CATEGORY_LABELS,
+  ownedStandardIdsFromAbilities,
+} from "../features/character-sheet/components/StandardAbilityPickSlot";
 import {
   normalizeLoadoutEntry,
   inventoryHasPhysicalArmor,
@@ -693,130 +697,7 @@ function buildHealRollBoostPresetFromSelections(
   return { abilities: abilitiesPreset, heritage: heritagePreset };
 }
 
-/** Fixed popover style clamped to the visible viewport (incl. embedded preview). */
-function getVisibleViewportBox() {
-  const vv = typeof window !== "undefined" ? window.visualViewport : null;
-  const docEl =
-    typeof document !== "undefined" ? document.documentElement : null;
-  const width = Math.min(
-    window.innerWidth || Infinity,
-    docEl?.clientWidth || Infinity,
-    vv?.width || Infinity,
-  );
-  const height = Math.min(
-    window.innerHeight || Infinity,
-    docEl?.clientHeight || Infinity,
-    vv?.height || Infinity,
-  );
-  const offsetLeft = vv?.offsetLeft || 0;
-  const offsetTop = vv?.offsetTop || 0;
-  return {
-    width: Number.isFinite(width) ? width : window.innerWidth,
-    height: Number.isFinite(height) ? height : window.innerHeight,
-    offsetLeft,
-    offsetTop,
-  };
-}
-
-function computeAbilityPickerFixedStyle(anchorEl) {
-  const pad = 8;
-  const vp = getVisibleViewportBox();
-  const maxRight = vp.offsetLeft + vp.width - pad;
-  const maxBottom = vp.offsetTop + vp.height - pad;
-  const minLeft = vp.offsetLeft + pad;
-  const minTop = vp.offsetTop + pad;
-  const width = Math.min(320, Math.max(200, vp.width - pad * 2));
-  const base = {
-    position: "fixed",
-    zIndex: 400,
-    width,
-    maxWidth: width,
-    padding: "8px",
-    background: "#111827",
-    border: "1px solid #374151",
-    borderRadius: "4px",
-    boxShadow: "0 8px 24px rgba(0,0,0,0.55)",
-    boxSizing: "border-box",
-    // Outer does not scroll — inner list owns overflow (avoids double scrollbar).
-    overflow: "hidden",
-    display: "flex",
-    flexDirection: "column",
-    gap: "6px",
-  };
-  if (!anchorEl || typeof window === "undefined") {
-    return {
-      ...base,
-      top: minTop,
-      left: minLeft,
-      maxHeight: Math.max(160, vp.height - pad * 2),
-    };
-  }
-  const r = anchorEl.getBoundingClientRect();
-  const spaceBelow = maxBottom - (r.bottom + 4);
-  const spaceAbove = r.top - 4 - minTop;
-  const openDown = spaceBelow >= 180 || spaceBelow >= spaceAbove;
-  let maxHeight = Math.max(
-    140,
-    Math.min(400, openDown ? spaceBelow : spaceAbove),
-  );
-  // Prefer align-left with trigger; if that overflows right, shift left.
-  let left = r.left;
-  if (left + width > maxRight) left = maxRight - width;
-  if (left < minLeft) left = minLeft;
-  // If still wider than viewport, shrink already handled via width = vp - pads.
-  let top = openDown ? r.bottom + 4 : r.top - 4 - maxHeight;
-  if (top < minTop) top = minTop;
-  if (top + maxHeight > maxBottom) {
-    maxHeight = Math.max(140, maxBottom - top);
-  }
-  return { ...base, top, left, maxHeight };
-}
-
-function AbilityPickerPopover({ open, anchorRef, children }) {
-  const [style, setStyle] = useState(null);
-  useLayoutEffect(() => {
-    if (!open) {
-      setStyle(null);
-      return undefined;
-    }
-    const update = () => {
-      const wrap = anchorRef?.current;
-      const anchor = wrap?.querySelector?.("button") || wrap || null;
-      setStyle(computeAbilityPickerFixedStyle(anchor));
-    };
-    update();
-    window.addEventListener("resize", update);
-    window.addEventListener("scroll", update, true);
-    window.visualViewport?.addEventListener("resize", update);
-    window.visualViewport?.addEventListener("scroll", update);
-    return () => {
-      window.removeEventListener("resize", update);
-      window.removeEventListener("scroll", update, true);
-      window.visualViewport?.removeEventListener("resize", update);
-      window.visualViewport?.removeEventListener("scroll", update);
-    };
-  }, [open, anchorRef]);
-  if (!open || !style || typeof document === "undefined") return null;
-  return createPortal(
-    <div data-ability-picker-popover="" style={style}>
-      {children}
-    </div>,
-    document.body,
-  );
-}
-
 // ─── CharacterSheetWrapper ────────────────────────────────────────────────────
-
-const CATEGORY_LABELS = {
-  aggression: "Aggression",
-  endurance: "Endurance",
-  cunning: "Cunning",
-  awareness: "Awareness",
-  presence: "Presence",
-  teamwork: "Teamwork",
-  adaptability: "Adaptability",
-  stand_nature: "Stand Nature",
-};
 
 /** Compare kit rows without extra server-normalized fields causing false mismatch. */
 function inventorySyncFingerprint(inv) {
@@ -2365,6 +2246,11 @@ const CharacterSheetWrapper = ({
   );
   const [standardAbilitiesList, setStandardAbilitiesList] = useState([]);
 
+  const ownedStdIds = useMemo(
+    () => ownedStandardIdsFromAbilities(abilities),
+    [abilities],
+  );
+
   // Fetch standard abilities for dropdown
   useEffect(() => {
     referenceAPI
@@ -3757,6 +3643,12 @@ const CharacterSheetWrapper = ({
         );
         return;
       }
+      if (ownedStdIds.has(Number(pendingStandAStdId))) {
+        setPendingStandAError(
+          "That standard ability is already on this sheet — pick a different one.",
+        );
+        return;
+      }
       reward = {
         branch: "two_unique_plus_one_standard",
         unique_abilities: uniques,
@@ -3767,9 +3659,16 @@ const CharacterSheetWrapper = ({
         setPendingStandAError("Pick two standard abilities.");
         return;
       }
+      const ids = pendingStandAStdIds.map((id) => Number(id));
+      if (ids.some((id) => ownedStdIds.has(id))) {
+        setPendingStandAError(
+          "One or both standards are already on this sheet — pick different ones.",
+        );
+        return;
+      }
       reward = {
         branch: "two_standard",
-        standard_ability_ids: pendingStandAStdIds.map((id) => Number(id)),
+        standard_ability_ids: ids,
       };
     }
     setPendingStandABusy(true);
@@ -3802,6 +3701,7 @@ const CharacterSheetWrapper = ({
     pendingStandAUniques,
     pendingStandAStdId,
     pendingStandAStdIds,
+    ownedStdIds,
     applyAllocationBackendCharacter,
   ]);
 
@@ -4360,6 +4260,12 @@ const CharacterSheetWrapper = ({
         );
         return;
       }
+      if (ownedStdIds.has(Number(planBAStdId))) {
+        setPlanBAError(
+          "That standard ability is already on this sheet — pick a different one.",
+        );
+        return;
+      }
       a_grant = {
         branch: "two_unique_plus_one_standard",
         unique_abilities: uniques,
@@ -4370,9 +4276,16 @@ const CharacterSheetWrapper = ({
         setPlanBAError("Pick two standard abilities.");
         return;
       }
+      const ids = planBAStdIds.map((id) => Number(id));
+      if (ids.some((id) => ownedStdIds.has(id))) {
+        setPlanBAError(
+          "One or both standards are already on this sheet — pick different ones.",
+        );
+        return;
+      }
       a_grant = {
         branch: "two_standard",
-        standard_ability_ids: planBAStdIds.map((id) => Number(id)),
+        standard_ability_ids: ids,
       };
     }
     setPlanBusy(true);
@@ -4408,6 +4321,7 @@ const CharacterSheetWrapper = ({
     planBAUniques,
     planBAStdId,
     planBAStdIds,
+    ownedStdIds,
   ]);
 
   const queuePlanAbility = useCallback(
@@ -4568,11 +4482,24 @@ const CharacterSheetWrapper = ({
           );
           return;
         }
+        if (ownedStdIds.has(Number(levelUpRewardStandardId))) {
+          setLevelUpError(
+            "B→A reward: that standard is already on this sheet — pick a different one.",
+          );
+          return;
+        }
       } else if (
         !levelUpRewardStandardIds[0] ||
         !levelUpRewardStandardIds[1]
       ) {
         setLevelUpError("B→A reward: pick two standard abilities.");
+        return;
+      } else if (
+        levelUpRewardStandardIds.some((id) => ownedStdIds.has(Number(id)))
+      ) {
+        setLevelUpError(
+          "B→A reward: one or both standards are already on this sheet — pick different ones.",
+        );
         return;
       }
     }
@@ -20999,50 +20926,67 @@ const CharacterSheetWrapper = ({
                                   />
                                 </React.Fragment>
                               ))}
-                              <select
-                                style={{
-                                  ...S.sel,
+                              <StandardAbilityPickSlot
+                                value={planBAStdId}
+                                onChange={setPlanBAStdId}
+                                options={standardAbilitiesList}
+                                ownedStandardIds={ownedStdIds}
+                                excludeIds={[]}
+                                placeholder="Pick standard…"
+                                btnStyle={{
+                                  ...S.btn,
                                   width: "100%",
+                                  textAlign: "left",
+                                  background: "#1f2937",
+                                  color: planBAStdId ? "#e5e7eb" : "#9ca3af",
+                                  border: "1px solid #374151",
                                   marginBottom: 8,
                                 }}
-                                value={planBAStdId}
-                                onChange={(e) =>
-                                  setPlanBAStdId(e.target.value)
-                                }
-                              >
-                                <option value="">- pick standard -</option>
-                                {standardAbilitiesList.map((a) => (
-                                  <option key={a.id} value={a.id}>
-                                    {a.name}
-                                  </option>
-                                ))}
-                              </select>
+                                inpStyle={{
+                                  ...S.inp,
+                                  border: "1px solid #374151",
+                                  padding: "6px 10px",
+                                  fontSize: "12px",
+                                  width: "100%",
+                                  boxSizing: "border-box",
+                                }}
+                              />
                             </>
                           ) : (
                             [0, 1].map((i) => (
-                              <select
+                              <StandardAbilityPickSlot
                                 key={i}
-                                style={{
-                                  ...S.sel,
-                                  width: "100%",
-                                  marginBottom: 6,
-                                }}
                                 value={planBAStdIds[i] || ""}
-                                onChange={(e) => {
+                                onChange={(id) => {
                                   const next = [...planBAStdIds];
-                                  next[i] = e.target.value;
+                                  next[i] = id;
                                   setPlanBAStdIds(next);
                                 }}
-                              >
-                                <option value="">
-                                  {`- pick standard ${i + 1} -`}
-                                </option>
-                                {standardAbilitiesList.map((a) => (
-                                  <option key={a.id} value={a.id}>
-                                    {a.name}
-                                  </option>
-                                ))}
-                              </select>
+                                options={standardAbilitiesList}
+                                ownedStandardIds={ownedStdIds}
+                                excludeIds={planBAStdIds.filter(
+                                  (_, j) => j !== i,
+                                )}
+                                placeholder={`Pick standard ${i + 1}…`}
+                                btnStyle={{
+                                  ...S.btn,
+                                  width: "100%",
+                                  textAlign: "left",
+                                  background: "#1f2937",
+                                  color: planBAStdIds[i]
+                                    ? "#e5e7eb"
+                                    : "#9ca3af",
+                                  border: "1px solid #374151",
+                                }}
+                                inpStyle={{
+                                  ...S.inp,
+                                  border: "1px solid #374151",
+                                  padding: "6px 10px",
+                                  fontSize: "12px",
+                                  width: "100%",
+                                  boxSizing: "border-box",
+                                }}
+                              />
                             ))
                           )}
                           {planBAError ? (
@@ -23241,38 +23185,66 @@ const CharacterSheetWrapper = ({
                         />
                       </React.Fragment>
                     ))}
-                    <select
-                      style={{ ...S.sel, width: "100%" }}
+                    <StandardAbilityPickSlot
                       value={levelUpRewardStandardId}
-                      onChange={(e) => setLevelUpRewardStandardId(e.target.value)}
-                    >
-                      <option value="">Pick standard ability…</option>
-                      {standardAbilitiesList.map((a) => (
-                        <option key={a.id} value={a.id}>
-                          {a.name}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={setLevelUpRewardStandardId}
+                      options={standardAbilitiesList}
+                      ownedStandardIds={ownedStdIds}
+                      excludeIds={[]}
+                      placeholder="Pick standard ability…"
+                      btnStyle={{
+                        ...S.btn,
+                        width: "100%",
+                        textAlign: "left",
+                        background: "#1f2937",
+                        color: levelUpRewardStandardId ? "#e5e7eb" : "#9ca3af",
+                        border: "1px solid #374151",
+                      }}
+                      inpStyle={{
+                        ...S.inp,
+                        border: "1px solid #374151",
+                        padding: "6px 10px",
+                        fontSize: "12px",
+                        width: "100%",
+                        boxSizing: "border-box",
+                      }}
+                    />
                   </>
                 ) : (
                   [0, 1].map((i) => (
-                    <select
+                    <StandardAbilityPickSlot
                       key={i}
-                      style={{ ...S.sel, width: "100%", marginBottom: 6 }}
                       value={levelUpRewardStandardIds[i] || ""}
-                      onChange={(e) => {
+                      onChange={(id) => {
                         const next = [...levelUpRewardStandardIds];
-                        next[i] = e.target.value;
+                        next[i] = id;
                         setLevelUpRewardStandardIds(next);
                       }}
-                    >
-                      <option value="">Standard ability {i + 1}…</option>
-                      {standardAbilitiesList.map((a) => (
-                        <option key={a.id} value={a.id}>
-                          {a.name}
-                        </option>
-                      ))}
-                    </select>
+                      options={standardAbilitiesList}
+                      ownedStandardIds={ownedStdIds}
+                      excludeIds={levelUpRewardStandardIds.filter(
+                        (_, j) => j !== i,
+                      )}
+                      placeholder={`Standard ability ${i + 1}…`}
+                      btnStyle={{
+                        ...S.btn,
+                        width: "100%",
+                        textAlign: "left",
+                        background: "#1f2937",
+                        color: levelUpRewardStandardIds[i]
+                          ? "#e5e7eb"
+                          : "#9ca3af",
+                        border: "1px solid #374151",
+                      }}
+                      inpStyle={{
+                        ...S.inp,
+                        border: "1px solid #374151",
+                        padding: "6px 10px",
+                        fontSize: "12px",
+                        width: "100%",
+                        boxSizing: "border-box",
+                      }}
+                    />
                   ))
                 )}
               </div>
@@ -23599,38 +23571,63 @@ const CharacterSheetWrapper = ({
                     />
                   </React.Fragment>
                 ))}
-                <select
-                  style={{ ...S.sel, width: "100%", marginBottom: 8 }}
+                <StandardAbilityPickSlot
                   value={pendingStandAStdId}
-                  onChange={(e) => setPendingStandAStdId(e.target.value)}
-                >
-                  <option value="">- pick standard -</option>
-                  {standardAbilitiesList.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setPendingStandAStdId}
+                  options={standardAbilitiesList}
+                  ownedStandardIds={ownedStdIds}
+                  excludeIds={[]}
+                  placeholder="Pick standard…"
+                  btnStyle={{
+                    ...S.btn,
+                    width: "100%",
+                    textAlign: "left",
+                    background: "#1f2937",
+                    color: pendingStandAStdId ? "#e5e7eb" : "#9ca3af",
+                    border: "1px solid #374151",
+                    marginBottom: 8,
+                  }}
+                  inpStyle={{
+                    ...S.inp,
+                    border: "1px solid #374151",
+                    padding: "6px 10px",
+                    fontSize: "12px",
+                    width: "100%",
+                    boxSizing: "border-box",
+                  }}
+                />
               </>
             ) : (
               [0, 1].map((i) => (
-                <select
+                <StandardAbilityPickSlot
                   key={i}
-                  style={{ ...S.sel, width: "100%", marginBottom: 6 }}
                   value={pendingStandAStdIds[i] || ""}
-                  onChange={(e) => {
+                  onChange={(id) => {
                     const next = [...pendingStandAStdIds];
-                    next[i] = e.target.value;
+                    next[i] = id;
                     setPendingStandAStdIds(next);
                   }}
-                >
-                  <option value="">{`- pick standard ${i + 1} -`}</option>
-                  {standardAbilitiesList.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name}
-                    </option>
-                  ))}
-                </select>
+                  options={standardAbilitiesList}
+                  ownedStandardIds={ownedStdIds}
+                  excludeIds={pendingStandAStdIds.filter((_, j) => j !== i)}
+                  placeholder={`Pick standard ${i + 1}…`}
+                  btnStyle={{
+                    ...S.btn,
+                    width: "100%",
+                    textAlign: "left",
+                    background: "#1f2937",
+                    color: pendingStandAStdIds[i] ? "#e5e7eb" : "#9ca3af",
+                    border: "1px solid #374151",
+                  }}
+                  inpStyle={{
+                    ...S.inp,
+                    border: "1px solid #374151",
+                    padding: "6px 10px",
+                    fontSize: "12px",
+                    width: "100%",
+                    boxSizing: "border-box",
+                  }}
+                />
               ))
             )}
             {pendingStandAError ? (
