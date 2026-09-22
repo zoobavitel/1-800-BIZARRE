@@ -2885,7 +2885,6 @@ const CharacterSheetWrapper = ({
     useState(false);
   const [crewFactionLinks, setCrewFactionLinks] = useState([]);
   const [crewFactionAddName, setCrewFactionAddName] = useState("");
-  const [crewFactionAddExistingId, setCrewFactionAddExistingId] = useState("");
   const [crewFactionAddRep, setCrewFactionAddRep] = useState(0);
   const [crewFactionAddBusy, setCrewFactionAddBusy] = useState(false);
   const [crewFactionAddErr, setCrewFactionAddErr] = useState(null);
@@ -3225,50 +3224,86 @@ const CharacterSheetWrapper = ({
     [campaigns, campaignId],
   );
 
-  const crewLinkableFactions = useMemo(() => {
-    const facs = campaignForCrewFactionAdd?.factions || [];
-    const linkedIds = new Set(
-      (crewFactionLinks || []).map((r) => Number(r.faction_id)),
-    );
-    return facs.filter((f) => f?.id != null && !linkedIds.has(Number(f.id)));
-  }, [campaignForCrewFactionAdd?.factions, crewFactionLinks]);
+  /** Prefer sheet campaign factions; fall back to campaigns list entry. */
+  const crewCampaignFactions = useMemo(() => {
+    const fromSheet = charCampaign?.factions;
+    const fromList = campaignForCrewFactionAdd?.factions;
+    if (Array.isArray(fromSheet) && fromSheet.length) return fromSheet;
+    if (Array.isArray(fromList)) return fromList;
+    return [];
+  }, [charCampaign?.factions, campaignForCrewFactionAdd?.factions]);
 
-  /** Non-GMs only see standings for factions the GM has revealed (matches CrewSerializer). */
-  const crewFactionLinksForDisplay = useMemo(() => {
-    const list = crewFactionLinks || [];
-    if (isGM) return list;
-    return list.filter((r) => r.visible_to_players !== false);
-  }, [crewFactionLinks, isGM]);
+  /**
+   * All campaign factions joined to crew standings.
+   * Missing link → reputation 0 until GM edits (creates relationship).
+   * Players only see factions with visible_to_players !== false.
+   */
+  const crewFactionRowsForDisplay = useMemo(() => {
+    const facs = crewCampaignFactions || [];
+    const linksByFid = new Map(
+      (crewFactionLinks || []).map((r) => [Number(r.faction_id), r]),
+    );
+    const rows = facs
+      .filter((f) => f?.id != null)
+      .map((f) => {
+        const fid = Number(f.id);
+        const link = linksByFid.get(fid);
+        return {
+          id: link?.id ?? `cf-${fid}`,
+          relationship_id: link?.id ?? null,
+          faction_id: fid,
+          faction_name: f.name || link?.faction_name || `Faction ${fid}`,
+          reputation_value:
+            link?.reputation_value != null
+              ? Number(link.reputation_value)
+              : 0,
+          visible_to_players: f.visible_to_players !== false,
+          players_see_reputation:
+            link?.players_see_reputation ?? f.players_see_reputation,
+          players_see_tier: link?.players_see_tier ?? f.players_see_tier,
+          players_see_hold: link?.players_see_hold ?? f.players_see_hold,
+          players_see_notes: link?.players_see_notes ?? f.players_see_notes,
+          faction_level: link?.faction_level ?? f.level,
+          faction_hold: link?.faction_hold ?? f.hold,
+          faction_notes: link?.faction_notes ?? f.notes,
+          faction_image: link?.faction_image ?? f.image,
+          faction_image_url: link?.faction_image_url ?? f.image_url,
+        };
+      });
+    for (const link of crewFactionLinks || []) {
+      const fid = Number(link.faction_id);
+      if (!Number.isFinite(fid)) continue;
+      if (facs.some((f) => Number(f.id) === fid)) continue;
+      rows.push({
+        ...link,
+        id: link.id ?? `link-${fid}`,
+        relationship_id: link.id ?? null,
+        reputation_value: Number(link.reputation_value) || 0,
+      });
+    }
+    if (isGM) return rows;
+    return rows.filter((r) => r.visible_to_players !== false);
+  }, [crewCampaignFactions, crewFactionLinks, isGM]);
 
   const handleAddCrewFactionLink = useCallback(async () => {
     if (!charData.crewId || !campaignId) return;
     const nameTrim = crewFactionAddName.trim();
-    const exId = Number.parseInt(String(crewFactionAddExistingId || ""), 10);
     const rep = Math.min(3, Math.max(-3, Number(crewFactionAddRep) || 0));
-    if (nameTrim && Number.isFinite(exId)) {
-      setCrewFactionAddErr("Use either a new name or an existing faction, not both.");
-      return;
-    }
-    if (!nameTrim && !Number.isFinite(exId)) {
-      setCrewFactionAddErr("Enter a new faction name or pick an existing faction.");
+    if (!nameTrim) {
+      setCrewFactionAddErr("Enter a new faction name.");
       return;
     }
     setCrewFactionAddBusy(true);
     setCrewFactionAddErr(null);
     try {
-      let fid = null;
-      if (nameTrim) {
-        const created = await factionAPI.createFaction({
-          campaign: Number.parseInt(String(campaignId), 10),
-          name: nameTrim,
-          visible_to_players: false,
-        });
-        fid = created?.id ?? created?.pk;
-      } else {
-        fid = exId;
-      }
+      const created = await factionAPI.createFaction({
+        campaign: Number.parseInt(String(campaignId), 10),
+        name: nameTrim,
+        visible_to_players: false,
+      });
+      const fid = created?.id ?? created?.pk;
       if (!fid) {
-        setCrewFactionAddErr("Could not resolve faction to link.");
+        setCrewFactionAddErr("Could not create faction.");
         return;
       }
       await crewAPI.patchCrew(charData.crewId, {
@@ -3277,12 +3312,11 @@ const CharacterSheetWrapper = ({
       const crewRes = await crewAPI.getCrew(charData.crewId);
       setCrewFactionLinks(crewRes.faction_relationships || []);
       setCrewFactionAddName("");
-      setCrewFactionAddExistingId("");
       setCrewFactionAddRep(0);
       onCampaignRefresh?.();
     } catch (e) {
       setCrewFactionAddErr(
-        e?.message || "Could not create or link faction. Try a different name.",
+        e?.message || "Could not create faction. Try a different name.",
       );
     } finally {
       setCrewFactionAddBusy(false);
@@ -3291,7 +3325,6 @@ const CharacterSheetWrapper = ({
     charData.crewId,
     campaignId,
     crewFactionAddName,
-    crewFactionAddExistingId,
     crewFactionAddRep,
     onCampaignRefresh,
   ]);
@@ -22475,211 +22508,254 @@ const CharacterSheetWrapper = ({
                     ) : null}
                   </div>
                 ) : null}
-                {crewFactionLinksForDisplay.length === 0 ? (
+                {crewFactionRowsForDisplay.length === 0 ? (
                   <div style={{ fontSize: "12px", color: "#6b7280" }}>
-                    {crewFactionLinks.length === 0 ? (
+                    {(crewCampaignFactions || []).length === 0 ? (
                       <>
-                        No linked factions yet.
+                        No campaign factions yet.
                         {isGM && campaignId
-                          ? " Create a faction for the campaign, then link it to this crew."
+                          ? " Create one below (hidden until you reveal it)."
                           : ""}
                       </>
                     ) : (
                       <>
-                        No crew–faction standings are revealed to players yet. Your
-                        GM can reveal them from the crew block when the table is meant
-                        to see them.
+                        No factions are revealed to players yet. Your GM can
+                        reveal them from this block when the table is meant to
+                        see them.
                       </>
                     )}
                   </div>
                 ) : (
                   <div
                     style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "8px",
+                      display: "grid",
+                      gridTemplateColumns:
+                        "repeat(auto-fill, minmax(180px, 1fr))",
+                      gap: "10px",
                     }}
                   >
-                    {crewFactionLinksForDisplay.map((row) => {
+                    {crewFactionRowsForDisplay.map((row) => {
                       const factionThumbSrc = resolveMediaUrl(
-                        pickCrewFactionRowImage(
-                          row,
-                          campaignForCrewFactionAdd?.factions,
-                        ),
+                        pickCrewFactionRowImage(row, crewCampaignFactions),
                       );
-                      const factionInitial = (
-                        row.faction_name || "F"
-                      )
+                      const factionInitial = (row.faction_name || "F")
                         .trim()
                         .charAt(0)
                         .toUpperCase();
                       return (
-                      <div
-                        key={row.id}
-                        style={{
-                          display: "flex",
-                          flexWrap: "wrap",
-                          alignItems: "center",
-                          gap: "10px",
-                          fontSize: "12px",
-                          background: "#111827",
-                          padding: "8px",
-                          borderRadius: "6px",
-                          border: "1px solid #374151",
-                        }}
-                      >
-                        {factionThumbSrc ? (
-                          <img
-                            src={factionThumbSrc}
-                            alt=""
-                            title={row.faction_name || "Faction"}
-                            style={{
-                              width: 36,
-                              height: 36,
-                              objectFit: "cover",
-                              borderRadius: 6,
-                              border: "1px solid #4b5563",
-                              flexShrink: 0,
-                              background: "#111827",
-                            }}
-                            onError={(e) => {
-                              e.currentTarget.style.display = "none";
-                            }}
-                          />
-                        ) : (
+                        <div
+                          key={row.id}
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "8px",
+                            fontSize: "12px",
+                            background: "#111827",
+                            padding: "10px",
+                            borderRadius: "6px",
+                            border: "1px solid #374151",
+                            minWidth: 0,
+                          }}
+                        >
                           <div
                             style={{
-                              width: 36,
-                              height: 36,
-                              borderRadius: 6,
-                              border: "1px solid #4b5563",
-                              flexShrink: 0,
-                              background: "#0d1117",
                               display: "flex",
                               alignItems: "center",
-                              justifyContent: "center",
-                              color: "#6b7280",
-                              fontSize: 14,
-                              fontWeight: "bold",
+                              gap: "8px",
+                              minWidth: 0,
                             }}
-                            aria-hidden="true"
                           >
-                            {factionInitial}
-                          </div>
-                        )}
-                        <span style={{ fontWeight: 600, color: "#e5e7eb" }}>
-                          {row.faction_name}
-                        </span>
-                        {isGM || row.players_see_reputation !== false ? (
-                          <span style={{ color: "#9ca3af" }}>
-                            {row.reputation_value}{" "}
-                            <span style={{ color: "#6b7280" }}>
-                              ({reputationTierLabel(row.reputation_value)})
+                            {factionThumbSrc ? (
+                              <img
+                                src={factionThumbSrc}
+                                alt=""
+                                title={row.faction_name || "Faction"}
+                                style={{
+                                  width: 40,
+                                  height: 40,
+                                  objectFit: "cover",
+                                  borderRadius: 6,
+                                  border: "1px solid #4b5563",
+                                  flexShrink: 0,
+                                  background: "#111827",
+                                }}
+                                onError={(e) => {
+                                  e.currentTarget.style.display = "none";
+                                }}
+                              />
+                            ) : (
+                              <div
+                                style={{
+                                  width: 40,
+                                  height: 40,
+                                  borderRadius: 6,
+                                  border: "1px solid #4b5563",
+                                  flexShrink: 0,
+                                  background: "#0d1117",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  color: "#6b7280",
+                                  fontSize: 14,
+                                  fontWeight: "bold",
+                                }}
+                                aria-hidden="true"
+                              >
+                                {factionInitial}
+                              </div>
+                            )}
+                            <span
+                              style={{
+                                fontWeight: 600,
+                                color: "#e5e7eb",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                                minWidth: 0,
+                              }}
+                              title={row.faction_name}
+                            >
+                              {row.faction_name}
                             </span>
-                          </span>
-                        ) : null}
-                        {!isGM && row.faction_level != null ? (
-                          <span style={{ color: "#6b7280" }}>
-                            Tier {row.faction_level}
-                          </span>
-                        ) : null}
-                        {!isGM && row.faction_hold ? (
-                          <span style={{ color: "#6b7280" }}>
-                            Hold:{" "}
-                            {row.faction_hold === "strong" ? "Strong" : "Weak"}
-                          </span>
-                        ) : null}
-                        {!isGM && row.faction_notes ? (
-                          <span
-                            style={{ color: "#6b7280", maxWidth: "100%" }}
-                            title={row.faction_notes}
-                          >
-                            {row.faction_notes}
-                          </span>
-                        ) : null}
-                        {isGM && charData.crewId ? (
-                          <>
-                            <label
+                          </div>
+                          {isGM || row.players_see_reputation !== false ? (
+                            <span style={{ color: "#9ca3af" }}>
+                              {row.reputation_value}{" "}
+                              <span style={{ color: "#6b7280" }}>
+                                ({reputationTierLabel(row.reputation_value)})
+                              </span>
+                            </span>
+                          ) : null}
+                          {!isGM &&
+                          row.players_see_tier !== false &&
+                          row.faction_level != null ? (
+                            <span style={{ color: "#6b7280" }}>
+                              Tier {row.faction_level}
+                            </span>
+                          ) : null}
+                          {!isGM &&
+                          row.players_see_hold !== false &&
+                          row.faction_hold ? (
+                            <span style={{ color: "#6b7280" }}>
+                              Hold:{" "}
+                              {row.faction_hold === "strong"
+                                ? "Strong"
+                                : "Weak"}
+                            </span>
+                          ) : null}
+                          {!isGM &&
+                          row.players_see_notes !== false &&
+                          row.faction_notes ? (
+                            <span
+                              style={{
+                                color: "#6b7280",
+                                display: "-webkit-box",
+                                WebkitLineClamp: 3,
+                                WebkitBoxOrient: "vertical",
+                                overflow: "hidden",
+                              }}
+                              title={row.faction_notes}
+                            >
+                              {row.faction_notes}
+                            </span>
+                          ) : null}
+                          {isGM && charData.crewId ? (
+                            <div
                               style={{
                                 display: "flex",
-                                alignItems: "center",
-                                gap: "4px",
-                                fontSize: "11px",
+                                flexDirection: "column",
+                                gap: "6px",
+                                marginTop: "auto",
                               }}
                             >
-                              Rep
-                              <input
-                                type="number"
-                                min={-3}
-                                max={3}
-                                defaultValue={row.reputation_value}
-                                key={`${row.id}-${row.reputation_value}`}
+                              <label
                                 style={{
-                                  width: "52px",
-                                  background: "#0d1117",
-                                  color: "#fff",
-                                  border: "1px solid #4b5563",
-                                  borderRadius: "4px",
-                                  padding: "2px 4px",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: "4px",
+                                  fontSize: "11px",
+                                  color: "#9ca3af",
                                 }}
-                                onBlur={(e) => {
-                                  const v = Math.min(
-                                    3,
-                                    Math.max(
-                                      -3,
-                                      parseInt(e.target.value, 10) || 0,
-                                    ),
-                                  );
-                                  crewAPI
-                                    .patchCrew(charData.crewId, {
-                                      faction_relationships: [
-                                        {
-                                          faction_id: row.faction_id,
-                                          reputation_value: v,
-                                        },
-                                      ],
+                              >
+                                Rep
+                                <input
+                                  type="number"
+                                  min={-3}
+                                  max={3}
+                                  defaultValue={row.reputation_value}
+                                  key={`${row.id}-${row.reputation_value}`}
+                                  style={{
+                                    width: "52px",
+                                    background: "#0d1117",
+                                    color: "#fff",
+                                    border: "1px solid #4b5563",
+                                    borderRadius: "4px",
+                                    padding: "2px 4px",
+                                  }}
+                                  onBlur={(e) => {
+                                    const v = Math.min(
+                                      3,
+                                      Math.max(
+                                        -3,
+                                        parseInt(e.target.value, 10) || 0,
+                                      ),
+                                    );
+                                    crewAPI
+                                      .patchCrew(charData.crewId, {
+                                        faction_relationships: [
+                                          {
+                                            faction_id: row.faction_id,
+                                            reputation_value: v,
+                                          },
+                                        ],
+                                      })
+                                      .then(() =>
+                                        crewAPI
+                                          .getCrew(charData.crewId)
+                                          .then((d) => {
+                                            setCrewFactionLinks(
+                                              d.faction_relationships || [],
+                                            );
+                                          }),
+                                      )
+                                      .catch(() => {});
+                                  }}
+                                />
+                              </label>
+                              <button
+                                type="button"
+                                style={{
+                                  ...S.btn,
+                                  fontSize: "10px",
+                                  padding: "2px 8px",
+                                  width: "100%",
+                                }}
+                                onClick={() => {
+                                  factionAPI
+                                    .patchFaction(row.faction_id, {
+                                      visible_to_players:
+                                        !row.visible_to_players,
                                     })
                                     .then(() =>
-                                      crewAPI.getCrew(charData.crewId).then((d) => {
-                                        setCrewFactionLinks(
-                                          d.faction_relationships || [],
-                                        );
-                                      }),
+                                      crewAPI
+                                        .getCrew(charData.crewId)
+                                        .then((d) => {
+                                          setCrewFactionLinks(
+                                            d.faction_relationships || [],
+                                          );
+                                          onCampaignRefresh?.();
+                                        }),
                                     )
                                     .catch(() => {});
                                 }}
-                              />
-                            </label>
-                            <button
-                              type="button"
-                              style={{
-                                ...S.btn,
-                                fontSize: "10px",
-                                padding: "2px 8px",
-                              }}
-                              onClick={() => {
-                                factionAPI
-                                  .patchFaction(row.faction_id, {
-                                    visible_to_players: !row.visible_to_players,
-                                  })
-                                  .then(() =>
-                                    crewAPI.getCrew(charData.crewId).then((d) => {
-                                      setCrewFactionLinks(
-                                        d.faction_relationships || [],
-                                      );
-                                      onCampaignRefresh?.();
-                                    }),
-                                  )
-                                  .catch(() => {});
-                              }}
-                            >
-                              {row.visible_to_players
-                                ? "Hide from players"
-                                : "Reveal to players"}
-                            </button>
-                          </>
-                        ) : null}
-                      </div>
+                              >
+                                {row.visible_to_players
+                                  ? "Hide from players"
+                                  : "Reveal to players"}
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
                       );
                     })}
                   </div>
@@ -22698,7 +22774,7 @@ const CharacterSheetWrapper = ({
                     }}
                   >
                     <span style={{ ...S.lbl, fontSize: "10px" }}>
-                      Add faction link
+                      Create faction
                     </span>
                     <div
                       style={{
@@ -22707,8 +22783,9 @@ const CharacterSheetWrapper = ({
                         lineHeight: 1.4,
                       }}
                     >
-                      Create a GM-only faction by name, or link one already in this
-                      campaign. Set starting reputation (−3 to +3), then add link.
+                      Create a GM-only faction by name. It appears in the grid
+                      above (hidden until revealed). Set starting reputation
+                      (−3 to +3).
                     </div>
                     <div
                       style={{
@@ -22731,43 +22808,9 @@ const CharacterSheetWrapper = ({
                         onChange={(e) => {
                           setCrewFactionAddName(e.target.value);
                           setCrewFactionAddErr(null);
-                          if (e.target.value.trim())
-                            setCrewFactionAddExistingId("");
                         }}
                         disabled={crewFactionAddBusy}
                       />
-                      <span style={{ fontSize: "10px", color: "#6b7280" }}>or</span>
-                      <select
-                        style={{
-                          ...S.sel,
-                          flex: "1 1 160px",
-                          minWidth: "140px",
-                          fontSize: "11px",
-                        }}
-                        value={crewFactionAddExistingId}
-                        onChange={(e) => {
-                          setCrewFactionAddExistingId(e.target.value);
-                          setCrewFactionAddErr(null);
-                          if (e.target.value) setCrewFactionAddName("");
-                        }}
-                        disabled={crewFactionAddBusy}
-                      >
-                        <option value="">— Existing campaign faction —</option>
-                        {crewLinkableFactions.map((f) => (
-                          <option key={f.id} value={String(f.id)}>
-                            {f.name || `Faction ${f.id}`}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div
-                      style={{
-                        display: "flex",
-                        flexWrap: "wrap",
-                        gap: "10px",
-                        alignItems: "center",
-                      }}
-                    >
                       <label
                         style={{
                           display: "flex",
@@ -22818,19 +22861,12 @@ const CharacterSheetWrapper = ({
                         disabled={crewFactionAddBusy}
                         onClick={() => void handleAddCrewFactionLink()}
                       >
-                        {crewFactionAddBusy ? "Saving…" : "Add link"}
+                        {crewFactionAddBusy ? "Saving…" : "Create"}
                       </button>
                     </div>
                     {crewFactionAddErr ? (
                       <div style={{ fontSize: "11px", color: "#f87171" }}>
                         {crewFactionAddErr}
-                      </div>
-                    ) : null}
-                    {crewLinkableFactions.length === 0 &&
-                    !(campaignForCrewFactionAdd?.factions || []).length ? (
-                      <div style={{ fontSize: "10px", color: "#6b7280" }}>
-                        No factions on this campaign yet — use the name field to
-                        create the first one.
                       </div>
                     ) : null}
                   </div>
