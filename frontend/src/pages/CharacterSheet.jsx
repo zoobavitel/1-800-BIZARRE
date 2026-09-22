@@ -13184,7 +13184,7 @@ const CharacterSheetWrapper = ({
                   )}
 
                   {/* Clocks */}
-                  <div style={{ marginBottom: "14px" }}>
+                  <div style={S.card}>
                     <button
                       type="button"
                       onClick={() =>
