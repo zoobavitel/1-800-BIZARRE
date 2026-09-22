@@ -12504,6 +12504,1053 @@ const CharacterSheetWrapper = ({
                   </div>
                 </div>
 
+                {/* Session + clocks — left column */}
+                <div style={{ marginBottom: "12px" }}>
+                  {/* Session info the table shares with this sheet (wanted, NPC clocks). */}
+                  {charCampaign && activeSessionId && (
+                    <div
+                      style={{
+                        ...S.card,
+                        marginBottom: "14px",
+                        borderColor: "#4b5563",
+                        borderLeftWidth: "3px",
+                        borderLeftColor: "#7c3aed",
+                      }}
+                    >
+                      <span style={S.lbl}>SESSION</span>
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: "12px",
+                          alignItems: "center",
+                          marginBottom: "8px",
+                        }}
+                      >
+                        <span style={{ fontSize: "11px", color: "#9ca3af" }}>
+                          Wanted:
+                        </span>
+                        <div style={{ display: "flex", gap: "2px" }}>
+                          {[1, 2, 3, 4, 5].map((n) => (
+                            <span
+                              key={n}
+                              style={{
+                                color:
+                                  n <= (charCampaign.wanted_stars ?? 0)
+                                    ? "#fbbf24"
+                                    : "#4b5563",
+                              }}
+                            >
+                              ★
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      {sessionNpcsPartyFacingDisplay.length > 0 && (
+                        <div style={{ marginBottom: "8px" }}>
+                          <span style={{ fontSize: "11px", color: "#9ca3af" }}>
+                            Session NPC Clocks:
+                          </span>
+                          <div
+                            style={{
+                              display: "flex",
+                              flexWrap: "wrap",
+                              gap: "12px",
+                              marginTop: "4px",
+                            }}
+                          >
+                            {sessionNpcsPartyFacingDisplay.map((npc) => (
+                              <div
+                                key={npc.id}
+                                style={{
+                                  background: "#1f2937",
+                                  padding: "8px",
+                                  borderRadius: "4px",
+                                  border: "1px solid #374151",
+                                  minWidth: "120px",
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    fontSize: "11px",
+                                    fontWeight: "bold",
+                                    color: "#e5e7eb",
+                                    marginBottom: "4px",
+                                  }}
+                                >
+                                  {npc.name || "NPC"}
+                                </div>
+                                {npc.stand_name && (
+                                  <div
+                                    style={{
+                                      fontSize: "10px",
+                                      color: "#9ca3af",
+                                      marginBottom: "4px",
+                                    }}
+                                  >
+                                    {npc.stand_name}
+                                  </div>
+                                )}
+                                {npc.stand_coin_stats &&
+                                  Object.keys(npc.stand_coin_stats).length > 0 && (
+                                    <div
+                                      style={{
+                                        fontSize: "10px",
+                                        color: "#a78bfa",
+                                        marginBottom: "4px",
+                                      }}
+                                    >
+                                      Stand{" "}
+                                      {Object.entries(npc.stand_coin_stats)
+                                        .map(([k, v]) => `${k[0]}:${v}`)
+                                        .join(" · ")}
+                                    </div>
+                                  )}
+                                {Array.isArray(npc.abilities) &&
+                                  npc.abilities.length > 0 && (
+                                    <div
+                                      style={{
+                                        marginBottom: "6px",
+                                        padding: "4px 6px",
+                                        border: "1px solid #374151",
+                                        borderRadius: "4px",
+                                      }}
+                                    >
+                                      <div
+                                        style={{
+                                          fontSize: "10px",
+                                          color: "#9ca3af",
+                                          marginBottom: "2px",
+                                        }}
+                                      >
+                                        Abilities
+                                      </div>
+                                      {(npc.abilities || []).slice(0, 6).map((ab) => (
+                                        <div
+                                          key={ab.id || ab.name}
+                                          style={{
+                                            fontSize: "10px",
+                                            color: "#d1d5db",
+                                            lineHeight: 1.35,
+                                          }}
+                                        >
+                                          {ab.name || "Ability"}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                {npc.vulnerability_clock_max > 0 && (
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: "6px",
+                                      marginBottom: "4px",
+                                    }}
+                                  >
+                                    <ProgressClock
+                                      size={36}
+                                      segments={npc.vulnerability_clock_max}
+                                      filled={npc.vulnerability_clock_current}
+                                    />
+                                    <span
+                                      style={{
+                                        fontSize: "10px",
+                                        color: "#9ca3af",
+                                      }}
+                                    >
+                                      Vuln {npc.vulnerability_clock_current}/
+                                      {npc.vulnerability_clock_max}
+                                    </span>
+                                  </div>
+                                )}
+                                {(npc.conflict_clocks || []).length > 0
+                                  ? (npc.conflict_clocks || []).map((clk) => (
+                                      <div
+                                        key={clk.id || clk.name}
+                                        style={{
+                                          display: "flex",
+                                          alignItems: "center",
+                                          gap: "6px",
+                                          marginBottom: "2px",
+                                        }}
+                                      >
+                                        <ProgressClock
+                                          size={32}
+                                          segments={clk.segments || 4}
+                                          filled={clk.filled || 0}
+                                        />
+                                        <span
+                                          style={{
+                                            fontSize: "10px",
+                                            color: "#6b7280",
+                                          }}
+                                        >
+                                          {clk.name || "Conflict"}{" "}
+                                          {clk.filled || 0}/{clk.segments || 4}
+                                        </span>
+                                      </div>
+                                    ))
+                                  : null}
+                                {(npc.alt_clocks || []).length > 0
+                                  ? (npc.alt_clocks || []).map((clk) => (
+                                      <div
+                                        key={clk.id || clk.name}
+                                        style={{
+                                          display: "flex",
+                                          alignItems: "center",
+                                          gap: "6px",
+                                          marginBottom: "2px",
+                                        }}
+                                      >
+                                        <ProgressClock
+                                          size={32}
+                                          segments={clk.segments || 4}
+                                          filled={clk.filled || 0}
+                                        />
+                                        <span
+                                          style={{
+                                            fontSize: "10px",
+                                            color: "#6b7280",
+                                          }}
+                                        >
+                                          {clk.name || "Alt"} {clk.filled || 0}/
+                                          {clk.segments || 4}
+                                        </span>
+                                      </div>
+                                    ))
+                                  : null}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {(charCampaign.showcased_npcs || []).filter(
+                        (sn) => sn.show_clocks_to_party,
+                      ).length > 0 && (
+                        <div style={{ marginBottom: "8px" }}>
+                          <span style={{ fontSize: "11px", color: "#9ca3af" }}>
+                            Showcased NPC Clocks:
+                          </span>
+                          <div
+                            style={{
+                              display: "flex",
+                              flexWrap: "wrap",
+                              gap: "12px",
+                              marginTop: "4px",
+                            }}
+                          >
+                            {(charCampaign.showcased_npcs || [])
+                              .filter((sn) => sn.show_clocks_to_party)
+                              .map((sn) => {
+                                const npc = sn.npc || {};
+                                return (
+                                  <div
+                                    key={sn.id}
+                                    style={{
+                                      background: "#1f2937",
+                                      padding: "8px",
+                                      borderRadius: "4px",
+                                      border: "1px solid #374151",
+                                      minWidth: "120px",
+                                    }}
+                                  >
+                                    <div
+                                      style={{
+                                        fontSize: "11px",
+                                        fontWeight: "bold",
+                                        color: "#e5e7eb",
+                                        marginBottom: "4px",
+                                      }}
+                                    >
+                                      {npc.name || "NPC"}
+                                    </div>
+                                    {npc.stand_name && (
+                                      <div
+                                        style={{
+                                          fontSize: "10px",
+                                          color: "#9ca3af",
+                                          marginBottom: "4px",
+                                        }}
+                                      >
+                                        {npc.stand_name}
+                                      </div>
+                                    )}
+                                    {npc.stand_coin_stats &&
+                                      Object.keys(npc.stand_coin_stats).length > 0 && (
+                                        <div
+                                          style={{
+                                            fontSize: "10px",
+                                            color: "#a78bfa",
+                                            marginBottom: "4px",
+                                          }}
+                                        >
+                                          Stand{" "}
+                                          {Object.entries(npc.stand_coin_stats)
+                                            .map(([k, v]) => `${k[0]}:${v}`)
+                                            .join(" · ")}
+                                        </div>
+                                      )}
+                                    {Array.isArray(npc.abilities) &&
+                                      npc.abilities.length > 0 && (
+                                        <div
+                                          style={{
+                                            marginBottom: "6px",
+                                            padding: "4px 6px",
+                                            border: "1px solid #374151",
+                                            borderRadius: "4px",
+                                          }}
+                                        >
+                                          <div
+                                            style={{
+                                              fontSize: "10px",
+                                              color: "#9ca3af",
+                                              marginBottom: "2px",
+                                            }}
+                                          >
+                                            Abilities
+                                          </div>
+                                          {(npc.abilities || [])
+                                            .slice(0, 6)
+                                            .map((ab) => (
+                                              <div
+                                                key={ab.id || ab.name}
+                                                style={{
+                                                  fontSize: "10px",
+                                                  color: "#d1d5db",
+                                                  lineHeight: 1.35,
+                                                }}
+                                              >
+                                                {ab.name || "Ability"}
+                                              </div>
+                                            ))}
+                                        </div>
+                                      )}
+                                    {npc.vulnerability_clock_max > 0 && (
+                                      <div
+                                        style={{
+                                          display: "flex",
+                                          alignItems: "center",
+                                          gap: "6px",
+                                          marginBottom: "4px",
+                                        }}
+                                      >
+                                        <ProgressClock
+                                          size={36}
+                                          segments={npc.vulnerability_clock_max}
+                                          filled={
+                                            npc.vulnerability_clock_current || 0
+                                          }
+                                        />
+                                        <span
+                                          style={{
+                                            fontSize: "10px",
+                                            color: "#9ca3af",
+                                          }}
+                                        >
+                                          Vuln{" "}
+                                          {npc.vulnerability_clock_current || 0}
+                                          /{npc.vulnerability_clock_max}
+                                        </span>
+                                      </div>
+                                    )}
+                                    {(npc.conflict_clocks || []).map((clk) => (
+                                      <div
+                                        key={clk.id || clk.name}
+                                        style={{
+                                          display: "flex",
+                                          alignItems: "center",
+                                          gap: "6px",
+                                          marginBottom: "2px",
+                                        }}
+                                      >
+                                        <ProgressClock
+                                          size={32}
+                                          segments={clk.segments || 4}
+                                          filled={clk.filled || 0}
+                                        />
+                                        <span
+                                          style={{
+                                            fontSize: "10px",
+                                            color: "#6b7280",
+                                          }}
+                                        >
+                                          {clk.name || "Conflict"}{" "}
+                                          {clk.filled || 0}/{clk.segments || 4}
+                                        </span>
+                                      </div>
+                                    ))}
+                                    {(npc.alt_clocks || []).map((clk) => (
+                                      <div
+                                        key={clk.id || clk.name}
+                                        style={{
+                                          display: "flex",
+                                          alignItems: "center",
+                                          gap: "6px",
+                                          marginBottom: "2px",
+                                        }}
+                                      >
+                                        <ProgressClock
+                                          size={32}
+                                          segments={clk.segments || 4}
+                                          filled={clk.filled || 0}
+                                        />
+                                        <span
+                                          style={{
+                                            fontSize: "10px",
+                                            color: "#6b7280",
+                                          }}
+                                        >
+                                          {clk.name || "Alt"} {clk.filled || 0}/
+                                          {clk.segments || 4}
+                                        </span>
+                                      </div>
+                                    ))}
+                                    {(npc.progress_clocks || []).map((clk) => (
+                                      <div
+                                        key={clk.id}
+                                        style={{
+                                          display: "flex",
+                                          alignItems: "center",
+                                          gap: "6px",
+                                          marginBottom: "2px",
+                                        }}
+                                      >
+                                        <ProgressClock
+                                          size={32}
+                                          segments={clk.max_segments || 4}
+                                          filled={clk.filled_segments || 0}
+                                        />
+                                        <span
+                                          style={{
+                                            fontSize: "10px",
+                                            color: "#6b7280",
+                                          }}
+                                        >
+                                          {clk.name || "Clock"}{" "}
+                                          {clk.filled_segments || 0}/
+                                          {clk.max_segments || 4}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                );
+                              })}
+                          </div>
+                        </div>
+                      )}
+                      {/* GM session / campaign clocks (player-visible) */}
+                      {(() => {
+                        const gmId = normalizeCampaignGmId(charCampaign?.gm);
+                        const sid = activeSessionId != null ? Number(activeSessionId) : null;
+                        const npcIds = new Set();
+                        for (const npc of sessionNpcsPartyFacingDisplay || []) {
+                          if (npc?.id != null) npcIds.add(Number(npc.id));
+                        }
+                        for (const sn of charCampaign.showcased_npcs || []) {
+                          const nid = sn?.npc?.id ?? sn?.npc_id;
+                          if (nid != null) npcIds.add(Number(nid));
+                        }
+                        const sessionClocks = (charCampaign.progress_clocks || []).filter(
+                          (clk) => {
+                            if (!isGmManagedProgressClock(clk, gmId)) return false;
+                            if (!(!!clk.visible_to_players || !!clk.visible_to_party))
+                              return false;
+                            if (clk.npc != null && clk.npc !== "") {
+                              const nid = Number(
+                                typeof clk.npc === "object" ? clk.npc.id : clk.npc,
+                              );
+                              if (Number.isFinite(nid) && npcIds.has(nid)) return false;
+                            }
+                            const clkSession =
+                              clk.session != null && clk.session !== ""
+                                ? Number(
+                                    typeof clk.session === "object"
+                                      ? clk.session.id
+                                      : clk.session,
+                                  )
+                                : null;
+                            if (clkSession == null) return true;
+                            return sid != null && clkSession === sid;
+                          },
+                        );
+                        if (sessionClocks.length === 0) return null;
+                        return (
+                          <div style={{ marginBottom: "8px" }}>
+                            <span style={{ fontSize: "11px", color: "#9ca3af" }}>
+                              Session clocks:
+                            </span>
+                            <div
+                              style={{
+                                display: "grid",
+                                gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                                gap: "6px",
+                                marginTop: "6px",
+                              }}
+                            >
+                              {sessionClocks.map((clk) => {
+                                const canEdit =
+                                  isGM ||
+                                  Number(clk.created_by) === Number(user?.id);
+                                const segs =
+                                  clk.max_segments ?? clk.segments ?? 4;
+                                const fill =
+                                  clk.filled_segments ?? clk.filled ?? 0;
+                                return (
+                                  <div
+                                    key={clk.id}
+                                    style={{
+                                      background: "#374151",
+                                      padding: "4px",
+                                      borderRadius: "4px",
+                                      textAlign: "center",
+                                      minWidth: 0,
+                                    }}
+                                  >
+                                    <div
+                                      title={clk.name}
+                                      style={{
+                                        fontSize: "10px",
+                                        fontWeight: "bold",
+                                        marginBottom: "2px",
+                                        overflow: "hidden",
+                                        textOverflow: "ellipsis",
+                                        whiteSpace: "nowrap",
+                                      }}
+                                    >
+                                      {clk.name}
+                                    </div>
+                                    <div
+                                      style={{
+                                        display: "flex",
+                                        justifyContent: "center",
+                                        minWidth: 0,
+                                      }}
+                                    >
+                                      <ProgressClock
+                                        size={32}
+                                        segments={segs}
+                                        filled={fill}
+                                        interactive={canEdit}
+                                        onClick={
+                                          canEdit
+                                            ? (f) => {
+                                                progressClockAPI
+                                                  .updateProgressClock(clk.id, {
+                                                    filled_segments: f,
+                                                  })
+                                                  .then(() =>
+                                                    onCampaignRefresh?.(),
+                                                  )
+                                                  .catch(() => {});
+                                              }
+                                            : undefined
+                                        }
+                                      />
+                                    </div>
+                                    <div
+                                      style={{
+                                        fontSize: "9px",
+                                        color: "#6b7280",
+                                      }}
+                                    >
+                                      {fill}/{segs}
+                                    </div>
+                                    <div
+                                      style={{
+                                        fontSize: "8px",
+                                        color: "#6ee7b7",
+                                        marginTop: "2px",
+                                      }}
+                                    >
+                                      Shared by the GM
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
+
+                  {/* Clocks */}
+                  <div style={{ marginBottom: "14px" }}>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setClocksSectionExpandedPersist((prev) => {
+                          if (prev) {
+                            setClockEditorOpen(false);
+                            setNewClockName("");
+                            setNewClockSegments(4);
+                            setNewClockShared(false);
+                          }
+                          return !prev;
+                        })
+                      }
+                      aria-expanded={clocksSectionExpanded}
+                      aria-controls="character-sheet-clocks-panel"
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        width: "100%",
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        padding: 0,
+                        marginBottom: "8px",
+                        textAlign: "left",
+                      }}
+                    >
+                      <span
+                        aria-hidden
+                        style={{
+                          color: "#9ca3af",
+                          fontSize: "10px",
+                          lineHeight: 1,
+                          width: "12px",
+                          flexShrink: 0,
+                          userSelect: "none",
+                        }}
+                      >
+                        {clocksSectionExpanded ? "\u25bc" : "\u25ba"}
+                      </span>
+                      <span
+                        style={{
+                          color: S.lbl.color,
+                          fontSize: S.lbl.fontSize,
+                          fontWeight: S.lbl.fontWeight,
+                        }}
+                      >
+                        CLOCKS
+                      </span>
+                    </button>
+                    {clocksSectionExpanded ? (
+                      <div id="character-sheet-clocks-panel">
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                        gap: "6px",
+                        marginBottom: "8px",
+                      }}
+                    >
+                      {clocks.map((clk) => {
+                        const gmManaged = isGmManagedProgressClock(
+                          clk,
+                          charCampaign?.gm,
+                        );
+                        const gmShared =
+                          gmManaged &&
+                          (!!clk.visible_to_players || !!clk.visible_to_party);
+                        const segs = clockWedgeCount(clk.segments);
+                        const fill = clampClockFilled(clk.filled, segs);
+                        const canResizeClock =
+                          canEditSheet && (!gmManaged || isGM);
+                        const gmLabel = gmShared
+                          ? "Shared by the GM"
+                          : "GM clock (private)";
+                        return (
+                        <div
+                          key={clk.id}
+                          style={{
+                            background: "#374151",
+                            padding: "4px",
+                            borderRadius: "4px",
+                            textAlign: "center",
+                            minWidth: 0,
+                          }}
+                        >
+                          <input
+                            value={clk.name}
+                            onChange={(e) => {
+                              markDirtyIntent();
+                              bumpClocksHydrateGuard();
+                              const name = e.target.value;
+                              setClocks((p) =>
+                                p.map((c) =>
+                                  c.id === clk.id ? { ...c, name } : c,
+                                ),
+                              );
+                            }}
+                            style={{
+                              ...S.inp,
+                              textAlign: "center",
+                              fontSize: "10px",
+                              width: "100%",
+                              boxSizing: "border-box",
+                              marginBottom: "2px",
+                              padding: "2px 3px",
+                            }}
+                          />
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "center",
+                              minWidth: 0,
+                            }}
+                          >
+                            <ProgressClock
+                              size={32}
+                              segments={segs}
+                              filled={fill}
+                              interactive={canEditSheet}
+                              onClick={(f) => setClockFilled(clk.id, f, segs)}
+                            />
+                          </div>
+                          <div style={{ fontSize: "9px", color: "#6b7280" }}>
+                            {fill}/{segs}
+                          </div>
+                          {canResizeClock ? (
+                            <label
+                              style={{
+                                display: "flex",
+                                justifyContent: "center",
+                                alignItems: "center",
+                                gap: "2px",
+                                fontSize: "9px",
+                                color: "#9ca3af",
+                                marginTop: "2px",
+                              }}
+                            >
+                              Size
+                              <input
+                                type="number"
+                                min={1}
+                                max={12}
+                                title="Clock segments (1–12). −/+ ticks fill, not size."
+                                value={segs}
+                                onChange={(e) =>
+                                  resizeClockSegments(clk.id, e.target.value)
+                                }
+                                style={{
+                                  ...S.inp,
+                                  width: "28px",
+                                  fontSize: "9px",
+                                  textAlign: "center",
+                                  padding: "1px 2px",
+                                }}
+                              />
+                            </label>
+                          ) : null}
+                          {gmManaged ? (
+                            <div
+                              title={
+                                gmShared
+                                  ? "The GM shared this clock with everyone at the table."
+                                  : "GM clock — not shown to players until the GM marks it visible."
+                              }
+                              style={{
+                                fontSize: "8px",
+                                color: gmShared ? "#6ee7b7" : "#9ca3af",
+                                marginTop: "2px",
+                                lineHeight: 1.2,
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {gmLabel}
+                            </div>
+                          ) : (
+                          <label
+                            title="Shared party"
+                            style={{
+                              display: "flex",
+                              justifyContent: "center",
+                              alignItems: "center",
+                              gap: "2px",
+                              fontSize: "8px",
+                              color: "#9ca3af",
+                              marginTop: "2px",
+                              overflow: "hidden",
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={!!clk.visible_to_party}
+                              onChange={(e) => {
+                                markDirtyIntent();
+                                bumpClocksHydrateGuard();
+                                const visible_to_party = e.target.checked;
+                                setClocks((p) =>
+                                  p.map((c) =>
+                                    c.id === clk.id
+                                      ? { ...c, visible_to_party }
+                                      : c,
+                                  ),
+                                );
+                              }}
+                            />
+                            Shared
+                          </label>
+                          )}
+                          <button
+                            onClick={() => {
+                              markDirtyIntent();
+                              bumpClocksHydrateGuard();
+                              setClocks((p) =>
+                                p.filter((c) => c.id !== clk.id),
+                              );
+                            }}
+                            style={{
+                              color: "#f87171",
+                              background: "none",
+                              border: "none",
+                              cursor: "pointer",
+                              fontSize: "10px",
+                              padding: "0",
+                            }}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                        );
+                      })}
+                    </div>
+                    {!clockEditorOpen ? (
+                      <button
+                        onClick={() => setClockEditorOpen(true)}
+                        style={{
+                          ...S.btn,
+                          border: "2px dashed #374151",
+                          background: "transparent",
+                          color: "#6b7280",
+                          width: "100%",
+                          padding: "6px",
+                        }}
+                      >
+                        + Add Clock
+                      </button>
+                    ) : (
+                      <div
+                        style={{
+                          border: "1px solid #374151",
+                          borderRadius: "6px",
+                          padding: "10px",
+                          background: "#0b1220",
+                          display: "grid",
+                          gap: "8px",
+                        }}
+                      >
+                        <div>
+                          <span style={S.lbl}>Clock name</span>
+                          <input
+                            style={S.inp}
+                            value={newClockName}
+                            onChange={(e) => setNewClockName(e.target.value)}
+                            placeholder="e.g. Infiltrate estate"
+                            maxLength={64}
+                          />
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                          <div>
+                            <span style={S.lbl}>Segments</span>
+                            <input
+                              type="number"
+                              min={1}
+                              max={12}
+                              style={S.inp}
+                              value={newClockSegments}
+                              onChange={(e) =>
+                                setNewClockSegments(
+                                  Math.max(1, Math.min(12, Number(e.target.value) || 1)),
+                                )
+                              }
+                            />
+                          </div>
+                          <div style={{ display: "flex", alignItems: "end" }}>
+                            <label
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "6px",
+                                fontSize: "12px",
+                                color: "#9ca3af",
+                              }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={newClockShared}
+                                onChange={(e) => setNewClockShared(e.target.checked)}
+                              />
+                              Shared party
+                            </label>
+                          </div>
+                        </div>
+                        <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
+                          <button
+                            onClick={() => {
+                              setClockEditorOpen(false);
+                              setNewClockName("");
+                              setNewClockSegments(4);
+                              setNewClockShared(false);
+                            }}
+                            style={S.btnGhost}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={addClock}
+                            disabled={!String(newClockName || "").trim()}
+                            style={{
+                              ...S.btnPrimary,
+                              opacity: String(newClockName || "").trim() ? 1 : 0.5,
+                              cursor: String(newClockName || "").trim()
+                                ? "pointer"
+                                : "not-allowed",
+                            }}
+                          >
+                            Create clock
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                  {/* Shared party clocks: other players' shared clocks only.
+                      Own clocks stay in the list above; GM/session clocks live under SESSION (left column). */}
+                  {charCampaign?.progress_clocks?.length > 0 &&
+                    (() => {
+                      const gmId = normalizeCampaignGmId(charCampaign?.gm);
+                      const ownIds = new Set(
+                        (clocks || [])
+                          .map((c) => Number(c?.id))
+                          .filter((n) => Number.isFinite(n)),
+                      );
+                      const partyClocks = (charCampaign.progress_clocks || [])
+                        .filter(
+                          (clk) => !isGmManagedProgressClock(clk, gmId),
+                        )
+                        .filter((clk) => {
+                          const id = Number(clk?.id);
+                          if (Number.isFinite(id) && ownIds.has(id)) {
+                            return false;
+                          }
+                          // Own clocks (with Shared party checkbox) live above.
+                          if (Number(clk.created_by) === Number(user?.id)) {
+                            return false;
+                          }
+                          return !!clk.visible_to_party;
+                        });
+                      if (partyClocks.length === 0) return null;
+                      return (
+                        <div style={{ marginBottom: "14px" }}>
+                          <span style={S.lbl}>Shared party clocks</span>
+                          <div
+                            style={{
+                              display: "grid",
+                              gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                              gap: "6px",
+                              marginTop: "6px",
+                            }}
+                          >
+                            {partyClocks.map((clk) => {
+                              const canEdit =
+                                isGM || Number(clk.created_by) === Number(user?.id);
+                              return (
+                                <div
+                                  key={clk.id}
+                                  style={{
+                                    background: "#374151",
+                                    padding: "4px",
+                                    borderRadius: "4px",
+                                    textAlign: "center",
+                                    minWidth: 0,
+                                  }}
+                                >
+                                  <div
+                                    title={clk.name}
+                                    style={{
+                                      fontSize: "10px",
+                                      fontWeight: "bold",
+                                      marginBottom: "2px",
+                                      overflow: "hidden",
+                                      textOverflow: "ellipsis",
+                                      whiteSpace: "nowrap",
+                                    }}
+                                  >
+                                    {clk.name}
+                                  </div>
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      justifyContent: "center",
+                                      minWidth: 0,
+                                    }}
+                                  >
+                                    <ProgressClock
+                                      size={32}
+                                      segments={clk.max_segments}
+                                      filled={clk.filled_segments}
+                                      interactive={canEdit}
+                                      onClick={
+                                        canEdit
+                                          ? (f) => {
+                                              progressClockAPI
+                                                .updateProgressClock(clk.id, {
+                                                  filled_segments: f,
+                                                })
+                                                .then(() =>
+                                                  onCampaignRefresh?.(),
+                                                )
+                                                .catch(() => {});
+                                            }
+                                          : undefined
+                                      }
+                                    />
+                                  </div>
+                                  <div
+                                    style={{
+                                      fontSize: "9px",
+                                      color: "#6b7280",
+                                    }}
+                                  >
+                                    {clk.filled_segments}/{clk.max_segments}
+                                  </div>
+                                  <label
+                                    title="Shared party"
+                                    style={{
+                                      display: "flex",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                      gap: 2,
+                                      marginTop: 2,
+                                      fontSize: "8px",
+                                      color: "#9ca3af",
+                                      cursor: canEdit ? "pointer" : "default",
+                                      overflow: "hidden",
+                                    }}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={!!clk.visible_to_party}
+                                      disabled={!canEdit}
+                                      onChange={(e) => {
+                                        progressClockAPI
+                                          .updateProgressClock(clk.id, {
+                                            visible_to_party: e.target.checked,
+                                          })
+                                          .then(() => onCampaignRefresh?.())
+                                          .catch(() => {});
+                                      }}
+                                    />
+                                    Shared
+                                  </label>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                      </div>
+                    ) : null}
+                  </div>
+
+                </div>
+
                 {/* Stress & Trauma */}
                 <div style={S.card}>
                   <div
@@ -15112,441 +16159,6 @@ const CharacterSheetWrapper = ({
                     </div>
                   </div>
                   ) : null}
-
-                  {/* Session info the table shares with this sheet (wanted, NPC clocks). */}
-                  {charCampaign && activeSessionId && (
-                    <div
-                      style={{
-                        ...S.card,
-                        marginBottom: "14px",
-                        borderColor: "#4b5563",
-                        borderLeftWidth: "3px",
-                        borderLeftColor: "#7c3aed",
-                      }}
-                    >
-                      <span style={S.lbl}>SESSION</span>
-                      <div
-                        style={{
-                          display: "flex",
-                          gap: "12px",
-                          alignItems: "center",
-                          marginBottom: "8px",
-                        }}
-                      >
-                        <span style={{ fontSize: "11px", color: "#9ca3af" }}>
-                          Wanted:
-                        </span>
-                        <div style={{ display: "flex", gap: "2px" }}>
-                          {[1, 2, 3, 4, 5].map((n) => (
-                            <span
-                              key={n}
-                              style={{
-                                color:
-                                  n <= (charCampaign.wanted_stars ?? 0)
-                                    ? "#fbbf24"
-                                    : "#4b5563",
-                              }}
-                            >
-                              ★
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                      {sessionNpcsPartyFacingDisplay.length > 0 && (
-                        <div style={{ marginBottom: "8px" }}>
-                          <span style={{ fontSize: "11px", color: "#9ca3af" }}>
-                            Session NPC Clocks:
-                          </span>
-                          <div
-                            style={{
-                              display: "flex",
-                              flexWrap: "wrap",
-                              gap: "12px",
-                              marginTop: "4px",
-                            }}
-                          >
-                            {sessionNpcsPartyFacingDisplay.map((npc) => (
-                              <div
-                                key={npc.id}
-                                style={{
-                                  background: "#1f2937",
-                                  padding: "8px",
-                                  borderRadius: "4px",
-                                  border: "1px solid #374151",
-                                  minWidth: "120px",
-                                }}
-                              >
-                                <div
-                                  style={{
-                                    fontSize: "11px",
-                                    fontWeight: "bold",
-                                    color: "#e5e7eb",
-                                    marginBottom: "4px",
-                                  }}
-                                >
-                                  {npc.name || "NPC"}
-                                </div>
-                                {npc.stand_name && (
-                                  <div
-                                    style={{
-                                      fontSize: "10px",
-                                      color: "#9ca3af",
-                                      marginBottom: "4px",
-                                    }}
-                                  >
-                                    {npc.stand_name}
-                                  </div>
-                                )}
-                                {npc.stand_coin_stats &&
-                                  Object.keys(npc.stand_coin_stats).length > 0 && (
-                                    <div
-                                      style={{
-                                        fontSize: "10px",
-                                        color: "#a78bfa",
-                                        marginBottom: "4px",
-                                      }}
-                                    >
-                                      Stand{" "}
-                                      {Object.entries(npc.stand_coin_stats)
-                                        .map(([k, v]) => `${k[0]}:${v}`)
-                                        .join(" · ")}
-                                    </div>
-                                  )}
-                                {Array.isArray(npc.abilities) &&
-                                  npc.abilities.length > 0 && (
-                                    <div
-                                      style={{
-                                        marginBottom: "6px",
-                                        padding: "4px 6px",
-                                        border: "1px solid #374151",
-                                        borderRadius: "4px",
-                                      }}
-                                    >
-                                      <div
-                                        style={{
-                                          fontSize: "10px",
-                                          color: "#9ca3af",
-                                          marginBottom: "2px",
-                                        }}
-                                      >
-                                        Abilities
-                                      </div>
-                                      {(npc.abilities || []).slice(0, 6).map((ab) => (
-                                        <div
-                                          key={ab.id || ab.name}
-                                          style={{
-                                            fontSize: "10px",
-                                            color: "#d1d5db",
-                                            lineHeight: 1.35,
-                                          }}
-                                        >
-                                          {ab.name || "Ability"}
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-                                {npc.vulnerability_clock_max > 0 && (
-                                  <div
-                                    style={{
-                                      display: "flex",
-                                      alignItems: "center",
-                                      gap: "6px",
-                                      marginBottom: "4px",
-                                    }}
-                                  >
-                                    <ProgressClock
-                                      size={36}
-                                      segments={npc.vulnerability_clock_max}
-                                      filled={npc.vulnerability_clock_current}
-                                    />
-                                    <span
-                                      style={{
-                                        fontSize: "10px",
-                                        color: "#9ca3af",
-                                      }}
-                                    >
-                                      Vuln {npc.vulnerability_clock_current}/
-                                      {npc.vulnerability_clock_max}
-                                    </span>
-                                  </div>
-                                )}
-                                {(npc.conflict_clocks || []).length > 0
-                                  ? (npc.conflict_clocks || []).map((clk) => (
-                                      <div
-                                        key={clk.id || clk.name}
-                                        style={{
-                                          display: "flex",
-                                          alignItems: "center",
-                                          gap: "6px",
-                                          marginBottom: "2px",
-                                        }}
-                                      >
-                                        <ProgressClock
-                                          size={32}
-                                          segments={clk.segments || 4}
-                                          filled={clk.filled || 0}
-                                        />
-                                        <span
-                                          style={{
-                                            fontSize: "10px",
-                                            color: "#6b7280",
-                                          }}
-                                        >
-                                          {clk.name || "Conflict"}{" "}
-                                          {clk.filled || 0}/{clk.segments || 4}
-                                        </span>
-                                      </div>
-                                    ))
-                                  : null}
-                                {(npc.alt_clocks || []).length > 0
-                                  ? (npc.alt_clocks || []).map((clk) => (
-                                      <div
-                                        key={clk.id || clk.name}
-                                        style={{
-                                          display: "flex",
-                                          alignItems: "center",
-                                          gap: "6px",
-                                          marginBottom: "2px",
-                                        }}
-                                      >
-                                        <ProgressClock
-                                          size={32}
-                                          segments={clk.segments || 4}
-                                          filled={clk.filled || 0}
-                                        />
-                                        <span
-                                          style={{
-                                            fontSize: "10px",
-                                            color: "#6b7280",
-                                          }}
-                                        >
-                                          {clk.name || "Alt"} {clk.filled || 0}/
-                                          {clk.segments || 4}
-                                        </span>
-                                      </div>
-                                    ))
-                                  : null}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      {(charCampaign.showcased_npcs || []).filter(
-                        (sn) => sn.show_clocks_to_party,
-                      ).length > 0 && (
-                        <div style={{ marginBottom: "8px" }}>
-                          <span style={{ fontSize: "11px", color: "#9ca3af" }}>
-                            Showcased NPC Clocks:
-                          </span>
-                          <div
-                            style={{
-                              display: "flex",
-                              flexWrap: "wrap",
-                              gap: "12px",
-                              marginTop: "4px",
-                            }}
-                          >
-                            {(charCampaign.showcased_npcs || [])
-                              .filter((sn) => sn.show_clocks_to_party)
-                              .map((sn) => {
-                                const npc = sn.npc || {};
-                                return (
-                                  <div
-                                    key={sn.id}
-                                    style={{
-                                      background: "#1f2937",
-                                      padding: "8px",
-                                      borderRadius: "4px",
-                                      border: "1px solid #374151",
-                                      minWidth: "120px",
-                                    }}
-                                  >
-                                    <div
-                                      style={{
-                                        fontSize: "11px",
-                                        fontWeight: "bold",
-                                        color: "#e5e7eb",
-                                        marginBottom: "4px",
-                                      }}
-                                    >
-                                      {npc.name || "NPC"}
-                                    </div>
-                                    {npc.stand_name && (
-                                      <div
-                                        style={{
-                                          fontSize: "10px",
-                                          color: "#9ca3af",
-                                          marginBottom: "4px",
-                                        }}
-                                      >
-                                        {npc.stand_name}
-                                      </div>
-                                    )}
-                                    {npc.stand_coin_stats &&
-                                      Object.keys(npc.stand_coin_stats).length > 0 && (
-                                        <div
-                                          style={{
-                                            fontSize: "10px",
-                                            color: "#a78bfa",
-                                            marginBottom: "4px",
-                                          }}
-                                        >
-                                          Stand{" "}
-                                          {Object.entries(npc.stand_coin_stats)
-                                            .map(([k, v]) => `${k[0]}:${v}`)
-                                            .join(" · ")}
-                                        </div>
-                                      )}
-                                    {Array.isArray(npc.abilities) &&
-                                      npc.abilities.length > 0 && (
-                                        <div
-                                          style={{
-                                            marginBottom: "6px",
-                                            padding: "4px 6px",
-                                            border: "1px solid #374151",
-                                            borderRadius: "4px",
-                                          }}
-                                        >
-                                          <div
-                                            style={{
-                                              fontSize: "10px",
-                                              color: "#9ca3af",
-                                              marginBottom: "2px",
-                                            }}
-                                          >
-                                            Abilities
-                                          </div>
-                                          {(npc.abilities || [])
-                                            .slice(0, 6)
-                                            .map((ab) => (
-                                              <div
-                                                key={ab.id || ab.name}
-                                                style={{
-                                                  fontSize: "10px",
-                                                  color: "#d1d5db",
-                                                  lineHeight: 1.35,
-                                                }}
-                                              >
-                                                {ab.name || "Ability"}
-                                              </div>
-                                            ))}
-                                        </div>
-                                      )}
-                                    {npc.vulnerability_clock_max > 0 && (
-                                      <div
-                                        style={{
-                                          display: "flex",
-                                          alignItems: "center",
-                                          gap: "6px",
-                                          marginBottom: "4px",
-                                        }}
-                                      >
-                                        <ProgressClock
-                                          size={36}
-                                          segments={npc.vulnerability_clock_max}
-                                          filled={
-                                            npc.vulnerability_clock_current || 0
-                                          }
-                                        />
-                                        <span
-                                          style={{
-                                            fontSize: "10px",
-                                            color: "#9ca3af",
-                                          }}
-                                        >
-                                          Vuln{" "}
-                                          {npc.vulnerability_clock_current || 0}
-                                          /{npc.vulnerability_clock_max}
-                                        </span>
-                                      </div>
-                                    )}
-                                    {(npc.conflict_clocks || []).map((clk) => (
-                                      <div
-                                        key={clk.id || clk.name}
-                                        style={{
-                                          display: "flex",
-                                          alignItems: "center",
-                                          gap: "6px",
-                                          marginBottom: "2px",
-                                        }}
-                                      >
-                                        <ProgressClock
-                                          size={32}
-                                          segments={clk.segments || 4}
-                                          filled={clk.filled || 0}
-                                        />
-                                        <span
-                                          style={{
-                                            fontSize: "10px",
-                                            color: "#6b7280",
-                                          }}
-                                        >
-                                          {clk.name || "Conflict"}{" "}
-                                          {clk.filled || 0}/{clk.segments || 4}
-                                        </span>
-                                      </div>
-                                    ))}
-                                    {(npc.alt_clocks || []).map((clk) => (
-                                      <div
-                                        key={clk.id || clk.name}
-                                        style={{
-                                          display: "flex",
-                                          alignItems: "center",
-                                          gap: "6px",
-                                          marginBottom: "2px",
-                                        }}
-                                      >
-                                        <ProgressClock
-                                          size={32}
-                                          segments={clk.segments || 4}
-                                          filled={clk.filled || 0}
-                                        />
-                                        <span
-                                          style={{
-                                            fontSize: "10px",
-                                            color: "#6b7280",
-                                          }}
-                                        >
-                                          {clk.name || "Alt"} {clk.filled || 0}/
-                                          {clk.segments || 4}
-                                        </span>
-                                      </div>
-                                    ))}
-                                    {(npc.progress_clocks || []).map((clk) => (
-                                      <div
-                                        key={clk.id}
-                                        style={{
-                                          display: "flex",
-                                          alignItems: "center",
-                                          gap: "6px",
-                                          marginBottom: "2px",
-                                        }}
-                                      >
-                                        <ProgressClock
-                                          size={32}
-                                          segments={clk.max_segments || 4}
-                                          filled={clk.filled_segments || 0}
-                                        />
-                                        <span
-                                          style={{
-                                            fontSize: "10px",
-                                            color: "#6b7280",
-                                          }}
-                                        >
-                                          {clk.name || "Clock"}{" "}
-                                          {clk.filled_segments || 0}/
-                                          {clk.max_segments || 4}
-                                        </span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                );
-                              })}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
 
                   {/* Action Ratings — chargen baseline plus XP-bought action dots */}
                   <div style={{ marginBottom: "14px" }}>
@@ -21226,481 +21838,6 @@ const CharacterSheetWrapper = ({
                         </div>
                       )}
                     </div>
-                    ) : null}
-                  </div>
-
-                  {/* Clocks */}
-                  <div style={{ marginBottom: "14px" }}>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setClocksSectionExpandedPersist((prev) => {
-                          if (prev) {
-                            setClockEditorOpen(false);
-                            setNewClockName("");
-                            setNewClockSegments(4);
-                            setNewClockShared(false);
-                          }
-                          return !prev;
-                        })
-                      }
-                      aria-expanded={clocksSectionExpanded}
-                      aria-controls="character-sheet-clocks-panel"
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "8px",
-                        width: "100%",
-                        background: "none",
-                        border: "none",
-                        cursor: "pointer",
-                        padding: 0,
-                        marginBottom: "8px",
-                        textAlign: "left",
-                      }}
-                    >
-                      <span
-                        aria-hidden
-                        style={{
-                          color: "#9ca3af",
-                          fontSize: "10px",
-                          lineHeight: 1,
-                          width: "12px",
-                          flexShrink: 0,
-                          userSelect: "none",
-                        }}
-                      >
-                        {clocksSectionExpanded ? "\u25bc" : "\u25ba"}
-                      </span>
-                      <span
-                        style={{
-                          color: S.lbl.color,
-                          fontSize: S.lbl.fontSize,
-                          fontWeight: S.lbl.fontWeight,
-                        }}
-                      >
-                        CLOCKS
-                      </span>
-                    </button>
-                    {clocksSectionExpanded ? (
-                      <div id="character-sheet-clocks-panel">
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                        gap: "6px",
-                        marginBottom: "8px",
-                      }}
-                    >
-                      {clocks.map((clk) => {
-                        const gmManaged = isGmManagedProgressClock(
-                          clk,
-                          charCampaign?.gm,
-                        );
-                        const gmShared =
-                          gmManaged &&
-                          (!!clk.visible_to_players || !!clk.visible_to_party);
-                        const segs = clockWedgeCount(clk.segments);
-                        const fill = clampClockFilled(clk.filled, segs);
-                        const canResizeClock =
-                          canEditSheet && (!gmManaged || isGM);
-                        const gmLabel = gmShared
-                          ? "Shared by the GM"
-                          : "GM clock (private)";
-                        return (
-                        <div
-                          key={clk.id}
-                          style={{
-                            background: "#374151",
-                            padding: "4px",
-                            borderRadius: "4px",
-                            textAlign: "center",
-                            minWidth: 0,
-                          }}
-                        >
-                          <input
-                            value={clk.name}
-                            onChange={(e) => {
-                              markDirtyIntent();
-                              bumpClocksHydrateGuard();
-                              const name = e.target.value;
-                              setClocks((p) =>
-                                p.map((c) =>
-                                  c.id === clk.id ? { ...c, name } : c,
-                                ),
-                              );
-                            }}
-                            style={{
-                              ...S.inp,
-                              textAlign: "center",
-                              fontSize: "10px",
-                              width: "100%",
-                              boxSizing: "border-box",
-                              marginBottom: "2px",
-                              padding: "2px 3px",
-                            }}
-                          />
-                          <div
-                            style={{
-                              display: "flex",
-                              justifyContent: "center",
-                              minWidth: 0,
-                            }}
-                          >
-                            <ProgressClock
-                              size={32}
-                              segments={segs}
-                              filled={fill}
-                              interactive={canEditSheet}
-                              onClick={(f) => setClockFilled(clk.id, f, segs)}
-                            />
-                          </div>
-                          <div style={{ fontSize: "9px", color: "#6b7280" }}>
-                            {fill}/{segs}
-                          </div>
-                          {canResizeClock ? (
-                            <label
-                              style={{
-                                display: "flex",
-                                justifyContent: "center",
-                                alignItems: "center",
-                                gap: "2px",
-                                fontSize: "9px",
-                                color: "#9ca3af",
-                                marginTop: "2px",
-                              }}
-                            >
-                              Size
-                              <input
-                                type="number"
-                                min={1}
-                                max={12}
-                                title="Clock segments (1–12). −/+ ticks fill, not size."
-                                value={segs}
-                                onChange={(e) =>
-                                  resizeClockSegments(clk.id, e.target.value)
-                                }
-                                style={{
-                                  ...S.inp,
-                                  width: "28px",
-                                  fontSize: "9px",
-                                  textAlign: "center",
-                                  padding: "1px 2px",
-                                }}
-                              />
-                            </label>
-                          ) : null}
-                          {gmManaged ? (
-                            <div
-                              title={
-                                gmShared
-                                  ? "The GM shared this clock with everyone at the table."
-                                  : "GM clock — not shown to players until the GM marks it visible."
-                              }
-                              style={{
-                                fontSize: "8px",
-                                color: gmShared ? "#6ee7b7" : "#9ca3af",
-                                marginTop: "2px",
-                                lineHeight: 1.2,
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                              }}
-                            >
-                              {gmLabel}
-                            </div>
-                          ) : (
-                          <label
-                            title="Shared party"
-                            style={{
-                              display: "flex",
-                              justifyContent: "center",
-                              alignItems: "center",
-                              gap: "2px",
-                              fontSize: "8px",
-                              color: "#9ca3af",
-                              marginTop: "2px",
-                              overflow: "hidden",
-                            }}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={!!clk.visible_to_party}
-                              onChange={(e) => {
-                                markDirtyIntent();
-                                bumpClocksHydrateGuard();
-                                const visible_to_party = e.target.checked;
-                                setClocks((p) =>
-                                  p.map((c) =>
-                                    c.id === clk.id
-                                      ? { ...c, visible_to_party }
-                                      : c,
-                                  ),
-                                );
-                              }}
-                            />
-                            Shared
-                          </label>
-                          )}
-                          <button
-                            onClick={() => {
-                              markDirtyIntent();
-                              bumpClocksHydrateGuard();
-                              setClocks((p) =>
-                                p.filter((c) => c.id !== clk.id),
-                              );
-                            }}
-                            style={{
-                              color: "#f87171",
-                              background: "none",
-                              border: "none",
-                              cursor: "pointer",
-                              fontSize: "10px",
-                              padding: "0",
-                            }}
-                          >
-                            ✕
-                          </button>
-                        </div>
-                        );
-                      })}
-                    </div>
-                    {!clockEditorOpen ? (
-                      <button
-                        onClick={() => setClockEditorOpen(true)}
-                        style={{
-                          ...S.btn,
-                          border: "2px dashed #374151",
-                          background: "transparent",
-                          color: "#6b7280",
-                          width: "100%",
-                          padding: "6px",
-                        }}
-                      >
-                        + Add Clock
-                      </button>
-                    ) : (
-                      <div
-                        style={{
-                          border: "1px solid #374151",
-                          borderRadius: "6px",
-                          padding: "10px",
-                          background: "#0b1220",
-                          display: "grid",
-                          gap: "8px",
-                        }}
-                      >
-                        <div>
-                          <span style={S.lbl}>Clock name</span>
-                          <input
-                            style={S.inp}
-                            value={newClockName}
-                            onChange={(e) => setNewClockName(e.target.value)}
-                            placeholder="e.g. Infiltrate estate"
-                            maxLength={64}
-                          />
-                        </div>
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-                          <div>
-                            <span style={S.lbl}>Segments</span>
-                            <input
-                              type="number"
-                              min={1}
-                              max={12}
-                              style={S.inp}
-                              value={newClockSegments}
-                              onChange={(e) =>
-                                setNewClockSegments(
-                                  Math.max(1, Math.min(12, Number(e.target.value) || 1)),
-                                )
-                              }
-                            />
-                          </div>
-                          <div style={{ display: "flex", alignItems: "end" }}>
-                            <label
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "6px",
-                                fontSize: "12px",
-                                color: "#9ca3af",
-                              }}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={newClockShared}
-                                onChange={(e) => setNewClockShared(e.target.checked)}
-                              />
-                              Shared party
-                            </label>
-                          </div>
-                        </div>
-                        <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
-                          <button
-                            onClick={() => {
-                              setClockEditorOpen(false);
-                              setNewClockName("");
-                              setNewClockSegments(4);
-                              setNewClockShared(false);
-                            }}
-                            style={S.btnGhost}
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            onClick={addClock}
-                            disabled={!String(newClockName || "").trim()}
-                            style={{
-                              ...S.btnPrimary,
-                              opacity: String(newClockName || "").trim() ? 1 : 0.5,
-                              cursor: String(newClockName || "").trim()
-                                ? "pointer"
-                                : "not-allowed",
-                            }}
-                          >
-                            Create clock
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
-                  {/* Shared party clocks: other players' shared clocks only.
-                      Own clocks stay in the list above; GM/session clocks live under SESSION. */}
-                  {charCampaign?.progress_clocks?.length > 0 &&
-                    (() => {
-                      const gmId = normalizeCampaignGmId(charCampaign?.gm);
-                      const ownIds = new Set(
-                        (clocks || [])
-                          .map((c) => Number(c?.id))
-                          .filter((n) => Number.isFinite(n)),
-                      );
-                      const partyClocks = (charCampaign.progress_clocks || [])
-                        .filter(
-                          (clk) => !isGmManagedProgressClock(clk, gmId),
-                        )
-                        .filter((clk) => {
-                          const id = Number(clk?.id);
-                          if (Number.isFinite(id) && ownIds.has(id)) {
-                            return false;
-                          }
-                          // Own clocks (with Shared party checkbox) live above.
-                          if (Number(clk.created_by) === Number(user?.id)) {
-                            return false;
-                          }
-                          return !!clk.visible_to_party;
-                        });
-                      if (partyClocks.length === 0) return null;
-                      return (
-                        <div style={{ marginBottom: "14px" }}>
-                          <span style={S.lbl}>Shared party clocks</span>
-                          <div
-                            style={{
-                              display: "grid",
-                              gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                              gap: "6px",
-                              marginTop: "6px",
-                            }}
-                          >
-                            {partyClocks.map((clk) => {
-                              const canEdit =
-                                isGM || Number(clk.created_by) === Number(user?.id);
-                              return (
-                                <div
-                                  key={clk.id}
-                                  style={{
-                                    background: "#374151",
-                                    padding: "4px",
-                                    borderRadius: "4px",
-                                    textAlign: "center",
-                                    minWidth: 0,
-                                  }}
-                                >
-                                  <div
-                                    title={clk.name}
-                                    style={{
-                                      fontSize: "10px",
-                                      fontWeight: "bold",
-                                      marginBottom: "2px",
-                                      overflow: "hidden",
-                                      textOverflow: "ellipsis",
-                                      whiteSpace: "nowrap",
-                                    }}
-                                  >
-                                    {clk.name}
-                                  </div>
-                                  <div
-                                    style={{
-                                      display: "flex",
-                                      justifyContent: "center",
-                                      minWidth: 0,
-                                    }}
-                                  >
-                                    <ProgressClock
-                                      size={32}
-                                      segments={clk.max_segments}
-                                      filled={clk.filled_segments}
-                                      interactive={canEdit}
-                                      onClick={
-                                        canEdit
-                                          ? (f) => {
-                                              progressClockAPI
-                                                .updateProgressClock(clk.id, {
-                                                  filled_segments: f,
-                                                })
-                                                .then(() =>
-                                                  onCampaignRefresh?.(),
-                                                )
-                                                .catch(() => {});
-                                            }
-                                          : undefined
-                                      }
-                                    />
-                                  </div>
-                                  <div
-                                    style={{
-                                      fontSize: "9px",
-                                      color: "#6b7280",
-                                    }}
-                                  >
-                                    {clk.filled_segments}/{clk.max_segments}
-                                  </div>
-                                  <label
-                                    title="Shared party"
-                                    style={{
-                                      display: "flex",
-                                      alignItems: "center",
-                                      justifyContent: "center",
-                                      gap: 2,
-                                      marginTop: 2,
-                                      fontSize: "8px",
-                                      color: "#9ca3af",
-                                      cursor: canEdit ? "pointer" : "default",
-                                      overflow: "hidden",
-                                    }}
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      checked={!!clk.visible_to_party}
-                                      disabled={!canEdit}
-                                      onChange={(e) => {
-                                        progressClockAPI
-                                          .updateProgressClock(clk.id, {
-                                            visible_to_party: e.target.checked,
-                                          })
-                                          .then(() => onCampaignRefresh?.())
-                                          .catch(() => {});
-                                      }}
-                                    />
-                                    Shared
-                                  </label>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })()}
-                      </div>
                     ) : null}
                   </div>
 
