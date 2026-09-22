@@ -2839,16 +2839,17 @@ class FactionSerializer(serializers.ModelSerializer):
         data = super().to_representation(instance)
         if self._viewer_is_gm_or_staff(instance):
             return data
-        if not getattr(instance, "players_see_tier", True):
+        show = bool(getattr(instance, "visible_to_players", False))
+        if not show or not getattr(instance, "players_see_tier", True):
             data["level"] = None
-        if not getattr(instance, "players_see_hold", True):
+        if not show or not getattr(instance, "players_see_hold", True):
             data["hold"] = None
-        if not getattr(instance, "players_see_reputation", True):
+        if not show or not getattr(instance, "players_see_reputation", True):
             data["reputation"] = None
-        if not getattr(instance, "players_see_notes", True):
+        if not show or not getattr(instance, "players_see_notes", True):
             data["notes"] = ""
             data["crew_notes"] = ""
-        if not getattr(instance, "players_see_npcs", True):
+        if not show or not getattr(instance, "players_see_npcs", True):
             data["npcs"] = []
         return data
 
