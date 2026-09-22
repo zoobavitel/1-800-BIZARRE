@@ -4,6 +4,7 @@ import {
   clockWedgeCount,
   clockWedgeFillColor,
   isPersistedProgressClockId,
+  mergeSheetProgressClocks,
   serializeSheetProgressClocks,
 } from "./progressClockSegments";
 
@@ -46,6 +47,44 @@ describe("isPersistedProgressClockId", () => {
     expect(isPersistedProgressClockId(Date.now())).toBe(false);
     expect(isPersistedProgressClockId("pc-clock-1")).toBe(false);
     expect(isPersistedProgressClockId(42)).toBe(true);
+  });
+});
+
+describe("mergeSheetProgressClocks", () => {
+  test("keeps clientKey when temp clock maps to server id", () => {
+    const prev = [
+      {
+        id: "pc-clock-1",
+        clientKey: "pc-clock-1",
+        name: "Infiltrate",
+        segments: 4,
+        filled: 0,
+      },
+    ];
+    const incoming = [
+      {
+        id: 99,
+        name: "Infiltrate",
+        max_segments: 4,
+        filled_segments: 0,
+        created_by: 3,
+      },
+    ];
+    const merged = mergeSheetProgressClocks(prev, incoming);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].id).toBe(99);
+    expect(merged[0].clientKey).toBe("pc-clock-1");
+    expect(merged[0].created_by).toBe(3);
+  });
+
+  test("appends new server clocks without a local temp", () => {
+    const merged = mergeSheetProgressClocks(
+      [],
+      [{ id: 5, name: "A", max_segments: 6, filled_segments: 1 }],
+    );
+    expect(merged).toHaveLength(1);
+    expect(merged[0].clientKey).toBe("id:5");
+    expect(merged[0].segments).toBe(6);
   });
 });
 

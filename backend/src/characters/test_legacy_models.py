@@ -147,6 +147,12 @@ class CampaignModelTest(TestCase):
         """Test campaign string representation."""
         self.assertEqual(str(self.campaign), 'Diamond is Unbreakable')
 
+    def test_allow_character_assignment_defaults_false(self):
+        """Empty GM roster card stays off until GM opts in."""
+        self.assertFalse(self.campaign.allow_character_assignment)
+        fresh = Campaign.objects.create(name='Fresh Camp', gm=self.gm_user)
+        self.assertFalse(fresh.allow_character_assignment)
+
 
 class CrewModelTest(TestCase):
     """Test Crew model based on SRD crew mechanics."""

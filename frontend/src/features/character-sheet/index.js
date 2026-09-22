@@ -38,5 +38,6 @@ export {
   computeHealingClockAfterSegments,
   normalizeCrewFromCharacter,
   resolveCrewFromCampaign,
+  pickCrewFactionRowImage,
 } from "./utils/characterUtils";
 export * from "./services/api";

@@ -86,18 +86,36 @@ export default function HomeFactionCard({
         <div className="f-card-name">{faction?.name || "—"}</div>
         <div className="f-card-type">{typeLabel}</div>
         <div className="f-card-tags">
-          <span className="p-tag">Tier {tierRoman(faction?.level)}</span>
-          <span className="p-tag">{holdLabel(faction?.hold)}</span>
-          <span className="p-tag">
-            Rep {rep > 0 ? "+" : ""}
-            {rep}
-          </span>
+          {faction?.level != null && faction?.level !== "" && (
+            <span className="p-tag">Tier {tierRoman(faction?.level)}</span>
+          )}
+          {faction?.hold ? (
+            <span className="p-tag">{holdLabel(faction?.hold)}</span>
+          ) : null}
+          {faction?.reputation != null && faction?.reputation !== "" && (
+            <span className="p-tag">
+              Rep {rep > 0 ? "+" : ""}
+              {rep}
+            </span>
+          )}
         </div>
-        <div
-          className={`f-card-status ${factionStatusClass(faction?.reputation)}`}
-        >
-          {factionStatusLabel(faction?.reputation)}
-        </div>
+        {faction?.reputation != null && faction?.reputation !== "" ? (
+          <div
+            className={`f-card-status ${factionStatusClass(faction?.reputation)}`}
+          >
+            {factionStatusLabel(faction?.reputation)}
+          </div>
+        ) : null}
+        {faction?.notes ? (
+          <div className="f-card-notes" title={faction.notes}>
+            {faction.notes}
+          </div>
+        ) : null}
+        {Array.isArray(faction?.npcs) && faction.npcs.length > 0 ? (
+          <div className="f-card-npcs">
+            {faction.npcs.length} NPC{faction.npcs.length === 1 ? "" : "s"}
+          </div>
+        ) : null}
         <div className="f-card-actions">
           <button
             type="button"

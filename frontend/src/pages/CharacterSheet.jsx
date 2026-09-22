@@ -29,6 +29,7 @@ import {
 } from "../features/character-sheet/constants/srd";
 import NpcsStandCoin from "../components/NpcsStandCoin";
 import ProgressClock from "../components/ProgressClock";
+import AvatarCropModal from "../components/AvatarCropModal";
 import AdvancementPlanStrip from "../features/character-sheet/components/AdvancementPlanStrip";
 import AdvancementPlanPanel from "../features/character-sheet/components/AdvancementPlanPanel";
 import {
@@ -70,6 +71,7 @@ import {
   computeHealingClockAfterSegments,
   normalizeCrewFromCharacter,
   resolveCrewFromCampaign,
+  pickCrewFactionRowImage,
 } from "../features/character-sheet";
 import { useAuth } from "../features/auth";
 import {
@@ -96,7 +98,9 @@ import {
   clampClockSegments,
   clockWedgeCount,
   isPersistedProgressClockId,
+  mergeSheetProgressClocks,
   normalizeSheetProgressClock,
+  progressClockClientKey,
 } from "../features/character-sheet/utils/progressClockSegments";
 import CharacterSheetInventoryList from "../features/character-sheet/components/CharacterSheetInventoryList";
 import CharacterSheetArmorPanel from "../features/character-sheet/components/CharacterSheetArmorPanel";
@@ -2705,8 +2709,9 @@ const CharacterSheetWrapper = ({
       ? character.clocks.map((c) => normalizeSheetProgressClock(c)).filter(Boolean)
       : [];
     setClocks((prev) => {
-      if (JSON.stringify(prev) === JSON.stringify(incoming)) return prev;
-      return incoming;
+      const merged = mergeSheetProgressClocks(prev, incoming);
+      if (JSON.stringify(prev) === JSON.stringify(merged)) return prev;
+      return merged;
     });
   }, [character?.id, character?.clocks, sheetDraftIsDirty]);
   const clockFillApiTimersRef = useRef({});
@@ -2878,10 +2883,12 @@ const CharacterSheetWrapper = ({
   const [crewPortraitUrlDraft, setCrewPortraitUrlDraft] = useState("");
   const [crewPortraitSaving, setCrewPortraitSaving] = useState(false);
   const [crewPortraitMsg, setCrewPortraitMsg] = useState(null);
-  const crewPortraitFileInputRef = useRef(null);
+  const [crewPortraitCropOpen, setCrewPortraitCropOpen] = useState(false);
+  const [crewPortraitEditorOpen, setCrewPortraitEditorOpen] = useState(false);
+  const [crewPortraitPreviewError, setCrewPortraitPreviewError] =
+    useState(false);
   const [crewFactionLinks, setCrewFactionLinks] = useState([]);
   const [crewFactionAddName, setCrewFactionAddName] = useState("");
-  const [crewFactionAddExistingId, setCrewFactionAddExistingId] = useState("");
   const [crewFactionAddRep, setCrewFactionAddRep] = useState(0);
   const [crewFactionAddBusy, setCrewFactionAddBusy] = useState(false);
   const [crewFactionAddErr, setCrewFactionAddErr] = useState(null);
@@ -2909,6 +2916,77 @@ const CharacterSheetWrapper = ({
     () => resolveMediaUrl(crewData.image || crewData.image_url || ""),
     [crewData.image, crewData.image_url],
   );
+
+  useEffect(() => {
+    setCrewPortraitPreviewError(false);
+  }, [crewPortraitSrc]);
+
+  const applyCrewPortraitFile = useCallback(
+    async (file, { successText = "Portrait uploaded." } = {}) => {
+      if (!file || !charData.crewId) return;
+      if (file.size > 10 * 1024 * 1024) {
+        setCrewPortraitMsg({
+          ok: false,
+          text: "Portrait must be 10 MB or smaller.",
+        });
+        return;
+      }
+      setCrewPortraitSaving(true);
+      setCrewPortraitMsg(null);
+      try {
+        await crewAPI.patchCrew(charData.crewId, {
+          imageFile: file,
+          image_url: "",
+        });
+        const d = await crewAPI.getCrew(charData.crewId);
+        setCrewData((p) => ({
+          ...p,
+          image: d.image ?? "",
+          image_url: d.image_url ?? "",
+        }));
+        setCrewPortraitUrlDraft("");
+        setCrewPortraitPreviewError(false);
+        setCrewPortraitMsg({ ok: true, text: successText });
+      } catch (err) {
+        setCrewPortraitMsg({
+          ok: false,
+          text: err?.message || "Could not upload portrait.",
+        });
+      } finally {
+        setCrewPortraitSaving(false);
+      }
+    },
+    [charData.crewId],
+  );
+
+  const clearCrewPortrait = useCallback(async () => {
+    if (!charData.crewId) return;
+    setCrewPortraitSaving(true);
+    setCrewPortraitMsg(null);
+    try {
+      await crewAPI.patchCrew(charData.crewId, {
+        image: null,
+        image_url: "",
+      });
+      const d = await crewAPI.getCrew(charData.crewId);
+      setCrewData((p) => ({
+        ...p,
+        image: d.image ?? "",
+        image_url: d.image_url ?? "",
+      }));
+      setCrewPortraitUrlDraft("");
+      setCrewPortraitCropOpen(false);
+      setCrewPortraitPreviewError(false);
+      setCrewPortraitMsg({ ok: true, text: "Portrait cleared." });
+    } catch (err) {
+      setCrewPortraitMsg({
+        ok: false,
+        text: err?.message || "Could not clear portrait.",
+      });
+    } finally {
+      setCrewPortraitSaving(false);
+    }
+  }, [charData.crewId]);
 
   useEffect(() => {
     if (activeMode !== "CREW MODE" || !charData.crewId) {
@@ -3150,50 +3228,86 @@ const CharacterSheetWrapper = ({
     [campaigns, campaignId],
   );
 
-  const crewLinkableFactions = useMemo(() => {
-    const facs = campaignForCrewFactionAdd?.factions || [];
-    const linkedIds = new Set(
-      (crewFactionLinks || []).map((r) => Number(r.faction_id)),
-    );
-    return facs.filter((f) => f?.id != null && !linkedIds.has(Number(f.id)));
-  }, [campaignForCrewFactionAdd?.factions, crewFactionLinks]);
+  /** Prefer sheet campaign factions; fall back to campaigns list entry. */
+  const crewCampaignFactions = useMemo(() => {
+    const fromSheet = charCampaign?.factions;
+    const fromList = campaignForCrewFactionAdd?.factions;
+    if (Array.isArray(fromSheet) && fromSheet.length) return fromSheet;
+    if (Array.isArray(fromList)) return fromList;
+    return [];
+  }, [charCampaign?.factions, campaignForCrewFactionAdd?.factions]);
 
-  /** Non-GMs only see standings for factions the GM has revealed (matches CrewSerializer). */
-  const crewFactionLinksForDisplay = useMemo(() => {
-    const list = crewFactionLinks || [];
-    if (isGM) return list;
-    return list.filter((r) => r.visible_to_players !== false);
-  }, [crewFactionLinks, isGM]);
+  /**
+   * All campaign factions joined to crew standings.
+   * Missing link → reputation 0 until GM edits (creates relationship).
+   * Players only see factions with visible_to_players !== false.
+   */
+  const crewFactionRowsForDisplay = useMemo(() => {
+    const facs = crewCampaignFactions || [];
+    const linksByFid = new Map(
+      (crewFactionLinks || []).map((r) => [Number(r.faction_id), r]),
+    );
+    const rows = facs
+      .filter((f) => f?.id != null)
+      .map((f) => {
+        const fid = Number(f.id);
+        const link = linksByFid.get(fid);
+        return {
+          id: link?.id ?? `cf-${fid}`,
+          relationship_id: link?.id ?? null,
+          faction_id: fid,
+          faction_name: f.name || link?.faction_name || `Faction ${fid}`,
+          reputation_value:
+            link?.reputation_value != null
+              ? Number(link.reputation_value)
+              : 0,
+          visible_to_players: f.visible_to_players !== false,
+          players_see_reputation:
+            link?.players_see_reputation ?? f.players_see_reputation,
+          players_see_tier: link?.players_see_tier ?? f.players_see_tier,
+          players_see_hold: link?.players_see_hold ?? f.players_see_hold,
+          players_see_notes: link?.players_see_notes ?? f.players_see_notes,
+          faction_level: link?.faction_level ?? f.level,
+          faction_hold: link?.faction_hold ?? f.hold,
+          faction_notes: link?.faction_notes ?? f.notes,
+          faction_image: link?.faction_image ?? f.image,
+          faction_image_url: link?.faction_image_url ?? f.image_url,
+        };
+      });
+    for (const link of crewFactionLinks || []) {
+      const fid = Number(link.faction_id);
+      if (!Number.isFinite(fid)) continue;
+      if (facs.some((f) => Number(f.id) === fid)) continue;
+      rows.push({
+        ...link,
+        id: link.id ?? `link-${fid}`,
+        relationship_id: link.id ?? null,
+        reputation_value: Number(link.reputation_value) || 0,
+      });
+    }
+    if (isGM) return rows;
+    return rows.filter((r) => r.visible_to_players !== false);
+  }, [crewCampaignFactions, crewFactionLinks, isGM]);
 
   const handleAddCrewFactionLink = useCallback(async () => {
     if (!charData.crewId || !campaignId) return;
     const nameTrim = crewFactionAddName.trim();
-    const exId = Number.parseInt(String(crewFactionAddExistingId || ""), 10);
     const rep = Math.min(3, Math.max(-3, Number(crewFactionAddRep) || 0));
-    if (nameTrim && Number.isFinite(exId)) {
-      setCrewFactionAddErr("Use either a new name or an existing faction, not both.");
-      return;
-    }
-    if (!nameTrim && !Number.isFinite(exId)) {
-      setCrewFactionAddErr("Enter a new faction name or pick an existing faction.");
+    if (!nameTrim) {
+      setCrewFactionAddErr("Enter a new faction name.");
       return;
     }
     setCrewFactionAddBusy(true);
     setCrewFactionAddErr(null);
     try {
-      let fid = null;
-      if (nameTrim) {
-        const created = await factionAPI.createFaction({
-          campaign: Number.parseInt(String(campaignId), 10),
-          name: nameTrim,
-          visible_to_players: false,
-        });
-        fid = created?.id ?? created?.pk;
-      } else {
-        fid = exId;
-      }
+      const created = await factionAPI.createFaction({
+        campaign: Number.parseInt(String(campaignId), 10),
+        name: nameTrim,
+        visible_to_players: false,
+      });
+      const fid = created?.id ?? created?.pk;
       if (!fid) {
-        setCrewFactionAddErr("Could not resolve faction to link.");
+        setCrewFactionAddErr("Could not create faction.");
         return;
       }
       await crewAPI.patchCrew(charData.crewId, {
@@ -3202,12 +3316,11 @@ const CharacterSheetWrapper = ({
       const crewRes = await crewAPI.getCrew(charData.crewId);
       setCrewFactionLinks(crewRes.faction_relationships || []);
       setCrewFactionAddName("");
-      setCrewFactionAddExistingId("");
       setCrewFactionAddRep(0);
       onCampaignRefresh?.();
     } catch (e) {
       setCrewFactionAddErr(
-        e?.message || "Could not create or link faction. Try a different name.",
+        e?.message || "Could not create faction. Try a different name.",
       );
     } finally {
       setCrewFactionAddBusy(false);
@@ -3216,7 +3329,6 @@ const CharacterSheetWrapper = ({
     charData.crewId,
     campaignId,
     crewFactionAddName,
-    crewFactionAddExistingId,
     crewFactionAddRep,
     onCampaignRefresh,
   ]);
@@ -8988,18 +9100,21 @@ const CharacterSheetWrapper = ({
     const segs = Number(newClockSegments);
     if (!name || !Number.isFinite(segs)) return;
     const boundedSegments = clampClockSegments(segs);
+    const clientKey = `pc-clock-${Date.now()}`;
     markDirtyIntent();
     bumpClocksHydrateGuard();
     setClocks((p) => [
       ...p,
       {
-        id: `pc-clock-${Date.now()}`,
+        id: clientKey,
+        clientKey,
         name,
         segments: boundedSegments,
         max_segments: boundedSegments,
         filled: 0,
         filled_segments: 0,
         visible_to_party: !!newClockShared,
+        created_by: user?.id ?? null,
       },
     ]);
     setNewClockName("");
@@ -9040,18 +9155,22 @@ const CharacterSheetWrapper = ({
   const addPerfectOrganismEntityClock = useCallback((sizeLabel, segments) => {
     const segs = clampClockSegments(segments);
     const stamp = Date.now();
+    const clientKey = `po-${stamp}-${Math.random().toString(16).slice(2, 8)}`;
+    bumpClocksHydrateGuard();
     setClocks((p) => [
       ...p,
       {
-        id: `po-${stamp}-${Math.random().toString(16).slice(2, 8)}`,
+        id: clientKey,
+        clientKey,
         name: `Perfect Organism — ${sizeLabel}`,
         segments: segs,
         filled: 0,
         visible_to_party: false,
+        created_by: user?.id ?? null,
       },
     ]);
     setClocksSectionExpandedPersist(true);
-  }, [setClocksSectionExpandedPersist]);
+  }, [bumpClocksHydrateGuard, setClocksSectionExpandedPersist, user?.id]);
 
   const buildPayload = useCallback(() => {
     const backendId =
@@ -12526,14 +12645,16 @@ const CharacterSheetWrapper = ({
                           marginBottom: "8px",
                         }}
                       >
-                        <span style={{ fontSize: "11px", color: "#9ca3af" }}>
+                        <span style={{ fontSize: "16px", color: "#9ca3af" }}>
                           Wanted:
                         </span>
-                        <div style={{ display: "flex", gap: "2px" }}>
+                        <div style={{ display: "flex", gap: "4px" }}>
                           {[1, 2, 3, 4, 5].map((n) => (
                             <span
                               key={n}
                               style={{
+                                fontSize: "18px",
+                                lineHeight: 1,
                                 color:
                                   n <= (charCampaign.wanted_stars ?? 0)
                                     ? "#fbbf24"
@@ -13075,7 +13196,7 @@ const CharacterSheetWrapper = ({
                   )}
 
                   {/* Clocks */}
-                  <div style={{ marginBottom: "14px" }}>
+                  <div style={S.card}>
                     <button
                       type="button"
                       onClick={() =>
@@ -13154,7 +13275,7 @@ const CharacterSheetWrapper = ({
                           : "GM clock (private)";
                         return (
                         <div
-                          key={clk.id}
+                          key={progressClockClientKey(clk)}
                           style={{
                             background: "#374151",
                             padding: "4px",
@@ -22148,9 +22269,98 @@ const CharacterSheetWrapper = ({
         {/* ══════════════════════════════════ CREW MODE ══════════════════════════════════ */}
         {activeMode === "CREW MODE" && (
           <div>
+            <div style={S.g2}>
             <div style={S.card}>
-              <div style={S.g2}>
-                <div>
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 12,
+                  alignItems: "flex-start",
+                }}
+              >
+                <div style={{ flexShrink: 0 }}>
+                  {(() => {
+                    const canTogglePortrait =
+                      !!charData.crewId && canEditSheet;
+                    const thumbInner =
+                      crewPortraitSrc && !crewPortraitPreviewError ? (
+                        <img
+                          src={crewPortraitSrc}
+                          alt=""
+                          crossOrigin="anonymous"
+                          style={{
+                            width: 112,
+                            height: 112,
+                            objectFit: "cover",
+                            borderRadius: 6,
+                            border: crewPortraitEditorOpen
+                              ? "2px solid var(--hftf-purple)"
+                              : "1px solid #4b5563",
+                            background: "#111827",
+                            display: "block",
+                          }}
+                          onError={() => setCrewPortraitPreviewError(true)}
+                          onLoad={() => setCrewPortraitPreviewError(false)}
+                        />
+                      ) : (
+                        <div
+                          style={{
+                            width: 112,
+                            height: 112,
+                            borderRadius: 6,
+                            border: crewPortraitEditorOpen
+                              ? "2px solid var(--hftf-purple)"
+                              : "1px solid #4b5563",
+                            background: "#111827",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            color: "#6b7280",
+                            fontSize: 36,
+                            fontWeight: "bold",
+                          }}
+                          aria-hidden="true"
+                        >
+                          {(charData.crew || "C")
+                            .trim()
+                            .charAt(0)
+                            .toUpperCase()}
+                        </div>
+                      );
+                    if (!canTogglePortrait) return thumbInner;
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCrewPortraitEditorOpen((open) => {
+                            if (open) setCrewPortraitCropOpen(false);
+                            return !open;
+                          });
+                        }}
+                        aria-expanded={crewPortraitEditorOpen}
+                        aria-controls="crew-portrait-editor"
+                        title={
+                          crewPortraitEditorOpen
+                            ? "Hide portrait controls"
+                            : "Edit crew portrait"
+                        }
+                        style={{
+                          padding: 0,
+                          margin: 0,
+                          border: "none",
+                          background: "transparent",
+                          cursor: "pointer",
+                          borderRadius: 6,
+                          lineHeight: 0,
+                        }}
+                      >
+                        {thumbInner}
+                      </button>
+                    );
+                  })()}
+                </div>
+                <div style={{ flex: "1 1 200px", minWidth: 0 }}>
                   <span style={S.lbl}>CREW NAME</span>
                   <input
                     style={S.inp}
@@ -22163,491 +22373,208 @@ const CharacterSheetWrapper = ({
                   />
                 </div>
               </div>
-              <div
-                style={{
-                  marginTop: "12px",
-                  paddingTop: "12px",
-                  borderTop: "1px solid #374151",
-                }}
-              >
-                <span style={S.lbl}>FACTION REPUTATION</span>
+              {charData.crewId && canEditSheet && crewPortraitEditorOpen ? (
                 <div
+                  id="crew-portrait-editor"
                   style={{
-                    fontSize: "11px",
-                    color: "#9ca3af",
-                    marginTop: "4px",
-                    marginBottom: "8px",
+                    marginTop: 10,
+                    padding: 10,
+                    borderRadius: 6,
+                    border: "1px solid #374151",
+                    background: "#0d1117",
                   }}
                 >
-                  Standing with campaign factions (-3 hostile, 0 neutral, +3
-                  allied). Hidden factions are GM-only until revealed.
-                </div>
-                {charData.crewId && canEditSheet ? (
+                  <span style={{ ...S.lbl, fontSize: "10px" }}>
+                    Portrait (file or HTTPS URL)
+                  </span>
                   <div
                     style={{
-                      marginBottom: 10,
-                      padding: 10,
-                      borderRadius: 6,
-                      border: "1px solid #374151",
-                      background: "#0d1117",
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: 10,
+                      alignItems: "flex-start",
+                      marginTop: 8,
                     }}
                   >
-                    <span style={{ ...S.lbl, fontSize: "10px" }}>
-                      Crew portrait (upload or HTTPS URL)
-                    </span>
-                    <div
-                      style={{
-                        display: "flex",
-                        flexWrap: "wrap",
-                        gap: 10,
-                        alignItems: "center",
-                        marginTop: 8,
-                      }}
-                    >
-                      {crewPortraitSrc ? (
-                        <img
-                          src={crewPortraitSrc}
-                          alt=""
-                          style={{
-                            width: 44,
-                            height: 44,
-                            objectFit: "cover",
-                            borderRadius: 6,
-                            border: "1px solid #4b5563",
-                            flexShrink: 0,
-                          }}
-                          onError={(e) => {
-                            e.currentTarget.style.display = "none";
-                          }}
-                        />
-                      ) : null}
+                    <div style={{ flex: "1 1 200px", minWidth: 0 }}>
                       <input
-                        ref={crewPortraitFileInputRef}
                         type="file"
                         accept="image/jpeg,image/png,image/webp,image/gif"
-                        style={{ display: "none" }}
+                        style={{
+                          fontSize: 11,
+                          color: "#d1d5db",
+                          maxWidth: "100%",
+                        }}
+                        disabled={crewPortraitSaving}
                         onChange={async (e) => {
                           const file = e.target.files?.[0];
                           e.target.value = "";
-                          if (!file || !charData.crewId) return;
-                          if (file.size > 10 * 1024 * 1024) {
-                            setCrewPortraitMsg({
-                              ok: false,
-                              text: "Portrait must be 10 MB or smaller.",
-                            });
-                            return;
-                          }
-                          setCrewPortraitSaving(true);
-                          setCrewPortraitMsg(null);
-                          try {
-                            await crewAPI.patchCrew(charData.crewId, {
-                              imageFile: file,
-                              image_url: "",
-                            });
-                            const d = await crewAPI.getCrew(charData.crewId);
-                            setCrewData((p) => ({
-                              ...p,
-                              image: d.image ?? "",
-                              image_url: d.image_url ?? "",
-                            }));
-                            setCrewPortraitUrlDraft("");
-                            setCrewPortraitMsg({
-                              ok: true,
-                              text: "Portrait uploaded.",
-                            });
-                          } catch (err) {
-                            setCrewPortraitMsg({
-                              ok: false,
-                              text: err?.message || "Could not upload portrait.",
-                            });
-                          } finally {
-                            setCrewPortraitSaving(false);
-                          }
+                          if (!file) return;
+                          await applyCrewPortraitFile(file);
                         }}
                       />
-                      <button
-                        type="button"
-                        style={{ ...S.btn, fontSize: 11 }}
-                        disabled={crewPortraitSaving}
-                        onClick={() => crewPortraitFileInputRef.current?.click()}
-                      >
-                        Upload
-                      </button>
-                      <input
-                        type="url"
-                        style={{
-                          ...S.inp,
-                          flex: "1 1 200px",
-                          minWidth: 0,
-                          fontSize: 11,
-                        }}
-                        value={crewPortraitUrlDraft}
-                        onChange={(e) => {
-                          setCrewPortraitUrlDraft(e.target.value);
-                          setCrewPortraitMsg(null);
-                        }}
-                        placeholder="https://example.com/crew-photo.jpg"
-                      />
-                      <button
-                        type="button"
-                        style={{ ...S.btn, fontSize: 11 }}
-                        disabled={crewPortraitSaving}
-                        onClick={async () => {
-                          if (!charData.crewId) return;
-                          const next = String(crewPortraitUrlDraft || "").trim();
-                          if (!next) return;
-                          setCrewPortraitSaving(true);
-                          setCrewPortraitMsg(null);
-                          try {
-                            await crewAPI.patchCrew(charData.crewId, {
-                              image_url: next,
-                              image: null,
-                            });
-                            const d = await crewAPI.getCrew(charData.crewId);
-                            setCrewData((p) => ({
-                              ...p,
-                              image: d.image ?? "",
-                              image_url: d.image_url ?? "",
-                            }));
-                            setCrewPortraitUrlDraft(
-                              String(d.image_url || "").trim(),
-                            );
-                            setCrewPortraitMsg({
-                              ok: true,
-                              text: "Portrait URL saved.",
-                            });
-                          } catch (err) {
-                            setCrewPortraitMsg({
-                              ok: false,
-                              text:
-                                err?.message ||
-                                "Could not save (HTTPS URL required).",
-                            });
-                          } finally {
-                            setCrewPortraitSaving(false);
-                          }
-                        }}
-                      >
-                        {crewPortraitSaving ? "Saving…" : "Save URL"}
-                      </button>
-                    </div>
-                    {crewPortraitMsg ? (
                       <div
-                        style={{
-                          marginTop: 6,
-                          fontSize: 10,
-                          color: crewPortraitMsg.ok ? "#34d399" : "#f87171",
-                        }}
-                      >
-                        {crewPortraitMsg.text}
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
-                {crewFactionLinksForDisplay.length === 0 ? (
-                  <div style={{ fontSize: "12px", color: "#6b7280" }}>
-                    {crewFactionLinks.length === 0 ? (
-                      <>
-                        No linked factions yet.
-                        {isGM && campaignId
-                          ? " Create a faction for the campaign, then link it to this crew."
-                          : ""}
-                      </>
-                    ) : (
-                      <>
-                        No crew–faction standings are revealed to players yet. Your
-                        GM can reveal them from the crew block when the table is meant
-                        to see them.
-                      </>
-                    )}
-                  </div>
-                ) : (
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "8px",
-                    }}
-                  >
-                    {crewFactionLinksForDisplay.map((row) => (
-                      <div
-                        key={row.id}
                         style={{
                           display: "flex",
                           flexWrap: "wrap",
-                          alignItems: "center",
-                          gap: "10px",
-                          fontSize: "12px",
-                          background: "#111827",
-                          padding: "8px",
-                          borderRadius: "6px",
-                          border: "1px solid #374151",
+                          gap: 6,
+                          marginTop: 6,
                         }}
                       >
-                        {crewPortraitSrc ? (
-                          <img
-                            src={crewPortraitSrc}
-                            alt=""
-                            title="Crew portrait"
-                            style={{
-                              width: 36,
-                              height: 36,
-                              objectFit: "cover",
-                              borderRadius: 6,
-                              border: "1px solid #4b5563",
-                              flexShrink: 0,
-                            }}
-                            onError={(e) => {
-                              e.currentTarget.style.display = "none";
-                            }}
-                          />
-                        ) : null}
-                        <span style={{ fontWeight: 600, color: "#e5e7eb" }}>
-                          {row.faction_name}
-                        </span>
-                        <span style={{ color: "#9ca3af" }}>
-                          {row.reputation_value}{" "}
-                          <span style={{ color: "#6b7280" }}>
-                            ({reputationTierLabel(row.reputation_value)})
-                          </span>
-                        </span>
-                        {isGM && charData.crewId ? (
-                          <>
-                            <label
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "4px",
-                                fontSize: "11px",
-                              }}
-                            >
-                              Rep
-                              <input
-                                type="number"
-                                min={-3}
-                                max={3}
-                                defaultValue={row.reputation_value}
-                                key={`${row.id}-${row.reputation_value}`}
-                                style={{
-                                  width: "52px",
-                                  background: "#0d1117",
-                                  color: "#fff",
-                                  border: "1px solid #4b5563",
-                                  borderRadius: "4px",
-                                  padding: "2px 4px",
-                                }}
-                                onBlur={(e) => {
-                                  const v = Math.min(
-                                    3,
-                                    Math.max(
-                                      -3,
-                                      parseInt(e.target.value, 10) || 0,
-                                    ),
-                                  );
-                                  crewAPI
-                                    .patchCrew(charData.crewId, {
-                                      faction_relationships: [
-                                        {
-                                          faction_id: row.faction_id,
-                                          reputation_value: v,
-                                        },
-                                      ],
-                                    })
-                                    .then(() =>
-                                      crewAPI.getCrew(charData.crewId).then((d) => {
-                                        setCrewFactionLinks(
-                                          d.faction_relationships || [],
-                                        );
-                                      }),
-                                    )
-                                    .catch(() => {});
-                                }}
-                              />
-                            </label>
-                            <button
-                              type="button"
-                              style={{
-                                ...S.btn,
-                                fontSize: "10px",
-                                padding: "2px 8px",
-                              }}
-                              onClick={() => {
-                                factionAPI
-                                  .patchFaction(row.faction_id, {
-                                    visible_to_players: !row.visible_to_players,
-                                  })
-                                  .then(() =>
-                                    crewAPI.getCrew(charData.crewId).then((d) => {
-                                      setCrewFactionLinks(
-                                        d.faction_relationships || [],
-                                      );
-                                      onCampaignRefresh?.();
-                                    }),
-                                  )
-                                  .catch(() => {});
-                              }}
-                            >
-                              {row.visible_to_players
-                                ? "Hide from players"
-                                : "Reveal to players"}
-                            </button>
-                          </>
-                        ) : null}
+                        <button
+                          type="button"
+                          disabled={
+                            crewPortraitSaving ||
+                            !crewPortraitSrc ||
+                            crewPortraitPreviewError
+                          }
+                          onClick={() => setCrewPortraitCropOpen(true)}
+                          style={{
+                            ...S.btnGhost,
+                            fontSize: 10,
+                            opacity:
+                              !crewPortraitSrc || crewPortraitPreviewError
+                                ? 0.5
+                                : 1,
+                          }}
+                        >
+                          Crop
+                        </button>
+                        <button
+                          type="button"
+                          disabled={
+                            crewPortraitSaving ||
+                            (!crewPortraitSrc && !crewPortraitUrlDraft)
+                          }
+                          onClick={() => clearCrewPortrait()}
+                          style={{ ...S.btnGhost, fontSize: 10 }}
+                        >
+                          Clear
+                        </button>
                       </div>
-                    ))}
-                  </div>
-                )}
-                {isGM && campaignId && charData.crewId ? (
-                  <div
-                    style={{
-                      marginTop: "12px",
-                      padding: "10px",
-                      borderRadius: "6px",
-                      border: "1px solid #374151",
-                      background: "#111827",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "8px",
-                    }}
-                  >
-                    <span style={{ ...S.lbl, fontSize: "10px" }}>
-                      Add faction link
-                    </span>
-                    <div
-                      style={{
-                        fontSize: "10px",
-                        color: "#6b7280",
-                        lineHeight: 1.4,
-                      }}
-                    >
-                      Create a GM-only faction by name, or link one already in this
-                      campaign. Set starting reputation (−3 to +3), then add link.
-                    </div>
-                    <div
-                      style={{
-                        display: "flex",
-                        flexWrap: "wrap",
-                        gap: "8px",
-                        alignItems: "center",
-                      }}
-                    >
-                      <input
-                        type="text"
-                        style={{
-                          ...S.inp,
-                          flex: "1 1 160px",
-                          minWidth: "140px",
-                          fontSize: "11px",
-                        }}
-                        placeholder="New faction name (hidden until revealed)"
-                        value={crewFactionAddName}
-                        onChange={(e) => {
-                          setCrewFactionAddName(e.target.value);
-                          setCrewFactionAddErr(null);
-                          if (e.target.value.trim())
-                            setCrewFactionAddExistingId("");
-                        }}
-                        disabled={crewFactionAddBusy}
-                      />
-                      <span style={{ fontSize: "10px", color: "#6b7280" }}>or</span>
-                      <select
-                        style={{
-                          ...S.sel,
-                          flex: "1 1 160px",
-                          minWidth: "140px",
-                          fontSize: "11px",
-                        }}
-                        value={crewFactionAddExistingId}
-                        onChange={(e) => {
-                          setCrewFactionAddExistingId(e.target.value);
-                          setCrewFactionAddErr(null);
-                          if (e.target.value) setCrewFactionAddName("");
-                        }}
-                        disabled={crewFactionAddBusy}
-                      >
-                        <option value="">— Existing campaign faction —</option>
-                        {crewLinkableFactions.map((f) => (
-                          <option key={f.id} value={String(f.id)}>
-                            {f.name || `Faction ${f.id}`}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div
-                      style={{
-                        display: "flex",
-                        flexWrap: "wrap",
-                        gap: "10px",
-                        alignItems: "center",
-                      }}
-                    >
-                      <label
+                      <div
                         style={{
                           display: "flex",
+                          flexWrap: "wrap",
+                          gap: 6,
+                          marginTop: 8,
                           alignItems: "center",
-                          gap: "6px",
-                          fontSize: "11px",
-                          color: "#9ca3af",
                         }}
                       >
-                        Starting rep
                         <input
-                          type="number"
-                          min={-3}
-                          max={3}
+                          type="url"
                           style={{
-                            width: "52px",
-                            background: "#0d1117",
-                            color: "#fff",
-                            border: "1px solid #4b5563",
-                            borderRadius: "4px",
-                            padding: "2px 4px",
-                            fontSize: "11px",
+                            ...S.inp,
+                            flex: "1 1 160px",
+                            minWidth: 0,
+                            fontSize: 11,
                           }}
-                          value={crewFactionAddRep}
+                          value={crewPortraitUrlDraft}
                           onChange={(e) => {
-                            setCrewFactionAddRep(
-                              Math.min(
-                                3,
-                                Math.max(
-                                  -3,
-                                  parseInt(e.target.value, 10) || 0,
-                                ),
-                              ),
-                            );
-                            setCrewFactionAddErr(null);
+                            setCrewPortraitUrlDraft(e.target.value);
+                            setCrewPortraitMsg(null);
                           }}
-                          disabled={crewFactionAddBusy}
+                          placeholder="https://example.com/crew-photo.jpg"
+                          disabled={crewPortraitSaving}
                         />
-                      </label>
-                      <button
-                        type="button"
-                        style={{
-                          ...S.btn,
-                          fontSize: "11px",
-                          padding: "4px 12px",
-                          opacity: crewFactionAddBusy ? 0.6 : 1,
-                        }}
-                        disabled={crewFactionAddBusy}
-                        onClick={() => void handleAddCrewFactionLink()}
-                      >
-                        {crewFactionAddBusy ? "Saving…" : "Add link"}
-                      </button>
+                        <button
+                          type="button"
+                          style={{ ...S.btn, fontSize: 11 }}
+                          disabled={crewPortraitSaving}
+                          onClick={async () => {
+                            if (!charData.crewId) return;
+                            const next = String(
+                              crewPortraitUrlDraft || "",
+                            ).trim();
+                            if (!next) return;
+                            setCrewPortraitSaving(true);
+                            setCrewPortraitMsg(null);
+                            try {
+                              await crewAPI.patchCrew(charData.crewId, {
+                                image_url: next,
+                                image: null,
+                              });
+                              const d = await crewAPI.getCrew(
+                                charData.crewId,
+                              );
+                              setCrewData((p) => ({
+                                ...p,
+                                image: d.image ?? "",
+                                image_url: d.image_url ?? "",
+                              }));
+                              setCrewPortraitUrlDraft(
+                                String(d.image_url || "").trim(),
+                              );
+                              setCrewPortraitPreviewError(false);
+                              setCrewPortraitMsg({
+                                ok: true,
+                                text: "Portrait URL saved.",
+                              });
+                            } catch (err) {
+                              setCrewPortraitMsg({
+                                ok: false,
+                                text:
+                                  err?.message ||
+                                  "Could not save (HTTPS URL required).",
+                              });
+                            } finally {
+                              setCrewPortraitSaving(false);
+                            }
+                          }}
+                        >
+                          {crewPortraitSaving ? "Saving…" : "Save URL"}
+                        </button>
+                      </div>
                     </div>
-                    {crewFactionAddErr ? (
-                      <div style={{ fontSize: "11px", color: "#f87171" }}>
-                        {crewFactionAddErr}
-                      </div>
-                    ) : null}
-                    {crewLinkableFactions.length === 0 &&
-                    !(campaignForCrewFactionAdd?.factions || []).length ? (
-                      <div style={{ fontSize: "10px", color: "#6b7280" }}>
-                        No factions on this campaign yet — use the name field to
-                        create the first one.
-                      </div>
-                    ) : null}
                   </div>
-                ) : null}
+                  {crewPortraitCropOpen &&
+                  crewPortraitSrc &&
+                  !crewPortraitPreviewError ? (
+                    <AvatarCropModal
+                      imageSrc={crewPortraitSrc}
+                      onCancel={() => setCrewPortraitCropOpen(false)}
+                      onApply={(file) => {
+                        setCrewPortraitCropOpen(false);
+                        void applyCrewPortraitFile(file, {
+                          successText: "Portrait cropped.",
+                        });
+                      }}
+                    />
+                  ) : null}
+                  {crewPortraitMsg ? (
+                    <div
+                      style={{
+                        marginTop: 6,
+                        fontSize: 10,
+                        color: crewPortraitMsg.ok ? "#34d399" : "#f87171",
+                      }}
+                    >
+                      {crewPortraitMsg.text}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+              <div style={{ marginTop: "12px" }}>
+                <span style={S.lbl}>DESCRIPTION</span>
+                <textarea
+                  value={crewData.description}
+                  onChange={(e) =>
+                    setCrewData((p) => ({ ...p, description: e.target.value }))
+                  }
+                  placeholder="A short crew description…"
+                  style={{
+                    width: "100%",
+                    height: "80px",
+                    background: "#0d1117",
+                    color: "#fff",
+                    border: "1px solid #374151",
+                    padding: "8px",
+                    fontFamily: "monospace",
+                    fontSize: "12px",
+                    resize: "none",
+                    boxSizing: "border-box",
+                  }}
+                />
               </div>
               <div
                 style={{
@@ -22852,112 +22779,402 @@ const CharacterSheetWrapper = ({
                 })()}
               </div>
             </div>
-            {charData.crewId ? (
-              <div
-                style={{
-                  ...S.card,
-                  marginBottom: "12px",
-                }}
-              >
+            <div
+              style={{
+                ...S.card,
+                display: "flex",
+                flexDirection: "column",
+                minHeight: 0,
+                minWidth: 0,
+              }}
+            >
+              <span style={S.lbl}>FACTION REPUTATION</span>
                 <div
                   style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: "8px",
-                    marginBottom: crewHistoryOpen ? "6px" : 0,
+                    fontSize: "11px",
+                    color: "#9ca3af",
+                    marginTop: "4px",
+                    marginBottom: "8px",
                   }}
                 >
-                  <span style={S.lbl}>CREW MODIFICATION HISTORY</span>
-                  <button
-                    type="button"
-                    onClick={() => setCrewHistoryOpenPersist((v) => !v)}
+                  Standing with campaign factions (-3 hostile, 0 neutral, +3
+                  allied). Hidden factions are GM-only until revealed.
+                </div>
+                <div
+                  style={{
+                    flex: 1,
+                    minHeight: 0,
+                    overflowY: "auto",
+                    maxHeight: "min(70vh, 720px)",
+                    marginTop: "4px",
+                  }}
+                >
+                {crewFactionRowsForDisplay.length === 0 ? (
+                  <div style={{ fontSize: "12px", color: "#6b7280" }}>
+                    {(crewCampaignFactions || []).length === 0 ? (
+                      <>
+                        No campaign factions yet.
+                        {isGM && campaignId
+                          ? " Create one below (hidden until you reveal it)."
+                          : ""}
+                      </>
+                    ) : (
+                      <>
+                        No factions are revealed to players yet. Your GM can
+                        reveal them from this block when the table is meant to
+                        see them.
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  <div
                     style={{
-                      ...S.btn,
-                      fontSize: "10px",
-                      padding: "2px 8px",
-                      background: "#111827",
-                      color: "#c4b5fd",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "10px",
                     }}
                   >
-                    {crewHistoryOpen ? "Collapse" : "Expand"}
-                  </button>
-                </div>
-                {crewHistoryOpen ? (
-                  <>
-                    <div
-                      style={{
-                        fontSize: "11px",
-                        color: "#6b7280",
-                        marginTop: "4px",
-                        marginBottom: "8px",
-                      }}
-                    >
-                      Saved changes to this crew (name, rep, turf, tier, wanted,
-                      coin, notes, upgrades, etc.).
-                    </div>
-                    <div style={{ maxHeight: "220px", overflow: "auto" }}>
-                      {crewHistoryEntries.length === 0 ? (
-                        <div style={{ fontSize: "12px", color: "#6b7280" }}>
-                          No history entries yet.
-                        </div>
-                      ) : (
-                        <ul
+                    {crewFactionRowsForDisplay.map((row) => {
+                      const factionThumbSrc = resolveMediaUrl(
+                        pickCrewFactionRowImage(row, crewCampaignFactions),
+                      );
+                      const factionInitial = (row.faction_name || "F")
+                        .trim()
+                        .charAt(0)
+                        .toUpperCase();
+                      return (
+                        <div
+                          key={row.id}
                           style={{
-                            margin: 0,
-                            paddingLeft: "18px",
-                            fontSize: "11px",
-                            color: "#d1d5db",
-                            lineHeight: 1.5,
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "8px",
+                            fontSize: "12px",
+                            background: "#111827",
+                            padding: "10px",
+                            borderRadius: "6px",
+                            border: "1px solid #374151",
+                            minWidth: 0,
                           }}
                         >
-                          {crewHistoryEntries.map((entry) => {
-                            const cf = entry.changed_fields || {};
-                            const keys = Object.keys(cf).filter((k) =>
-                              CREW_HISTORY_FIELD_KEYS.has(k),
-                            );
-                            if (!keys.length) return null;
-                            const when = entry.timestamp
-                              ? new Date(entry.timestamp).toLocaleString()
-                              : "";
-                            return (
-                              <li key={entry.id} style={{ marginBottom: "8px" }}>
-                                <div style={{ color: "#9ca3af" }}>
-                                  {when}
-                                  {entry.editor_username
-                                    ? ` · ${entry.editor_username}`
-                                    : ""}
-                                </div>
-                                {keys.map((k) => {
-                                  const ch = cf[k] || {};
-                                  return (
-                                    <div key={k}>
-                                      <strong>{k}</strong>:{" "}
-                                      <span style={{ color: "#fca5a5" }}>
-                                        {String(ch.old ?? "")}
-                                      </span>{" "}
-                                      →{" "}
-                                      <span style={{ color: "#86efac" }}>
-                                        {String(ch.new ?? "")}
-                                      </span>
-                                    </div>
-                                  );
-                                })}
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      )}
-                    </div>
-                  </>
-                ) : (
-                  <div style={{ fontSize: "10px", color: "#6b7280" }}>
-                    Hidden. Expand to view crew edit history.
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "8px",
+                              minWidth: 0,
+                            }}
+                          >
+                            {factionThumbSrc ? (
+                              <img
+                                src={factionThumbSrc}
+                                alt=""
+                                title={row.faction_name || "Faction"}
+                                style={{
+                                  width: 40,
+                                  height: 40,
+                                  objectFit: "cover",
+                                  borderRadius: 6,
+                                  border: "1px solid #4b5563",
+                                  flexShrink: 0,
+                                  background: "#111827",
+                                }}
+                                onError={(e) => {
+                                  e.currentTarget.style.display = "none";
+                                }}
+                              />
+                            ) : (
+                              <div
+                                style={{
+                                  width: 40,
+                                  height: 40,
+                                  borderRadius: 6,
+                                  border: "1px solid #4b5563",
+                                  flexShrink: 0,
+                                  background: "#0d1117",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  color: "#6b7280",
+                                  fontSize: 14,
+                                  fontWeight: "bold",
+                                }}
+                                aria-hidden="true"
+                              >
+                                {factionInitial}
+                              </div>
+                            )}
+                            <span
+                              style={{
+                                fontWeight: 600,
+                                color: "#e5e7eb",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                                minWidth: 0,
+                              }}
+                              title={row.faction_name}
+                            >
+                              {row.faction_name}
+                            </span>
+                          </div>
+                          {isGM || row.players_see_reputation !== false ? (
+                            <span style={{ color: "#9ca3af" }}>
+                              {row.reputation_value}{" "}
+                              <span style={{ color: "#6b7280" }}>
+                                ({reputationTierLabel(row.reputation_value)})
+                              </span>
+                            </span>
+                          ) : null}
+                          {!isGM &&
+                          row.players_see_tier !== false &&
+                          row.faction_level != null ? (
+                            <span style={{ color: "#6b7280" }}>
+                              Tier {row.faction_level}
+                            </span>
+                          ) : null}
+                          {!isGM &&
+                          row.players_see_hold !== false &&
+                          row.faction_hold ? (
+                            <span style={{ color: "#6b7280" }}>
+                              Hold:{" "}
+                              {row.faction_hold === "strong"
+                                ? "Strong"
+                                : "Weak"}
+                            </span>
+                          ) : null}
+                          {!isGM &&
+                          row.players_see_notes !== false &&
+                          row.faction_notes ? (
+                            <span
+                              style={{
+                                color: "#6b7280",
+                                display: "-webkit-box",
+                                WebkitLineClamp: 3,
+                                WebkitBoxOrient: "vertical",
+                                overflow: "hidden",
+                              }}
+                              title={row.faction_notes}
+                            >
+                              {row.faction_notes}
+                            </span>
+                          ) : null}
+                          {isGM && charData.crewId ? (
+                            <div
+                              style={{
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: "6px",
+                                marginTop: "auto",
+                              }}
+                            >
+                              <label
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: "4px",
+                                  fontSize: "11px",
+                                  color: "#9ca3af",
+                                }}
+                              >
+                                Rep
+                                <input
+                                  type="number"
+                                  min={-3}
+                                  max={3}
+                                  defaultValue={row.reputation_value}
+                                  key={`${row.id}-${row.reputation_value}`}
+                                  style={{
+                                    width: "52px",
+                                    background: "#0d1117",
+                                    color: "#fff",
+                                    border: "1px solid #4b5563",
+                                    borderRadius: "4px",
+                                    padding: "2px 4px",
+                                  }}
+                                  onBlur={(e) => {
+                                    const v = Math.min(
+                                      3,
+                                      Math.max(
+                                        -3,
+                                        parseInt(e.target.value, 10) || 0,
+                                      ),
+                                    );
+                                    crewAPI
+                                      .patchCrew(charData.crewId, {
+                                        faction_relationships: [
+                                          {
+                                            faction_id: row.faction_id,
+                                            reputation_value: v,
+                                          },
+                                        ],
+                                      })
+                                      .then(() =>
+                                        crewAPI
+                                          .getCrew(charData.crewId)
+                                          .then((d) => {
+                                            setCrewFactionLinks(
+                                              d.faction_relationships || [],
+                                            );
+                                          }),
+                                      )
+                                      .catch(() => {});
+                                  }}
+                                />
+                              </label>
+                              <button
+                                type="button"
+                                style={{
+                                  ...S.btn,
+                                  fontSize: "10px",
+                                  padding: "2px 8px",
+                                  width: "100%",
+                                }}
+                                onClick={() => {
+                                  factionAPI
+                                    .patchFaction(row.faction_id, {
+                                      visible_to_players:
+                                        !row.visible_to_players,
+                                    })
+                                    .then(() =>
+                                      crewAPI
+                                        .getCrew(charData.crewId)
+                                        .then((d) => {
+                                          setCrewFactionLinks(
+                                            d.faction_relationships || [],
+                                          );
+                                          onCampaignRefresh?.();
+                                        }),
+                                    )
+                                    .catch(() => {});
+                                }}
+                              >
+                                {row.visible_to_players
+                                  ? "Hide from players"
+                                  : "Reveal to players"}
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
-              </div>
-            ) : null}
-            <div style={S.g3}>
+                </div>
+                {isGM && campaignId && charData.crewId ? (
+                  <div
+                    style={{
+                      marginTop: "12px",
+                      padding: "10px",
+                      borderRadius: "6px",
+                      border: "1px solid #374151",
+                      background: "#111827",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "8px",
+                    }}
+                  >
+                    <span style={{ ...S.lbl, fontSize: "10px" }}>
+                      Create faction
+                    </span>
+                    <div
+                      style={{
+                        fontSize: "10px",
+                        color: "#6b7280",
+                        lineHeight: 1.4,
+                      }}
+                    >
+                      Create a GM-only faction by name. It appears in the grid
+                      above (hidden until revealed). Set starting reputation
+                      (−3 to +3).
+                    </div>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: "8px",
+                        alignItems: "center",
+                      }}
+                    >
+                      <input
+                        type="text"
+                        style={{
+                          ...S.inp,
+                          flex: "1 1 160px",
+                          minWidth: "140px",
+                          fontSize: "11px",
+                        }}
+                        placeholder="New faction name (hidden until revealed)"
+                        value={crewFactionAddName}
+                        onChange={(e) => {
+                          setCrewFactionAddName(e.target.value);
+                          setCrewFactionAddErr(null);
+                        }}
+                        disabled={crewFactionAddBusy}
+                      />
+                      <label
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          fontSize: "11px",
+                          color: "#9ca3af",
+                        }}
+                      >
+                        Starting rep
+                        <input
+                          type="number"
+                          min={-3}
+                          max={3}
+                          style={{
+                            width: "52px",
+                            background: "#0d1117",
+                            color: "#fff",
+                            border: "1px solid #4b5563",
+                            borderRadius: "4px",
+                            padding: "2px 4px",
+                            fontSize: "11px",
+                          }}
+                          value={crewFactionAddRep}
+                          onChange={(e) => {
+                            setCrewFactionAddRep(
+                              Math.min(
+                                3,
+                                Math.max(
+                                  -3,
+                                  parseInt(e.target.value, 10) || 0,
+                                ),
+                              ),
+                            );
+                            setCrewFactionAddErr(null);
+                          }}
+                          disabled={crewFactionAddBusy}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        style={{
+                          ...S.btn,
+                          fontSize: "11px",
+                          padding: "4px 12px",
+                          opacity: crewFactionAddBusy ? 0.6 : 1,
+                        }}
+                        disabled={crewFactionAddBusy}
+                        onClick={() => void handleAddCrewFactionLink()}
+                      >
+                        {crewFactionAddBusy ? "Saving…" : "Create"}
+                      </button>
+                    </div>
+                    {crewFactionAddErr ? (
+                      <div style={{ fontSize: "11px", color: "#f87171" }}>
+                        {crewFactionAddErr}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+            </div>
+            </div>
+            <div style={S.g2}>
               <div style={S.card}>
                 <span style={S.lbl}>SPECIAL ABILITIES</span>
                 {crewData.specialAbilities.map((ab, i) => (
@@ -22992,28 +23209,6 @@ const CharacterSheetWrapper = ({
                 >
                   + Add Ability
                 </button>
-              </div>
-              <div style={S.card}>
-                <span style={S.lbl}>DESCRIPTION</span>
-                <textarea
-                  value={crewData.description}
-                  onChange={(e) =>
-                    setCrewData((p) => ({ ...p, description: e.target.value }))
-                  }
-                  placeholder="A short crew description…"
-                  style={{
-                    width: "100%",
-                    height: "80px",
-                    background: "#0d1117",
-                    color: "#fff",
-                    border: "1px solid #374151",
-                    padding: "8px",
-                    fontFamily: "monospace",
-                    fontSize: "12px",
-                    resize: "none",
-                    boxSizing: "border-box",
-                  }}
-                />
                 <div style={{ marginTop: "12px" }}>
                   <span style={S.lbl}>UPGRADES — LAIR</span>
                   <div
@@ -23119,6 +23314,112 @@ const CharacterSheetWrapper = ({
                 />
               </div>
             </div>
+            {charData.crewId ? (
+              <div
+                style={{
+                  ...S.card,
+                  marginBottom: "12px",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: "8px",
+                    marginBottom: crewHistoryOpen ? "6px" : 0,
+                  }}
+                >
+                  <span style={S.lbl}>CREW MODIFICATION HISTORY</span>
+                  <button
+                    type="button"
+                    onClick={() => setCrewHistoryOpenPersist((v) => !v)}
+                    style={{
+                      ...S.btn,
+                      fontSize: "10px",
+                      padding: "2px 8px",
+                      background: "#111827",
+                      color: "#c4b5fd",
+                    }}
+                  >
+                    {crewHistoryOpen ? "Collapse" : "Expand"}
+                  </button>
+                </div>
+                {crewHistoryOpen ? (
+                  <>
+                    <div
+                      style={{
+                        fontSize: "11px",
+                        color: "#6b7280",
+                        marginTop: "4px",
+                        marginBottom: "8px",
+                      }}
+                    >
+                      Saved changes to this crew (name, rep, turf, tier, wanted,
+                      coin, notes, upgrades, etc.).
+                    </div>
+                    <div style={{ maxHeight: "220px", overflow: "auto" }}>
+                      {crewHistoryEntries.length === 0 ? (
+                        <div style={{ fontSize: "12px", color: "#6b7280" }}>
+                          No history entries yet.
+                        </div>
+                      ) : (
+                        <ul
+                          style={{
+                            margin: 0,
+                            paddingLeft: "18px",
+                            fontSize: "11px",
+                            color: "#d1d5db",
+                            lineHeight: 1.5,
+                          }}
+                        >
+                          {crewHistoryEntries.map((entry) => {
+                            const cf = entry.changed_fields || {};
+                            const keys = Object.keys(cf).filter((k) =>
+                              CREW_HISTORY_FIELD_KEYS.has(k),
+                            );
+                            if (!keys.length) return null;
+                            const when = entry.timestamp
+                              ? new Date(entry.timestamp).toLocaleString()
+                              : "";
+                            return (
+                              <li key={entry.id} style={{ marginBottom: "8px" }}>
+                                <div style={{ color: "#9ca3af" }}>
+                                  {when}
+                                  {entry.editor_username
+                                    ? ` · ${entry.editor_username}`
+                                    : ""}
+                                </div>
+                                {keys.map((k) => {
+                                  const ch = cf[k] || {};
+                                  return (
+                                    <div key={k}>
+                                      <strong>{k}</strong>:{" "}
+                                      <span style={{ color: "#fca5a5" }}>
+                                        {String(ch.old ?? "")}
+                                      </span>{" "}
+                                      →{" "}
+                                      <span style={{ color: "#86efac" }}>
+                                        {String(ch.new ?? "")}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ fontSize: "10px", color: "#6b7280" }}>
+                    Hidden. Expand to view crew edit history.
+                  </div>
+                )}
+              </div>
+            ) : null}
+
           </div>
         )}
       </div>

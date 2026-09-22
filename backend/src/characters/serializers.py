@@ -508,16 +508,47 @@ class CrewSerializer(serializers.ModelSerializer):
             fac = rel.faction
             if not show_all and not getattr(fac, "visible_to_players", False):
                 continue
-            out.append(
-                {
-                    "id": rel.id,
-                    "faction_id": fac.id,
-                    "faction_name": fac.name,
-                    "reputation_value": rel.reputation_value,
-                    "notes": rel.notes or "",
-                    "visible_to_players": getattr(fac, "visible_to_players", False),
-                }
-            )
+            see_tier = bool(getattr(fac, "players_see_tier", True))
+            see_hold = bool(getattr(fac, "players_see_hold", True))
+            see_rep = bool(getattr(fac, "players_see_reputation", True))
+            see_notes = bool(getattr(fac, "players_see_notes", True))
+            see_npcs = bool(getattr(fac, "players_see_npcs", True))
+            faction_image = ""
+            if getattr(fac, "image", None):
+                try:
+                    faction_image = fac.image.url or ""
+                except (ValueError, AttributeError):
+                    faction_image = ""
+            row = {
+                "id": rel.id,
+                "faction_id": fac.id,
+                "faction_name": fac.name,
+                "faction_image": faction_image,
+                "faction_image_url": getattr(fac, "image_url", "") or "",
+                "reputation_value": rel.reputation_value,
+                "notes": rel.notes or "",
+                "visible_to_players": getattr(fac, "visible_to_players", False),
+                "players_see_tier": see_tier,
+                "players_see_hold": see_hold,
+                "players_see_reputation": see_rep,
+                "players_see_notes": see_notes,
+                "players_see_npcs": see_npcs,
+            }
+            if show_all:
+                row["faction_level"] = fac.level
+                row["faction_hold"] = fac.hold
+                row["faction_reputation"] = fac.reputation
+                row["faction_notes"] = fac.notes or ""
+            else:
+                row["faction_level"] = fac.level if see_tier else None
+                row["faction_hold"] = fac.hold if see_hold else None
+                row["faction_reputation"] = fac.reputation if see_rep else None
+                row["faction_notes"] = (fac.notes or "") if see_notes else ""
+                if not see_rep:
+                    row["reputation_value"] = None
+                if not see_notes:
+                    row["notes"] = ""
+            out.append(row)
         return out
 
     def update(self, instance, validated_data):
@@ -2802,6 +2833,34 @@ class FactionSerializer(serializers.ModelSerializer):
         attrs = super().validate(attrs)
         return apply_portrait_exclusivity(self, attrs)
 
+    def _viewer_is_gm_or_staff(self, instance):
+        request = self.context.get("request")
+        user = getattr(request, "user", None) if request else None
+        if not user or not getattr(user, "is_authenticated", False):
+            return False
+        if getattr(user, "is_staff", False):
+            return True
+        campaign = getattr(instance, "campaign", None)
+        return bool(campaign and campaign.gm_id == user.id)
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if self._viewer_is_gm_or_staff(instance):
+            return data
+        show = bool(getattr(instance, "visible_to_players", False))
+        if not show or not getattr(instance, "players_see_tier", True):
+            data["level"] = None
+        if not show or not getattr(instance, "players_see_hold", True):
+            data["hold"] = None
+        if not show or not getattr(instance, "players_see_reputation", True):
+            data["reputation"] = None
+        if not show or not getattr(instance, "players_see_notes", True):
+            data["notes"] = ""
+            data["crew_notes"] = ""
+        if not show or not getattr(instance, "players_see_npcs", True):
+            data["npcs"] = []
+        return data
+
     class Meta:
         model = Faction
         fields = [
@@ -2818,6 +2877,11 @@ class FactionSerializer(serializers.ModelSerializer):
             "faction_status",
             "crew_notes",
             "visible_to_players",
+            "players_see_tier",
+            "players_see_hold",
+            "players_see_reputation",
+            "players_see_notes",
+            "players_see_npcs",
             "image",
             "image_url",
             "npcs",
@@ -2983,6 +3047,9 @@ class CampaignSerializer(serializers.ModelSerializer):
     campaign_npcs = NPCSummarySerializer(source="npcs", many=True, read_only=True)
     pending_invitations = serializers.SerializerMethodField()
     is_active = serializers.BooleanField(required=False, default=True)
+    allow_character_assignment = serializers.BooleanField(
+        required=False, default=False
+    )
     created_at = serializers.DateTimeField(read_only=True)
     active_session = serializers.PrimaryKeyRelatedField(
         queryset=Session.objects.all(), required=False, allow_null=True
@@ -3019,6 +3086,7 @@ class CampaignSerializer(serializers.ModelSerializer):
             "image",
             "wanted_stars",
             "is_active",
+            "allow_character_assignment",
             "created_at",
             "factions",
             "crews",
