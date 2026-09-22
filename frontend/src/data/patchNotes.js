@@ -8,6 +8,19 @@ export const PATCH_NOTES = [
     "version": null,
     "sections": [
       {
+        "title": "Added",
+        "items": [
+          "faction reputation card grid for all campaign factions",
+          "per-field GM visibility for tier, hold, rep, notes, NPCs",
+          "crew portrait upload crop and clear parity",
+          "inline faction editor replaces NPC grid in panel",
+          "allow_character_assignment toggle and hide GM roster card by default",
+          "move SESSION and CLOCKS to left column",
+          "B→A standard picks use AbilityPickerPopover",
+          "align Assist UI to same-crew SRD rule"
+        ]
+      },
+      {
         "title": "Fixed",
         "items": [
           "stop crew portrait on faction reputation rows",
@@ -21,18 +34,6 @@ export const PATCH_NOTES = [
         "title": "Maintenance",
         "items": [
           "refresh patchNotes for campaign UI polish branch"
-        ]
-      },
-      {
-        "title": "Added",
-        "items": [
-          "per-field GM visibility for tier, hold, rep, notes, NPCs",
-          "crew portrait upload crop and clear parity",
-          "inline faction editor replaces NPC grid in panel",
-          "allow_character_assignment toggle and hide GM roster card by default",
-          "move SESSION and CLOCKS to left column",
-          "B→A standard picks use AbilityPickerPopover",
-          "align Assist UI to same-crew SRD rule"
         ]
       },
       {
@@ -628,8 +629,7 @@ export const PATCH_NOTES = [
           "add manual XP to free pool",
           "add sheet edit undo/redo + XP/GM separation",
           "Take advance on full XP tracks",
-          "open NPC edit on card click",
-          "allow editing clock segments after create"
+          "open NPC edit on card click"
         ]
       }
     ]
