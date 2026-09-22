@@ -290,6 +290,86 @@ const CampaignFactionEditor = ({
           }
         />
       </div>
+      <div
+        style={{
+          marginBottom: "12px",
+          padding: "8px",
+          background: "var(--hftf-deep)",
+          borderRadius: "4px",
+          border: "1px solid var(--border)",
+        }}
+      >
+        <label
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "6px",
+            fontSize: "12px",
+            marginBottom: "8px",
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={factionForm.visible_to_players !== false}
+            onChange={(e) =>
+              setFactionForm((p) => ({
+                ...p,
+                visible_to_players: e.target.checked,
+              }))
+            }
+          />
+          Visible to players (crew standing)
+        </label>
+        <span
+          style={{
+            fontSize: "11px",
+            color: "var(--text-muted)",
+            display: "block",
+            marginBottom: "6px",
+          }}
+        >
+          Players may also see:
+        </span>
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "10px 14px",
+            fontSize: "12px",
+          }}
+        >
+          {[
+            ["players_see_tier", "Tier"],
+            ["players_see_hold", "Hold"],
+            ["players_see_reputation", "Reputation"],
+            ["players_see_notes", "Notes"],
+            ["players_see_npcs", "NPCs"],
+          ].map(([key, label]) => (
+            <label
+              key={key}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "5px",
+                opacity: factionForm.visible_to_players === false ? 0.5 : 1,
+              }}
+            >
+              <input
+                type="checkbox"
+                disabled={factionForm.visible_to_players === false}
+                checked={factionForm[key] !== false}
+                onChange={(e) =>
+                  setFactionForm((p) => ({
+                    ...p,
+                    [key]: e.target.checked,
+                  }))
+                }
+              />
+              {label}
+            </label>
+          ))}
+        </div>
+      </div>
       {factionForm.id && (
         <div
           style={{

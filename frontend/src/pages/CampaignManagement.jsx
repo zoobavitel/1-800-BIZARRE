@@ -2119,6 +2119,11 @@ function CampaignDetail({
       reputation: 0,
       notes: "",
       visible_to_players: true,
+      players_see_tier: true,
+      players_see_hold: true,
+      players_see_reputation: true,
+      players_see_notes: true,
+      players_see_npcs: true,
       image: null,
       imageFile: null,
     });
@@ -2153,6 +2158,11 @@ function CampaignDetail({
       reputation: f.reputation,
       notes: f.notes || "",
       visible_to_players: f.visible_to_players !== false,
+      players_see_tier: f.players_see_tier !== false,
+      players_see_hold: f.players_see_hold !== false,
+      players_see_reputation: f.players_see_reputation !== false,
+      players_see_notes: f.players_see_notes !== false,
+      players_see_npcs: f.players_see_npcs !== false,
       image: f.image || null,
       imageFile: null,
       npcs: f.npcs || [],
@@ -2281,6 +2291,11 @@ function CampaignDetail({
       notes: f.notes || "",
       visible_to_players:
         f.visible_to_players !== undefined ? !!f.visible_to_players : true,
+      players_see_tier: f.players_see_tier !== false,
+      players_see_hold: f.players_see_hold !== false,
+      players_see_reputation: f.players_see_reputation !== false,
+      players_see_notes: f.players_see_notes !== false,
+      players_see_npcs: f.players_see_npcs !== false,
       campaign: campaign.id,
     };
     if (f.imageFile) {
