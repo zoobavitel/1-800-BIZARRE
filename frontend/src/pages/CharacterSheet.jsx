@@ -1864,6 +1864,17 @@ const CharacterSheetWrapper = ({
   const [poolAllocateBusy, setPoolAllocateBusy] = useState(false);
   const [directAdvanceBusy, setDirectAdvanceBusy] = useState(false);
   const [poolTickError, setPoolTickError] = useState(null);
+  const [trainBusyTrack, setTrainBusyTrack] = useState(null);
+  const [trainError, setTrainError] = useState(null);
+  const [downtimeTrainedTracks, setDowntimeTrainedTracks] = useState(() =>
+    Array.isArray(character?.downtimeTrainedTracks)
+      ? character.downtimeTrainedTracks.map((t) =>
+          String(t || "")
+            .trim()
+            .toLowerCase(),
+        )
+      : [],
+  );
 
   // Abort in-flight autosave when SSE says character / XP / pending advanced.
   useEffect(() => {
@@ -2065,6 +2076,19 @@ const CharacterSheetWrapper = ({
       setPendingAdvanceCounts({ ...counts });
     }
   }, [character?.id, character?.pendingAdvanceCounts, sheetDraftIsDirty]);
+
+  useEffect(() => {
+    const trained = character?.downtimeTrainedTracks;
+    if (Array.isArray(trained)) {
+      setDowntimeTrainedTracks(
+        trained.map((t) =>
+          String(t || "")
+            .trim()
+            .toLowerCase(),
+        ),
+      );
+    }
+  }, [character?.id, character?.downtimeTrainedTracks]);
 
   useEffect(() => {
     const plan = character?.advancementPlan;
@@ -4610,6 +4634,81 @@ const CharacterSheetWrapper = ({
       setPoolTickError(msg);
     } finally {
       setPoolAllocateBusy(false);
+    }
+  };
+
+  const trainXpAmountForTrack = (trackKey) => {
+    const t = String(trackKey || "")
+      .trim()
+      .toLowerCase();
+    const training = crewData?.upgrades?.training || {};
+    if (t === "playbook") return training.personal ? 2 : 1;
+    if (t === "insight" || t === "prowess" || t === "resolve") {
+      return training[t] ? 2 : 1;
+    }
+    return 1;
+  };
+
+  const handleTrainTrack = async (trackKey) => {
+    const track = String(trackKey || "")
+      .trim()
+      .toLowerCase();
+    if (!characterId || !canEditSheet) return;
+    if (!["insight", "prowess", "resolve", "playbook"].includes(track)) {
+      return;
+    }
+    if (downtimeTrainedTracks.includes(track)) {
+      setTrainError(
+        `Already trained ${track} this downtime phase (once per track).`,
+      );
+      return;
+    }
+    if (trainBusyTrack || poolAllocateBusy) return;
+
+    setTrainBusyTrack(track);
+    setTrainError(null);
+    setPoolTickError(null);
+    try {
+      const res = await characterAPI.train(characterId, {
+        track,
+        ...(activeSessionId ? { session_id: activeSessionId } : {}),
+      });
+      if (res?.xp_clocks && typeof res.xp_clocks === "object") {
+        setXp((prev) => ({ ...prev, ...res.xp_clocks }));
+        setCharData((prev) => ({
+          ...prev,
+          xp: { ...(prev.xp || {}), ...res.xp_clocks },
+        }));
+      }
+      if (Array.isArray(res?.downtime_trained_tracks)) {
+        const next = res.downtime_trained_tracks.map((t) =>
+          String(t || "")
+            .trim()
+            .toLowerCase(),
+        );
+        setDowntimeTrainedTracks(next);
+        setCharData((prev) => ({ ...prev, downtimeTrainedTracks: next }));
+      } else {
+        setDowntimeTrainedTracks((prev) =>
+          prev.includes(track) ? prev : [...prev, track],
+        );
+      }
+      if (
+        typeof res?.pendings_minted === "number" &&
+        res.pendings_minted > 0
+      ) {
+        setPendingAdvanceCounts((prev) => ({
+          ...prev,
+          [track]:
+            (Number(prev?.[track]) || 0) + Number(res.pendings_minted || 0),
+        }));
+      }
+    } catch (e) {
+      const msg = e?.message || "Could not train that track";
+      setTrainError(msg);
+      setPoolTickError(msg);
+    } finally {
+      setTrainBusyTrack(null);
     }
   };
 
@@ -14868,7 +14967,7 @@ const CharacterSheetWrapper = ({
                         Heritage / Playbook below to bank from this pool.
                       </div>
                     )}
-                    {poolTickError ? (
+                    {poolTickError || trainError ? (
                       <div
                         style={{
                           marginTop: 6,
@@ -14876,7 +14975,7 @@ const CharacterSheetWrapper = ({
                           color: "#f87171",
                         }}
                       >
-                        {poolTickError}
+                        {poolTickError || trainError}
                       </div>
                     ) : null}
                   </div>
@@ -14972,6 +15071,48 @@ const CharacterSheetWrapper = ({
                           ? ` · ${pendingCount} pending`
                           : ""}
                       </span>
+                      {key !== "heritage" && canEditSheet && character?.id ? (
+                        <button
+                          type="button"
+                          disabled={
+                            !!trainBusyTrack ||
+                            poolAllocateBusy ||
+                            downtimeTrainedTracks.includes(key)
+                          }
+                          title={
+                            downtimeTrainedTracks.includes(key)
+                              ? "Already trained this track this downtime phase"
+                              : `Downtime train: +${trainXpAmountForTrack(key)} XP${
+                                  trainXpAmountForTrack(key) > 1
+                                    ? " (crew Training upgrade)"
+                                    : ""
+                                }. Once per track per phase.`
+                          }
+                          onClick={() => handleTrainTrack(key)}
+                          style={{
+                            ...S.btn,
+                            fontSize: "10px",
+                            padding: "2px 8px",
+                            background: downtimeTrainedTracks.includes(key)
+                              ? "#374151"
+                              : "#1e3a5f",
+                            color: downtimeTrainedTracks.includes(key)
+                              ? "#9ca3af"
+                              : "#93c5fd",
+                            fontWeight: "bold",
+                            opacity: trainBusyTrack === key ? 0.6 : 1,
+                            cursor: downtimeTrainedTracks.includes(key)
+                              ? "not-allowed"
+                              : "pointer",
+                          }}
+                        >
+                          {trainBusyTrack === key
+                            ? "…"
+                            : downtimeTrainedTracks.includes(key)
+                              ? "Trained"
+                              : `Train (+${trainXpAmountForTrack(key)})`}
+                        </button>
+                      ) : null}
                       {canTakeAdvance && canEditSheet && character?.id ? (
                         <button
                           type="button"
@@ -15060,8 +15201,9 @@ const CharacterSheetWrapper = ({
                         Precision stand dice → +1 playbook (innate, uncapped; not
                         Range, Durability, or Dev). End-session toggles + Dev
                         bonus → free pool (bank onto tracks later). Downtime
-                        training not automated yet. Crew XP: use crew scorecard
-                        triggers.
+                        Train buttons mark 1 XP (2 with crew Training upgrade)
+                        once per track per phase — activity budget not tracked
+                        yet. Crew XP: use crew scorecard triggers.
                       </div>
                     </div>
                     {!xpReqSnapshot.hasActiveSession && (

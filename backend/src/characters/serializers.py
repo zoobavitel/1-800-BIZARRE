@@ -1942,6 +1942,9 @@ class CharacterSerializer(serializers.ModelSerializer):
         data["advancement_plan"] = [
             serialize_plan_item(item) for item in list_queued_plan_items(instance)
         ]
+        from .services.downtime_train import tracks_trained_this_phase
+
+        data["downtime_trained_tracks"] = tracks_trained_this_phase(instance)
         return data
 
     def validate_coin_boxes(self, value):
