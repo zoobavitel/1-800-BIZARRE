@@ -323,7 +323,8 @@ export const characterAPI = {
     }),
 
   /**
-   * Crew Assist: recipient is `recipientCharacterId` (gets pending +1d); helper spends 1 stress.
+   * Crew Assist (helper-initiated): call from helper's sheet.
+   * URL = recipient (gets pending +1d); body helper_character_id = self (spends 1 stress).
    */
   assistHelp: (recipientCharacterId, helperCharacterId, sessionId) =>
     apiRequest(`/characters/${recipientCharacterId}/assist-help/`, {
