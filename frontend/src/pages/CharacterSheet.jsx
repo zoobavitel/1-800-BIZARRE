@@ -251,6 +251,7 @@ function progressToUpgrades(progress) {
       insight: false,
       prowess: false,
       resolve: false,
+      heritage: false,
       personal: false,
       mastery: false,
     },
@@ -2937,6 +2938,7 @@ const CharacterSheetWrapper = ({
         insight: false,
         prowess: false,
         resolve: false,
+        heritage: false,
         personal: false,
         mastery: false,
       },
@@ -4643,7 +4645,12 @@ const CharacterSheetWrapper = ({
       .toLowerCase();
     const training = crewData?.upgrades?.training || {};
     if (t === "playbook") return training.personal ? 2 : 1;
-    if (t === "insight" || t === "prowess" || t === "resolve") {
+    if (
+      t === "insight" ||
+      t === "prowess" ||
+      t === "resolve" ||
+      t === "heritage"
+    ) {
       return training[t] ? 2 : 1;
     }
     return 1;
@@ -4654,7 +4661,11 @@ const CharacterSheetWrapper = ({
       .trim()
       .toLowerCase();
     if (!characterId || !canEditSheet) return;
-    if (!["insight", "prowess", "resolve", "playbook"].includes(track)) {
+    if (
+      !["insight", "prowess", "resolve", "heritage", "playbook"].includes(
+        track,
+      )
+    ) {
       return;
     }
     if (downtimeTrainedTracks.includes(track)) {
@@ -15071,7 +15082,7 @@ const CharacterSheetWrapper = ({
                           ? ` · ${pendingCount} pending`
                           : ""}
                       </span>
-                      {key !== "heritage" && canEditSheet && character?.id ? (
+                      {canEditSheet && character?.id ? (
                         <button
                           type="button"
                           disabled={
@@ -15202,8 +15213,9 @@ const CharacterSheetWrapper = ({
                         Range, Durability, or Dev). End-session toggles + Dev
                         bonus → free pool (bank onto tracks later). Downtime
                         Train buttons mark 1 XP (2 with crew Training upgrade)
-                        once per track per phase — activity budget not tracked
-                        yet. Crew XP: use crew scorecard triggers.
+                        once per track per phase (Heritage Train is house-rule).
+                        Activity budget not tracked yet. Crew XP: use crew
+                        scorecard triggers.
                       </div>
                     </div>
                     {!xpReqSnapshot.hasActiveSession && (

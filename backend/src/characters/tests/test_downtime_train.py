@@ -98,15 +98,30 @@ class DowntimeTrainTests(APITestCase):
         self.assertEqual(res.status_code, 200, res.content)
         self.assertEqual(res.json()["amount"], 2)
 
-    def test_heritage_rejected(self):
+    def test_heritage_train_allowed(self):
+        """House rule: Heritage Train allowed (SRD excludes it)."""
         self.client.force_authenticate(user=self.player)
         res = self.client.post(
             f"/api/characters/{self.character.id}/train/",
             {"track": "heritage"},
             format="json",
         )
-        self.assertEqual(res.status_code, 400)
-        self.assertEqual(res.json().get("code"), "invalid_track")
+        self.assertEqual(res.status_code, 200, res.content)
+        self.assertEqual(res.json()["amount"], 1)
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.xp_clocks["heritage"], 1)
+
+    def test_heritage_two_xp_with_crew_upgrade(self):
+        self.crew.upgrade_progress = {"training_heritage": True}
+        self.crew.save(update_fields=["upgrade_progress"])
+        self.client.force_authenticate(user=self.player)
+        res = self.client.post(
+            f"/api/characters/{self.character.id}/train/",
+            {"track": "heritage"},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 200, res.content)
+        self.assertEqual(res.json()["amount"], 2)
 
     def test_once_per_track_per_phase(self):
         self.client.force_authenticate(user=self.player)

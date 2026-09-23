@@ -1,6 +1,9 @@
 """
 Downtime Train activity: mark 1 XP (or 2 with crew Training upgrade) on an
-attribute or playbook track. Once per track per downtime phase.
+XP track. Once per track per downtime phase.
+
+Trainable tracks: insight, prowess, resolve, playbook, heritage.
+Heritage Train is intentional homebrew (SRD train list excludes Heritage).
 
 Phase boundary: after the campaign's most recent COMPLETED Session
 (``session_date``). No completed session → any prior TRAIN for that track
@@ -15,15 +18,18 @@ from django.utils import timezone
 
 from characters.models import DowntimeActivity, Session
 
-TRAINABLE_TRACKS = frozenset({"insight", "prowess", "resolve", "playbook"})
+TRAINABLE_TRACKS = frozenset(
+    {"insight", "prowess", "resolve", "playbook", "heritage"}
+)
 
 # Crew.upgrade_progress keys (frontend progressToUpgrades). BitD "personal"
-# is Playbook Training.
+# is Playbook Training. ``training_heritage`` is house-rule (not SRD).
 TRACK_TO_TRAINING_UPGRADE = {
     "insight": "training_insight",
     "prowess": "training_prowess",
     "resolve": "training_resolve",
     "playbook": "training_personal",
+    "heritage": "training_heritage",
 }
 
 _TRAIN_DESC_PREFIX = "train:"
@@ -102,8 +108,7 @@ def assert_can_train(character, track: str) -> None:
     key = str(track or "").strip().lower()
     if key not in TRAINABLE_TRACKS:
         raise DowntimeTrainError(
-            "Train only Insight, Prowess, Resolve, or Playbook "
-            "(Heritage cannot be trained).",
+            "Train only Insight, Prowess, Resolve, Heritage, or Playbook.",
             code="invalid_track",
         )
     if key in tracks_trained_this_phase(character):
