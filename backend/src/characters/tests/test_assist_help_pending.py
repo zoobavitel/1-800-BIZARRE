@@ -66,7 +66,12 @@ class AssistHelpPendingTests(TestCase):
         self.assertEqual(r1.status_code, status.HTTP_200_OK, r1.data)
         self.assertEqual(AssistHelpPending.objects.count(), 1)
         self.helper.refresh_from_db()
+        self.recipient.refresh_from_db()
+        # SRD Assist: helper marks stress; beneficiary (URL character) does not.
         self.assertEqual(self.helper.stress, 5)
+        self.assertEqual(self.recipient.stress, 1)
+        self.assertEqual(r1.data["helper_id"], self.helper.id)
+        self.assertEqual(r1.data["helper_stress"], 5)
         r2 = self.client.post(
             url,
             {"helper_character_id": self.helper.id, "session_id": self.session.id},

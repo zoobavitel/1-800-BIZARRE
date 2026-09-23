@@ -1867,6 +1867,7 @@ const CharacterSheetWrapper = ({
   const [poolTickError, setPoolTickError] = useState(null);
   const [trainBusyTrack, setTrainBusyTrack] = useState(null);
   const [trainError, setTrainError] = useState(null);
+  const [xpHelpOpen, setXpHelpOpen] = useState(false);
   const [downtimeTrainedTracks, setDowntimeTrainedTracks] = useState(() =>
     Array.isArray(character?.downtimeTrainedTracks)
       ? character.downtimeTrainedTracks.map((t) =>
@@ -1876,6 +1877,23 @@ const CharacterSheetWrapper = ({
         )
       : [],
   );
+
+  // XP card ? help: click outside or Escape closes
+  useEffect(() => {
+    if (!xpHelpOpen) return undefined;
+    const handlePointer = (e) => {
+      if (!e.target?.closest?.("[data-xp-help]")) setXpHelpOpen(false);
+    };
+    const handleKey = (e) => {
+      if (e.key === "Escape") setXpHelpOpen(false);
+    };
+    document.addEventListener("mousedown", handlePointer);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("mousedown", handlePointer);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [xpHelpOpen]);
 
   // Abort in-flight autosave when SSE says character / XP / pending advanced.
   useEffect(() => {
@@ -14912,8 +14930,113 @@ const CharacterSheetWrapper = ({
                 </div>
 
                 {/* XP & Advancement — free pool spendable with or without active session */}
-                <div style={S.card}>
-                  <span style={S.lbl}>EXPERIENCE TRACKS</span>
+                <div style={{ ...S.card, position: "relative" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "flex-start",
+                      gap: "8px",
+                      marginBottom: "4px",
+                    }}
+                  >
+                    <span style={{ ...S.lbl, marginBottom: 0 }}>
+                      EXPERIENCE TRACKS
+                    </span>
+                    <div data-xp-help style={{ position: "relative", flexShrink: 0 }}>
+                      <button
+                        type="button"
+                        aria-label="XP help"
+                        aria-expanded={xpHelpOpen}
+                        aria-controls="xp-help-panel"
+                        onClick={() => setXpHelpOpen((o) => !o)}
+                        style={{
+                          width: 22,
+                          height: 22,
+                          borderRadius: "50%",
+                          border: "1px solid #4b5563",
+                          background: xpHelpOpen ? "#1f2937" : "#111827",
+                          color: "#9ca3af",
+                          fontSize: "12px",
+                          fontWeight: "bold",
+                          lineHeight: 1,
+                          padding: 0,
+                          cursor: "pointer",
+                          fontFamily: "var(--font-mono, monospace)",
+                        }}
+                      >
+                        ?
+                      </button>
+                      {xpHelpOpen ? (
+                        <div
+                          id="xp-help-panel"
+                          role="region"
+                          aria-label="XP help"
+                          style={{
+                            position: "absolute",
+                            top: "calc(100% + 6px)",
+                            right: 0,
+                            zIndex: 20,
+                            width: "min(340px, calc(100vw - 48px))",
+                            maxHeight: "min(420px, 70vh)",
+                            overflowY: "auto",
+                            padding: "10px 12px",
+                            background: "#0d1117",
+                            border: "1px solid #4b5563",
+                            borderRadius: "6px",
+                            boxShadow: "0 8px 24px rgba(0,0,0,0.45)",
+                            fontSize: "10px",
+                            color: "#9ca3af",
+                            lineHeight: 1.45,
+                          }}
+                        >
+                          <p style={{ margin: "0 0 10px" }}>
+                            Free pool (not tied to a live session). Earned from
+                            scorecard and Stand Development; bank anytime onto the
+                            tracks below. Filling a track mints a pending advance —
+                            leftover marks stay. Take advance redeems a pending (no
+                            second XP spend). Desperate-roll XP marks attribute
+                            tracks automatically and never sits here.
+                          </p>
+                          <p style={{ margin: "0 0 10px" }}>
+                            Tick empty boxes to bank Available XP onto that track.
+                            Filling a track mints a pending advance (leftover stays).
+                            Take advance redeems one pending (attribute → +1 action
+                            dot; heritage → +1 HP; playbook → coin / ability /
+                            acquire Stand).
+                          </p>
+                          <p style={{ margin: "0 0 10px" }}>
+                            <strong style={{ color: "#e5e7eb" }}>
+                              XP REQUIREMENTS (SRD):
+                            </strong>{" "}
+                            Desperate ACTION → +1 on that attribute (group desperate
+                            too); 0-dot desperate → +2. Desperate Power / Speed /
+                            Precision stand dice → +1 playbook (innate, uncapped; not
+                            Range, Durability, or Dev). End-session toggles + Dev
+                            bonus → free pool (bank onto tracks later). Downtime
+                            Train buttons mark 1 XP (2 with crew Training upgrade)
+                            once per track per phase (Heritage Train is house-rule).
+                            Activity budget not tracked yet. Crew XP: use crew
+                            scorecard triggers.
+                          </p>
+                          <p style={{ margin: 0 }}>
+                            <strong style={{ color: "#e5e7eb" }}>
+                              Desperate roll → attribute (+1) · end-of-session (max
+                              2 each).
+                            </strong>{" "}
+                            Desperate rolls: +1 XP in the roll&apos;s attribute:
+                            Insight (Hunt, Study, Survey, Tinker), Prowess (Finesse,
+                            Prowl, Skirmish, Wreck), Resolve (Bizarre, Command,
+                            Consort, Sway). End of session: table review for beliefs
+                            / struggle / playbook, up to 2 XP in each category; you
+                            may place that XP on any track when you spend it. Numbers
+                            here come from the experience tracker (this session) and
+                            your desperate rolls in the dice log.
+                          </p>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
                   <div
                     style={{
                       marginBottom: "12px",
@@ -14950,21 +15073,6 @@ const CharacterSheetWrapper = ({
                           {GRADE[devVal]})
                         </span>
                       ) : null}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: "10px",
-                        color: "#9ca3af",
-                        lineHeight: 1.45,
-                        marginBottom: "8px",
-                      }}
-                    >
-                      Free pool (not tied to a live session). Earned from
-                      scorecard and Stand Development; bank anytime onto the
-                      tracks below. Filling a track mints a pending advance —
-                      leftover marks stay. Take advance redeems a pending (no
-                      second XP spend). Desperate-roll XP marks attribute tracks
-                      automatically and never sits here.
                     </div>
                     {unallocatedXp <= 0 ? (
                       <div style={{ fontSize: "10px", color: "#6b7280" }}>
@@ -15170,20 +15278,6 @@ const CharacterSheetWrapper = ({
                     </div>
                     );
                   })}
-                  <div
-                    style={{
-                      fontSize: "10px",
-                      color: "#6b7280",
-                      marginBottom: "6px",
-                      lineHeight: 1.4,
-                    }}
-                  >
-                    Tick empty boxes to bank Available XP onto that track.
-                    Filling a track mints a pending advance (leftover stays).
-                    Take advance redeems one pending (attribute → +1 action
-                    dot; heritage → +1 HP; playbook → coin / ability / acquire
-                    Stand).
-                  </div>
 
                   <div
                     style={{
@@ -15199,24 +15293,6 @@ const CharacterSheetWrapper = ({
                   >
                     <div style={{ marginBottom: "8px" }}>
                       <span style={S.lbl}>XP REQUIREMENTS (SRD)</span>
-                      <div
-                        style={{
-                          fontSize: "10px",
-                          color: "#6b7280",
-                          marginTop: "4px",
-                          lineHeight: 1.45,
-                        }}
-                      >
-                        Desperate ACTION → +1 on that attribute (group desperate
-                        too); 0-dot desperate → +2. Desperate Power / Speed /
-                        Precision stand dice → +1 playbook (innate, uncapped; not
-                        Range, Durability, or Dev). End-session toggles + Dev
-                        bonus → free pool (bank onto tracks later). Downtime
-                        Train buttons mark 1 XP (2 with crew Training upgrade)
-                        once per track per phase (Heritage Train is house-rule).
-                        Activity budget not tracked yet. Crew XP: use crew
-                        scorecard triggers.
-                      </div>
                     </div>
                     {!xpReqSnapshot.hasActiveSession && (
                       <div
@@ -15614,24 +15690,6 @@ const CharacterSheetWrapper = ({
                           <strong style={{ color: "#9ca3af" }}>vice, trauma, or crew</strong>{" "}
                           entanglements; plus playbook-specific marks at end of session.
                         </div>
-                        <details
-                          style={{ marginTop: "8px", fontSize: "10px", color: "#6b7280" }}
-                        >
-                          <summary style={{ cursor: "pointer", userSelect: "none" }}>
-                            Desperate roll → attribute (+1) · end-of-session (max 2 each)
-                          </summary>
-                          <p style={{ margin: "6px 0 0" }}>
-                            <strong>Desperate rolls:</strong> +1 XP in the roll&apos;s
-                            attribute: Insight (Hunt, Study, Survey, Tinker), Prowess
-                            (Finesse, Prowl, Skirmish, Wreck), Resolve (Bizarre, Command, Consort, Sway).
-                            {" "}
-                            <strong>End of session:</strong> table review for
-                            beliefs / struggle / playbook, up to 2 XP in each
-                            category; you may place that XP on any track when you
-                            spend it. Numbers here come from the experience tracker
-                            (this session) and your desperate rolls in the dice log.
-                          </p>
-                        </details>
                       </>
                     )}
                   </div>
