@@ -70,6 +70,12 @@ export default function SessionXpAllocationTable({ rows }) {
             </th>
             <th
               style={{ textAlign: "right", padding: "6px 8px" }}
+              title="Manual / offline XP not on a named track (includes [pool] free-pool awards)."
+            >
+              Manual XP
+            </th>
+            <th
+              style={{ textAlign: "right", padding: "6px 8px" }}
               title="Sum of session XP records (scorecard→pool + Dev→pool + manual tracks + desperate attribute XP) plus any encoded XP settle would still add."
             >
               Total
@@ -130,6 +136,9 @@ export default function SessionXpAllocationTable({ rows }) {
               <td style={{ padding: "6px 8px", textAlign: "right", color: "#d1d5db" }}>
                 {row.manualSessionXp}
               </td>
+              <td style={{ padding: "6px 8px", textAlign: "right", color: "#86efac" }}>
+                {row.manualNonTrackXp ?? 0}
+              </td>
               <td style={{ padding: "6px 8px", textAlign: "right" }}>
                 <span
                   style={{
@@ -146,7 +155,10 @@ export default function SessionXpAllocationTable({ rows }) {
                     ? `Stand Development (session) +${row.developmentPoolXp} → pool`
                     : null,
                   row.manualSessionXp
-                    ? `Manual GM awards +${row.manualSessionXp} (already on tracks)`
+                    ? `Manual→tracks +${row.manualSessionXp}`
+                    : null,
+                  row.manualNonTrackXp
+                    ? `Manual XP +${row.manualNonTrackXp}`
                     : null,
                 ]
                   .filter(Boolean)

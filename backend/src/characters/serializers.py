@@ -1470,6 +1470,8 @@ class CharacterHistorySerializer(serializers.ModelSerializer):
     character_true_name = serializers.CharField(
         source="character.true_name", read_only=True
     )
+    character_portrait_url = serializers.SerializerMethodField()
+    character_initials = serializers.SerializerMethodField()
     editor_username = serializers.SerializerMethodField()
     can_undo = serializers.SerializerMethodField()
     undo_block_reason = serializers.SerializerMethodField()
@@ -1480,6 +1482,8 @@ class CharacterHistorySerializer(serializers.ModelSerializer):
             "id",
             "character",
             "character_true_name",
+            "character_portrait_url",
+            "character_initials",
             "editor",
             "editor_username",
             "timestamp",
@@ -1488,6 +1492,37 @@ class CharacterHistorySerializer(serializers.ModelSerializer):
             "can_undo",
             "undo_block_reason",
         ]
+
+    def get_character_portrait_url(self, obj):
+        ch = getattr(obj, "character", None)
+        if ch is None:
+            return None
+        request = self.context.get("request")
+        img = getattr(ch, "image", None)
+        if img:
+            try:
+                url = img.url
+            except ValueError:
+                url = None
+            if url:
+                if request is not None:
+                    return request.build_absolute_uri(url)
+                return url
+        url = (getattr(ch, "image_url", None) or "").strip()
+        return url or None
+
+    def get_character_initials(self, obj):
+        name = (
+            getattr(getattr(obj, "character", None), "true_name", None)
+            or getattr(getattr(obj, "character", None), "name", None)
+            or ""
+        )
+        parts = [p for p in str(name).strip().split() if p]
+        if not parts:
+            return "?"
+        if len(parts) == 1:
+            return parts[0][:2].upper()
+        return (parts[0][0] + parts[-1][0]).upper()
 
     def get_editor_username(self, obj):
         return obj.editor.username if obj.editor_id else None

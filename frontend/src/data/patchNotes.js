@@ -8,6 +8,24 @@ export const PATCH_NOTES = [
     "version": null,
     "sections": [
       {
+        "title": "Added",
+        "items": [
+          "server-derived completion and soft-dismiss",
+          "move crew description under name, upgrades into abilities",
+          "split CREW MODE identity and factions",
+          "move crew portrait beside CREW NAME",
+          "faction reputation card grid for all campaign factions",
+          "per-field GM visibility for tier, hold, rep, notes, NPCs",
+          "crew portrait upload crop and clear parity",
+          "inline faction editor replaces NPC grid in panel",
+          "allow_character_assignment toggle and hide GM roster card by default",
+          "crew portrait upload crop and clear parity",
+          "move SESSION and CLOCKS to left column",
+          "B→A standard picks use AbilityPickerPopover",
+          "align Assist UI to same-crew SRD rule"
+        ]
+      },
+      {
         "title": "Other",
         "items": [
           "Merge pull request #165 from zoobavitel/feature/crew-portrait-upload-crop",
@@ -24,23 +42,6 @@ export const PATCH_NOTES = [
         "items": [
           "refresh patch notes for crew portrait crop",
           "refresh patchNotes for campaign UI polish branch"
-        ]
-      },
-      {
-        "title": "Added",
-        "items": [
-          "move crew description under name, upgrades into abilities",
-          "split CREW MODE identity and factions",
-          "move crew portrait beside CREW NAME",
-          "faction reputation card grid for all campaign factions",
-          "per-field GM visibility for tier, hold, rep, notes, NPCs",
-          "crew portrait upload crop and clear parity",
-          "inline faction editor replaces NPC grid in panel",
-          "allow_character_assignment toggle and hide GM roster card by default",
-          "crew portrait upload crop and clear parity",
-          "move SESSION and CLOCKS to left column",
-          "B→A standard picks use AbilityPickerPopover",
-          "align Assist UI to same-crew SRD rule"
         ]
       },
       {
@@ -630,18 +631,6 @@ export const PATCH_NOTES = [
           "untick XP tracks refunds free pool",
           "add manual XP to free pool",
           "add sheet edit undo/redo + XP/GM separation"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-07-06",
-    "version": null,
-    "sections": [
-      {
-        "title": "Added",
-        "items": [
-          "XP undo/redo and GM history revert"
         ]
       }
     ]
