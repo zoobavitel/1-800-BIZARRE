@@ -23,7 +23,7 @@ export function viceStruggleSignalsForEncodedXp(roll) {
   return 0;
 }
 
-export function buildSessionEndLiveSummary(rolls, campaignChars, clocks) {
+export function buildSessionEndLiveSummary(rolls, campaignChars, clocks, sessionId) {
   const list = Array.isArray(rolls) ? rolls : [];
   const byType = {};
   let desperateCount = 0;
@@ -72,10 +72,12 @@ export function buildSessionEndLiveSummary(rolls, campaignChars, clocks) {
   }
   encodedRows.sort((a, b) => a.name.localeCompare(b.name));
   const clockList = Array.isArray(clocks) ? clocks : [];
+  const sid = sessionId != null && sessionId !== "" ? Number(sessionId) : NaN;
+  // Server `completed` + completed_session only — no filled≥max client fallback.
   const clocksCompleted = clockList.filter((c) => {
-    const max = Number(c.max_segments) || 0;
-    const filled = Number(c.filled_segments) || 0;
-    return max > 0 && filled >= max;
+    if (c?.completed !== true) return false;
+    if (!Number.isFinite(sid)) return false;
+    return Number(c.completed_session) === sid;
   }).length;
   return {
     rollCount: list.length,
@@ -233,8 +235,19 @@ export function mergeEndLiveRowsWithScorecard(rows, statsByChar, settled) {
 }
 
 /** Roll snapshot + per-PC pending auto-settle preview (STRUGGLE only) + Development→pool preview. */
-export function buildSessionEndLivePreview(rolls, campaignChars, clocks, characters) {
-  const inner = buildSessionEndLiveSummary(rolls, campaignChars, clocks);
+export function buildSessionEndLivePreview(
+  rolls,
+  campaignChars,
+  clocks,
+  characters,
+  sessionId,
+) {
+  const inner = buildSessionEndLiveSummary(
+    rolls,
+    campaignChars,
+    clocks,
+    sessionId,
+  );
   const charById = new Map((characters || []).map((c) => [Number(c.id), c]));
   const encById = new Map(inner.encodedRows.map((r) => [r.characterId, r]));
   const perPcRows = (campaignChars || []).map((ch) => {

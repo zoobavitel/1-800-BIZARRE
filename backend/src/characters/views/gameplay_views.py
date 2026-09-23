@@ -1,5 +1,6 @@
 from django.db import models
 from rest_framework import viewsets
+from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 
 from ..models import (
@@ -105,10 +106,33 @@ class ProgressClockViewSet(viewsets.ModelViewSet):
         qs = ProgressClock.objects.all()
         campaign_id = self.request.query_params.get('campaign')
         session_id = self.request.query_params.get('session')
+        completed = self.request.query_params.get('completed')
+        include_dismissed = self.request.query_params.get('include_dismissed')
+        completed_session_id = self.request.query_params.get('completed_session')
         if campaign_id:
             qs = qs.filter(campaign_id=campaign_id)
         if session_id:
             qs = qs.filter(session_id=session_id)
+        if completed_session_id:
+            qs = qs.filter(completed_session_id=completed_session_id)
+        if completed in ("1", "true", "True"):
+            qs = qs.filter(completed=True)
+        elif completed in ("0", "false", "False"):
+            qs = qs.filter(completed=False)
+        # List hides dismissed unless GM asks for ledger; detail actions need dismissed rows.
+        detail_actions = {
+            "retrieve",
+            "update",
+            "partial_update",
+            "destroy",
+            "dismiss",
+            "undismiss",
+        }
+        if (
+            getattr(self, "action", None) not in detail_actions
+            and include_dismissed not in ("1", "true", "True")
+        ):
+            qs = qs.filter(dismissed_at__isnull=True)
         user = self.request.user
         if not user.is_staff:
             qs = qs.filter(
@@ -120,6 +144,13 @@ class ProgressClockViewSet(viewsets.ModelViewSet):
                 try:
                     campaign = Campaign.objects.get(id=campaign_id)
                     if campaign.gm_id != user.id:
+                        # Non-GM completed filter: own character / created clocks.
+                        if completed in ("1", "true", "True"):
+                            qs = qs.filter(
+                                models.Q(character__user=user)
+                                | models.Q(crew__members__user=user)
+                                | models.Q(created_by=user)
+                            )
                         showcased_npc_ids = list(campaign.showcased_npcs.values_list('npc_id', flat=True))
                         campaign_player_ids = list(campaign.players.values_list('id', flat=True)) + list(
                             campaign.characters.values_list('user_id', flat=True).distinct()
@@ -232,6 +263,10 @@ class ProgressClockViewSet(viewsets.ModelViewSet):
         if not is_gm and not user.is_staff:
             if instance.created_by_id != user.id:
                 raise PermissionDenied("Only the creator or GM can delete this clock.")
+            if instance.completed:
+                raise PermissionDenied(
+                    "Completed clocks must be dismissed, not hard-deleted."
+                )
         if not instance.campaign and not user.is_staff:
             raise PermissionDenied("Only staff can delete clocks without a campaign.")
         snap = {
@@ -242,3 +277,39 @@ class ProgressClockViewSet(viewsets.ModelViewSet):
         }
         _log_progress_clock_audit(instance, user, "clock_deleted", {"before": snap})
         instance.delete()
+
+    @action(detail=True, methods=["post"])
+    def dismiss(self, request, pk=None):
+        from django.utils import timezone
+        from rest_framework.exceptions import PermissionDenied, ValidationError
+        from rest_framework.response import Response
+
+        clock = self.get_object()
+        user = request.user
+        is_gm = clock.campaign and clock.campaign.gm_id == user.id
+        if not user.is_staff and not is_gm and clock.created_by_id != user.id:
+            raise PermissionDenied("Only the creator or GM can dismiss this clock.")
+        if not clock.completed:
+            raise ValidationError("Only completed clocks can be soft-dismissed.")
+        if clock.dismissed_at is None:
+            clock.dismissed_at = timezone.now()
+            clock.save(update_fields=["dismissed_at"])
+            _log_progress_clock_audit(clock, user, "clock_dismissed")
+        return Response(ProgressClockSerializer(clock).data)
+
+    @action(detail=True, methods=["post"])
+    def undismiss(self, request, pk=None):
+        from rest_framework.exceptions import PermissionDenied, ValidationError
+        from rest_framework.response import Response
+
+        clock = self.get_object()
+        user = request.user
+        is_gm = clock.campaign and clock.campaign.gm_id == user.id
+        if not user.is_staff and not is_gm:
+            raise PermissionDenied("Only the GM can undismiss a clock.")
+        if clock.dismissed_at is None:
+            raise ValidationError("Clock is not dismissed.")
+        clock.dismissed_at = None
+        clock.save(update_fields=["dismissed_at"])
+        _log_progress_clock_audit(clock, user, "clock_undismissed")
+        return Response(ProgressClockSerializer(clock).data)

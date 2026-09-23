@@ -4247,12 +4247,15 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
         clearActiveCampaignChars,
         clearActiveClocks,
         clearActiveChars,
+        clearActiveModalSession?.id ?? clearActiveSessionDetail?.id,
       ),
     [
       clearActiveRolls,
       clearActiveCampaignChars,
       clearActiveClocks,
       clearActiveChars,
+      clearActiveModalSession?.id,
+      clearActiveSessionDetail?.id,
     ],
   );
 
@@ -5120,8 +5123,15 @@ function SessionDetail({
   );
 
   const endLivePreview = useMemo(
-    () => buildSessionEndLivePreview(rolls, campaignChars, clocks, characters),
-    [rolls, campaignChars, clocks, characters],
+    () =>
+      buildSessionEndLivePreview(
+        rolls,
+        campaignChars,
+        clocks,
+        characters,
+        session?.id,
+      ),
+    [rolls, campaignChars, clocks, characters, session?.id],
   );
 
   const endLiveRowsWithManual = useMemo(() => {

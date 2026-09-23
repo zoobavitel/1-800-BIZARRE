@@ -8,8 +8,28 @@ export const PATCH_NOTES = [
     "version": null,
     "sections": [
       {
+        "title": "Other",
+        "items": [
+          "Merge pull request #165 from zoobavitel/feature/crew-portrait-upload-crop",
+          "merge(master): resolve crew portrait PR conflicts with #164",
+          "Merge pull request #164 from zoobavitel/feature/campaign-ui-polish-chat",
+          "Merge pull request #163 from zoobavitel/feature/sheet-session-clocks-left-column",
+          "Merge pull request #162 from zoobavitel/feature/ba-standard-ability-picker",
+          "Merge pull request #161 from zoobavitel/fix/character-npc-mode-flicker",
+          "Merge branch 'feature/ba-standard-ability-picker' into feature/sheet-session-clocks-left-column"
+        ]
+      },
+      {
+        "title": "Maintenance",
+        "items": [
+          "refresh patch notes for crew portrait crop",
+          "refresh patchNotes for campaign UI polish branch"
+        ]
+      },
+      {
         "title": "Added",
         "items": [
+          "move crew description under name, upgrades into abilities",
           "split CREW MODE identity and factions",
           "move crew portrait beside CREW NAME",
           "faction reputation card grid for all campaign factions",
@@ -17,6 +37,7 @@ export const PATCH_NOTES = [
           "crew portrait upload crop and clear parity",
           "inline faction editor replaces NPC grid in panel",
           "allow_character_assignment toggle and hide GM roster card by default",
+          "crew portrait upload crop and clear parity",
           "move SESSION and CLOCKS to left column",
           "B→A standard picks use AbilityPickerPopover",
           "align Assist UI to same-crew SRD rule"
@@ -35,21 +56,6 @@ export const PATCH_NOTES = [
           "honor per-field visibility on sheet and home cards",
           "stop PC/NPC sheet flicker from stale npc route id",
           "SSE-safe refetch and clock create stability"
-        ]
-      },
-      {
-        "title": "Maintenance",
-        "items": [
-          "refresh patchNotes for campaign UI polish branch"
-        ]
-      },
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #163 from zoobavitel/feature/sheet-session-clocks-left-column",
-          "Merge pull request #162 from zoobavitel/feature/ba-standard-ability-picker",
-          "Merge pull request #161 from zoobavitel/fix/character-npc-mode-flicker",
-          "Merge branch 'feature/ba-standard-ability-picker' into feature/sheet-session-clocks-left-column"
         ]
       }
     ]
@@ -588,10 +594,7 @@ export const PATCH_NOTES = [
         "title": "Other",
         "items": [
           "Merge pull request #108 from zoobavitel/fix/clock-visible-players-sync",
-          "Merge pull request #107 from zoobavitel/feature/sheet-history-undo-rebased",
-          "Merge pull request #106 from zoobavitel/feature/xp-available-pool-label",
-          "Merge pull request #105 from zoobavitel/feature/xp-available-pool-label",
-          "Merge pull request #101 from zoobavitel/fix/session-xp-settle-for-update-stand"
+          "Merge pull request #107 from zoobavitel/feature/sheet-history-undo-rebased"
         ]
       },
       {
@@ -606,9 +609,7 @@ export const PATCH_NOTES = [
           "tick marks allocate pool xp",
           "coerce xp_clocks in add-xp",
           "ticks allocate from free pool",
-          "expect heritage undo clamp at track cap",
-          "keep Available XP usable without active session",
-          "show free-pool Available XP, not track sum"
+          "expect heritage undo clamp at track cap"
         ]
       },
       {
@@ -628,8 +629,7 @@ export const PATCH_NOTES = [
         "items": [
           "untick XP tracks refunds free pool",
           "add manual XP to free pool",
-          "add sheet edit undo/redo + XP/GM separation",
-          "Take advance on full XP tracks"
+          "add sheet edit undo/redo + XP/GM separation"
         ]
       }
     ]
