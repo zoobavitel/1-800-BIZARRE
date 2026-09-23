@@ -7,7 +7,6 @@ import React, {
 } from "react";
 import {
   sessionAPI,
-  resolveMediaUrl,
   npcAPI,
   characterAPI,
   crewAPI,
@@ -23,6 +22,7 @@ import {
   playbookToDisplay,
 } from "../../features/character-sheet/services/api";
 import InventoryItemPicker from "../../features/character-sheet/components/InventoryItemPicker";
+import { ArmorChargeBoxes } from "../../features/character-sheet/components/CharacterSheetArmorPanel";
 import { progressClockShowsPlayersBadge } from "../../features/character-sheet/utils/progressClockVisibility";
 import { buildRouteHref, handleSpaNavClick } from "../../utils/spaNavigation";
 import {
@@ -40,7 +40,30 @@ import {
   archetypeLabelsJoined,
   normalizePlaybookXpArchetypeKeys,
 } from "../../features/character-sheet/utils/playbookXpTriggerSrd";
-import { rosterHasLinkedCrewForCrewSheetFactionUi } from "../../features/character-sheet/utils/characterUtils";
+import {
+  rosterHasLinkedCrewForCrewSheetFactionUi,
+  standardAbilities,
+} from "../../features/character-sheet/utils/characterUtils";
+import {
+  SESSION_SHELL_TABS,
+  NPC_DRAG_MIME,
+  NPC_DRAG_SOURCE_MIME,
+  NO_FACTION_DROP_KEY,
+  NPC_NESTED_TABS,
+  PC_NESTED_TABS,
+  SessionShellTabBar,
+  NestedTabBar,
+  SessionPortraitThumb,
+  entityPortraitSrc,
+  AddNpcStripTile,
+} from "./sessionShellUi";
+import {
+  SessionFactionToken,
+  SessionNpcToken,
+  SessionPcToken,
+} from "./SessionTokenFaces";
+import "../../styles/Home.css";
+import "../../styles/SessionTokenCards.css";
 
 const GRADES = ["F", "D", "C", "B", "A", "S"];
 
@@ -792,16 +815,213 @@ function flatActionDots(actionDots) {
   return Object.entries(actionDots);
 }
 
-/** Blades-style attribute ratings: count of actions in each group with dot &gt; 0. */
-function insightProwessResolveFromActionDots(actionDots) {
-  const m = Object.fromEntries(flatActionDots(actionDots));
-  const c = (keys) =>
-    keys.reduce((n, k) => n + ((Number(m[k]) || 0) > 0 ? 1 : 0), 0);
-  return {
-    insight: c(["hunt", "study", "survey", "tinker"]),
-    prowess: c(["finesse", "prowl", "skirmish", "wreck"]),
-    resolve: c(["bizarre", "attune", "command", "consort", "sway"]),
+/** Sheet column order — same groups as CharacterSheet action rating columns. */
+const SESSION_ACTION_DOT_COLUMNS = [
+  {
+    attr: "INSIGHT",
+    actions: ["hunt", "study", "survey", "tinker"],
+  },
+  {
+    attr: "PROWESS",
+    actions: ["finesse", "prowl", "skirmish", "wreck"],
+  },
+  {
+    attr: "RESOLVE",
+    actions: ["bizarre", "command", "consort", "sway"],
+  },
+];
+
+function actionDotRatingMap(actionDots) {
+  const out = {};
+  for (const [k, v] of flatActionDots(actionDots)) {
+    const key = String(k || "")
+      .trim()
+      .toLowerCase();
+    if (!key) continue;
+    const n = Math.max(0, Math.min(4, Math.floor(Number(v) || 0)));
+    // Backend may send attune; sheet UI labels BIZARRE.
+    if (key === "attune") {
+      out.bizarre = Math.max(out.bizarre || 0, n);
+    } else {
+      out[key] = n;
+    }
+  }
+  return out;
+}
+
+/** Read-only action dots — same 12px circle visual as CharacterSheet (no edit/roll). */
+function SessionPcActionDotsReadout({ actionDots }) {
+  const ratings = actionDotRatingMap(actionDots);
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+        gap: 10,
+        minWidth: 0,
+        maxWidth: "100%",
+      }}
+    >
+      {SESSION_ACTION_DOT_COLUMNS.map(({ attr, actions }) => {
+        const attrRating = actions.reduce(
+          (n, a) => n + ((ratings[a] || 0) > 0 ? 1 : 0),
+          0,
+        );
+        return (
+          <div key={attr} style={{ minWidth: 0 }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 6,
+                gap: 4,
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: "bold",
+                  color: "#e5e7eb",
+                }}
+              >
+                {attr}
+              </span>
+              <div style={{ display: "flex", gap: 2 }}>
+                {[1, 2, 3, 4].map((d) => (
+                  <div
+                    key={d}
+                    style={{
+                      width: 7,
+                      height: 7,
+                      borderRadius: "50%",
+                      border: "1px solid #4b5563",
+                      background: d <= attrRating ? "#3b82f6" : "#1f2937",
+                    }}
+                    title={`${attr} rating ${attrRating}`}
+                  />
+                ))}
+              </div>
+            </div>
+            {actions.map((action) => {
+              const rating = ratings[action] || 0;
+              return (
+                <div
+                  key={action}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginBottom: 4,
+                    gap: 4,
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: 11,
+                      color: "#d1d5db",
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    {action}
+                  </span>
+                  <div style={{ display: "flex", gap: 2 }}>
+                    {[1, 2, 3, 4].map((d) => (
+                      <div
+                        key={d}
+                        style={{
+                          width: 12,
+                          height: 12,
+                          borderRadius: "50%",
+                          border: "1px solid var(--text-dim, #6b7280)",
+                          background:
+                            d <= rating
+                              ? "var(--hftf-purple, #7c3aed)"
+                              : "var(--bg-card, #0d1117)",
+                        }}
+                        title={`${action} ${rating}`}
+                      />
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function rosterHeritageAbilityLines(character) {
+  const details = character?.heritage_details || {};
+  const selectedBenefits = new Set(
+    (Array.isArray(character?.selected_benefits)
+      ? character.selected_benefits
+      : []
+    ).map((x) => Number(x)),
+  );
+  const selectedDetriments = new Set(
+    (Array.isArray(character?.selected_detriments)
+      ? character.selected_detriments
+      : []
+    ).map((x) => Number(x)),
+  );
+  const lines = [];
+  (details.benefits || []).forEach((b) => {
+    if (!b) return;
+    if (!(Boolean(b.required) || selectedBenefits.has(Number(b.id)))) return;
+    const name = String(b.name || "").trim();
+    if (name) lines.push({ kind: "benefit", name });
+  });
+  (details.detriments || []).forEach((d) => {
+    if (!d) return;
+    if (!(Boolean(d.required) || selectedDetriments.has(Number(d.id)))) return;
+    const name = String(d.name || "").trim();
+    if (name) lines.push({ kind: "detriment", name });
+  });
+  return lines;
+}
+
+function rosterPlaybookAbilityGroups(character) {
+  const groups = [];
+  const push = (label, raw, mapFn) => {
+    if (!Array.isArray(raw) || raw.length === 0) return;
+    const items = raw.map(mapFn).filter(Boolean);
+    if (items.length) groups.push({ label, items });
   };
+  push("Standard", character?.standard_ability_details, (a) =>
+    String(a?.name || "").trim(),
+  );
+  push("Hamon", character?.hamon_ability_details, (a) =>
+    String(a?.name || "").trim(),
+  );
+  push("Spin", character?.spin_ability_details, (a) =>
+    String(a?.name || "").trim(),
+  );
+
+  const customType =
+    character?.custom_ability_type || "single_with_3_uses";
+  const desc = String(character?.custom_ability_description || "").trim();
+  const extra = Array.isArray(character?.extra_custom_abilities)
+    ? character.extra_custom_abilities
+    : [];
+  const customItems = [];
+  if (customType === "three_separate_uses" && extra.length > 0) {
+    extra.forEach((a, i) => {
+      const name = String(a?.name || a?.description || `Custom ${i + 1}`).trim();
+      if (name) customItems.push(name);
+    });
+  } else if (desc || extra.length > 0) {
+    const name =
+      desc ||
+      String(extra[0]?.name || extra[0]?.description || "Custom Ability").trim();
+    if (name) customItems.push(name);
+  }
+  if (customItems.length) {
+    groups.push({ label: "Custom", items: customItems });
+  }
+  return groups;
 }
 
 /** One-line summary for roster inventory row (strings or common object shapes). */
@@ -880,14 +1100,6 @@ const card = {
   gap: 6,
   fontSize: 11,
   color: "#e5e7eb",
-};
-
-const grid = {
-  display: "flex",
-  flexWrap: "wrap",
-  gap: 12,
-  alignItems: "stretch",
-  marginTop: 8,
 };
 
 const lbl = { fontSize: 10, color: "#9ca3af", textTransform: "uppercase" };
@@ -1018,6 +1230,48 @@ function compactHarmFieldStyle(key, rawValue) {
   };
 }
 
+const COMPACT_HARM_FIELDS = [
+  ["l4", "L4", "1 / -1"],
+  ["l3", "L3", "1 / -1"],
+  ["l2a", "L2A", null],
+  ["l2b", "L2B", null],
+  ["l1a", "L1A", null],
+  ["l1b", "L1B", null],
+];
+
+const EMPTY_HARM_PAYLOAD = {
+  harm_level1_name: "",
+  harm_level1_used: false,
+  harm_level1_slot2_name: "",
+  harm_level1_slot2_used: false,
+  harm_level2_name: "",
+  harm_level2_used: false,
+  harm_level2_slot2_name: "",
+  harm_level2_slot2_used: false,
+  harm_level3_name: "",
+  harm_level3_used: false,
+  harm_level4_name: "",
+  harm_level4_used: false,
+};
+
+function harmPayloadFromDraft(d) {
+  const draft = d || {};
+  return {
+    harm_level1_name: draft.l1a || "",
+    harm_level1_used: !!(draft.l1a || "").trim(),
+    harm_level1_slot2_name: draft.l1b || "",
+    harm_level1_slot2_used: !!(draft.l1b || "").trim(),
+    harm_level2_name: draft.l2a || "",
+    harm_level2_used: !!(draft.l2a || "").trim(),
+    harm_level2_slot2_name: draft.l2b || "",
+    harm_level2_slot2_used: !!(draft.l2b || "").trim(),
+    harm_level3_name: draft.l3 || "",
+    harm_level3_used: !!(draft.l3 || "").trim(),
+    harm_level4_name: draft.l4 || "",
+    harm_level4_used: !!(draft.l4 || "").trim(),
+  };
+}
+
 /** End-of-session playbook clock triggers (ExperienceTracker). */
 const SESSION_PLAYBOOK_TRIGGER_CODES = new Set([
   "BELIEFS",
@@ -1082,6 +1336,8 @@ export default function SessionGMManagementPanels({
   onSessionPanelRefresh = null,
   user = null,
   equipmentCatalogItems = null,
+  /** Scorecard allocation panel from SessionDetail (moved off always-visible chrome). */
+  scorecardPanel = null,
 }) {
   /** Prefer session panel refetch (includes clocks). Parent `onRefresh` is often
    * only `getCampaign` — waiting on that (or SSE/poll) is why create felt slow. */
@@ -1189,12 +1445,28 @@ export default function SessionGMManagementPanels({
   const [npcUiBusyKey, setNpcUiBusyKey] = useState(null);
   const [collapsedCrewCards, setCollapsedCrewCards] = useState({});
   const [collapsedFactionCards, setCollapsedFactionCards] = useState({});
-  const [collapsedNpcCards, setCollapsedNpcCards] = useState({});
   const [collapsedPcCards, setCollapsedPcCards] = useState({});
+  /** Primary session shell tab (Rosters default). */
+  const [sessionShellTab, setSessionShellTab] = useState("rosters");
+  /** Nested tab id per NPC / PC card when photo-expanded. */
+  const [npcNestedTabById, setNpcNestedTabById] = useState({});
+  const [pcNestedTabById, setPcNestedTabById] = useState({});
+  /** Which NPC photo is expanded under its faction (id or null). */
+  const [expandedNpcPhotoId, setExpandedNpcPhotoId] = useState(null);
+  const [dragOverFactionKey, setDragOverFactionKey] = useState(null);
+  /** Prefetch fuller NPC when expanding if summary thin. */
+  const [npcDetailById, setNpcDetailById] = useState({});
+  const [addNpcTargetFactionId, setAddNpcTargetFactionId] = useState(null);
   const [npcRosterSectionCollapsed, setNpcRosterSectionCollapsed] =
     useState(false);
   const [playerRosterSectionCollapsed, setPlayerRosterSectionCollapsed] =
     useState(false);
+  /** Rosters tab: which columns are visible (cannot hide both). */
+  const [rosterShowNpc, setRosterShowNpc] = useState(true);
+  const [rosterShowPc, setRosterShowPc] = useState(true);
+  const [pcRosterFilter, setPcRosterFilter] = useState("");
+  /** True while an NPC token drag is in progress (for unassign drop zone). */
+  const [sessionNpcDragging, setSessionNpcDragging] = useState(false);
   const [sessionQuickFactionName, setSessionQuickFactionName] = useState("");
   const [sessionQuickFactionBusy, setSessionQuickFactionBusy] = useState(false);
   const [xpLifetimeCharId, setXpLifetimeCharId] = useState("");
@@ -1217,6 +1489,20 @@ export default function SessionGMManagementPanels({
   const [campaignWideClocks, setCampaignWideClocks] = useState([]);
   const [campaignWideClocksLoaded, setCampaignWideClocksLoaded] =
     useState(false);
+
+  const reloadCampaignWideClocks = useCallback(async () => {
+    if (!campaign?.id) return;
+    try {
+      const data = await progressClockAPI.getProgressClocks({
+        campaign: campaign.id,
+        include_dismissed: 1,
+      });
+      setCampaignWideClocks(unwrapApiArray(data));
+      setCampaignWideClocksLoaded(true);
+    } catch {
+      /* keep prior list */
+    }
+  }, [campaign?.id]);
 
   /** Inline create for per-PC progress clocks on this session (roster card). */
   const [pcSessionClockDraftFor, setPcSessionClockDraftFor] = useState(null);
@@ -1244,6 +1530,7 @@ export default function SessionGMManagementPanels({
   const [pcRosterNotesDraftByChar, setPcRosterNotesDraftByChar] = useState({});
   /** Inventory + notes PATCH from session roster PC cards */
   const [pcRosterSheetBusyId, setPcRosterSheetBusyId] = useState(null);
+  const pcCardElsRef = useRef({});
 
   const npcInvolvements = useMemo(
     () => sessionData?.npc_involvements || [],
@@ -1318,7 +1605,7 @@ export default function SessionGMManagementPanels({
     [session.id, setSessionData, onRefresh, setError],
   );
 
-  const addNpcToSession = (npcId) => {
+  const addNpcToSession = async (npcId) => {
     const next = [
       ...npcInvolvements,
       {
@@ -1329,7 +1616,17 @@ export default function SessionGMManagementPanels({
         show_all_abilities_to_players: false,
       },
     ];
-    return patchSessionInv(next);
+    await patchSessionInv(next);
+    const facTarget = addNpcTargetFactionId;
+    if (facTarget != null && Number.isFinite(Number(facTarget))) {
+      try {
+        await npcAPI.patchNPC(npcId, { faction: Number(facTarget) });
+        onRefresh();
+      } catch (e) {
+        setError(e?.message || "NPC added but faction assign failed.");
+      }
+    }
+    setAddNpcTargetFactionId(null);
   };
 
   useEffect(() => {
@@ -1453,6 +1750,7 @@ export default function SessionGMManagementPanels({
       onNavigateToNPC(null, { campaignId: campaign.id });
       return;
     }
+    setAddNpcTargetFactionId(null);
     setShowAddNpc(true);
   };
 
@@ -2085,6 +2383,813 @@ export default function SessionGMManagementPanels({
     [onRefresh, setError],
   );
 
+  /** Recent rolls list (PE strip + PC expand Roll tab). */
+  const renderCharacterRecentRollsLog = (characterId, { maxHeight = 120 } = {}) => (
+                    <div>
+                    <div style={lbl}>
+                      <span>Recent rolls</span>
+                    </div>
+                    <div
+                      title="Total stress recorded on this character’s rolls in this session (e.g. resistance cost, push). From roll payloads, not live clock ticks."
+                      style={{
+                        fontSize: 10,
+                        color: "#a78bfa",
+                        marginBottom: 6,
+                        lineHeight: 1.35,
+                      }}
+                    >
+                      Stress (session):{" "}
+                      <span style={{ fontWeight: 800, color: "#e9d5ff" }}>
+                        {sessionStressSpentForCharacter(characterId)}
+                      </span>
+                    </div>
+                    <div
+                      style={{
+                        border: "1px solid #374151",
+                        borderRadius: 6,
+                        padding: 8,
+                        background: "#0d1117",
+                        maxHeight,
+                        overflow: "auto",
+                        fontSize: 10,
+                        color: "#9ca3af",
+                      }}
+                    >
+                      {getRecentCharacterRolls(characterId).length === 0 ? (
+                        <div>—</div>
+                      ) : (
+                        getRecentCharacterRolls(characterId).map((r) => {
+                          const rtUp = String(r.roll_type || "").toUpperCase();
+                          const recBadge = recoveryBadgeFromRoll(r);
+                          const asst = assistInfoFromRoll(r);
+                          const rollHint = buildRecentRollDetailTitle(r);
+                          const diceSrcSummary = recentRollDiceSourcesSummary(r);
+                          const diceSrcTooltip =
+                            recentRollDiceSourcesTooltip(r) ||
+                            diceSrcSummary ||
+                            undefined;
+                          return (
+                          <div
+                            key={r.id}
+                            title={rollHint}
+                            style={{
+                              marginBottom: 4,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              gap: 8,
+                            }}
+                          >
+                            <div style={{ minWidth: 0 }}>
+                              {rtUp ? (
+                                <span style={{ color: "#6b7280" }}>{rtUp} · </span>
+                              ) : null}
+                              {(r.action_name || "action").toUpperCase()} ·{" "}
+                              {(r.results || []).join(", ")} →{" "}
+                              {(r.outcome || "").replace(/_/g, " ")}
+                              {diceSrcSummary ? (
+                                <span
+                                  title={diceSrcTooltip}
+                                  style={{
+                                    marginLeft: 6,
+                                    color: "#71717a",
+                                    fontSize: 9,
+                                    verticalAlign: "middle",
+                                  }}
+                                >
+                                  · {diceSrcSummary}
+                                </span>
+                              ) : null}
+                              <span
+                                style={{
+                                  marginLeft: 6,
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 3,
+                                  flexWrap: "wrap",
+                                  verticalAlign: "middle",
+                                }}
+                              >
+                                {rollHasTruthyFk(r.group_action) ? (
+                                  <span
+                                    title={`Group action id ${r.group_action}`}
+                                    style={{
+                                      fontSize: 8,
+                                      fontWeight: 700,
+                                      letterSpacing: "0.04em",
+                                      padding: "1px 5px",
+                                      borderRadius: 4,
+                                      border: "1px solid #1d4ed8",
+                                      background: "rgba(29, 78, 216, 0.2)",
+                                      color: "#93c5fd",
+                                    }}
+                                  >
+                                    GA
+                                  </span>
+                                ) : null}
+                                {recBadge ? (
+                                  <span
+                                    title={recBadge.title}
+                                    style={{
+                                      fontSize: 8,
+                                      fontWeight: 700,
+                                      letterSpacing: "0.04em",
+                                      padding: "1px 5px",
+                                      borderRadius: 4,
+                                      border: "1px solid #047857",
+                                      background: "rgba(4, 120, 87, 0.2)",
+                                      color: "#6ee7b7",
+                                    }}
+                                  >
+                                    {recBadge.label}
+                                  </span>
+                                ) : null}
+                                {asst ? (
+                                  <span
+                                    title={asst.title}
+                                    style={{
+                                      fontSize: 8,
+                                      fontWeight: 700,
+                                      letterSpacing: "0.04em",
+                                      padding: "1px 5px",
+                                      borderRadius: 4,
+                                      border: "1px solid #b45309",
+                                      background: "rgba(180, 83, 9, 0.2)",
+                                      color: "#fcd34d",
+                                    }}
+                                  >
+                                    {asst.label}
+                                  </span>
+                                ) : null}
+                              </span>
+                              {(Array.isArray(r.xp_award_details) &&
+                              r.xp_award_details.length > 0
+                                ? r.xp_award_details
+                                : r.xp_award_detail
+                                  ? [r.xp_award_detail]
+                                  : []
+                              ).map((xpRow, xpIdx) => (
+                                <span
+                                  key={`xp-${r.id}-${xpIdx}`}
+                                  style={{
+                                    display: "block",
+                                    marginTop: 3,
+                                    color: "#34d399",
+                                    fontSize: 9,
+                                    lineHeight: 1.35,
+                                  }}
+                                >
+                                  +{xpRow.xp_gained} XP ·{" "}
+                                  {xpRow.trigger_label || xpRow.trigger}
+                                  {xpRow.track &&
+                                  xpRow.track_total != null &&
+                                  xpRow.track_total !== undefined
+                                    ? ` · ${String(xpRow.track)} ${xpRow.track_total}`
+                                    : ""}
+                                  {xpRow.all_tracks_total != null &&
+                                  xpRow.all_tracks_total !== undefined
+                                    ? ` · all clocks ${xpRow.all_tracks_total}`
+                                    : ""}
+                                </span>
+                              ))}
+                            </div>
+                            <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+                              <button
+                                type="button"
+                                style={{ ...S.btnGhost, fontSize: 9, padding: "2px 6px" }}
+                                onClick={() => editRecentRoll(r)}
+                                disabled={recentRollSavingId === r.id}
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                style={{ ...S.btnDanger, fontSize: 9, padding: "2px 6px" }}
+                                onClick={() => deleteRecentRoll(r)}
+                                disabled={recentRollSavingId === r.id}
+                              >
+                                Del
+                              </button>
+                            </div>
+                          </div>
+                          );
+                        })
+                      )}
+                    </div>
+                    </div>
+  );
+
+  /** Compact manual dice form locked to one PC (expand Roll tab). */
+  const renderPcLockedManualRollForm = (characterId) => {
+    if (manualRoll == null || setManualRoll == null || !onManualRollCreate) {
+      return (
+        <div style={{ fontSize: 10, color: "#6b7280" }}>
+          Manual roll form unavailable.
+        </div>
+      );
+    }
+    const cid = String(characterId);
+    return (
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "8px",
+              alignItems: "flex-end",
+              fontSize: "11px",
+              marginBottom: 10,
+            }}
+          >
+            <div>
+              <span style={{ color: "#9ca3af", display: "block", marginBottom: 2 }}>
+                Roll type
+              </span>
+              <select
+                style={S.select}
+                value={manualRoll.rollKind}
+                onChange={(e) =>
+                  setManualRoll((p) => ({ ...p, rollKind: e.target.value, characterId: cid }))
+                }
+              >
+                <option value="ACTION">Action</option>
+                <option value="RESISTANCE">Resistance</option>
+                <option value="CLEAR_STRESS">Downtime recovery (vice)</option>
+                <option value="CLEAR_STRESS_IN_PLAY">
+                  Recovery in play (clear stress)
+                </option>
+              </select>
+            </div>
+            {String(manualRoll.rollKind || "").toUpperCase() === "ACTION" ? (
+              <div>
+                <span style={{ color: "#9ca3af", display: "block", marginBottom: 2 }}>
+                  Action
+                </span>
+                <select
+                  style={S.select}
+                  value={
+                    ACTION_RATING_KEYS.map((k) => k.toLowerCase()).includes(
+                      String(manualRoll.actionName || "").toLowerCase(),
+                    )
+                      ? String(manualRoll.actionName || "").toLowerCase()
+                      : "skirmish"
+                  }
+                  onChange={(e) =>
+                    setManualRoll((p) => ({
+                      ...p,
+                      actionName: e.target.value,
+                      characterId: cid,
+                    }))
+                  }
+                >
+                  {ACTION_RATING_KEYS.map((key) => {
+                    const v = key.toLowerCase();
+                    const label = key.charAt(0) + key.slice(1).toLowerCase();
+                    return (
+                      <option key={v} value={v}>
+                        {label}
+                      </option>
+                    );
+                  })}
+                  <option disabled style={{ opacity: 0.5 }}>
+                    — Stand coin —
+                  </option>
+                  {STAND_ROLL_KEYS_ALL.map((sk) => {
+                    const v = `stand_${sk}`;
+                    return (
+                      <option key={v} value={v}>
+                        {`Stand ${sk}`}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+            ) : String(manualRoll.rollKind || "").toUpperCase() === "RESISTANCE" ? (
+              <div>
+                <span style={{ color: "#9ca3af", display: "block", marginBottom: 2 }}>
+                  Attribute
+                </span>
+                <select
+                  style={S.select}
+                  value={manualRoll.resistanceAttr}
+                  onChange={(e) =>
+                    setManualRoll((p) => ({
+                      ...p,
+                      resistanceAttr: e.target.value,
+                      characterId: cid,
+                    }))
+                  }
+                >
+                  <option value="insight">Insight</option>
+                  <option value="prowess">Prowess</option>
+                  <option value="resolve">Resolve</option>
+                  <option value="stand_durability">Stand durability</option>
+                </select>
+              </div>
+            ) : (
+              <div>
+                <span style={{ color: "#9ca3af", display: "block", marginBottom: 2 }}>
+                  Note (overindulge, etc.)
+                </span>
+                <input
+                  style={{ ...S.inp, width: 140 }}
+                  value={manualRoll.viceNote}
+                  onChange={(e) =>
+                    setManualRoll((p) => ({
+                      ...p,
+                      viceNote: e.target.value,
+                      characterId: cid,
+                    }))
+                  }
+                  placeholder="optional"
+                />
+              </div>
+            )}
+            <div>
+              <span style={{ color: "#9ca3af", display: "block", marginBottom: 2 }}>
+                Dice (1–6)
+              </span>
+              <input
+                style={{ ...S.inp, width: 80 }}
+                value={manualRoll.diceStr}
+                onChange={(e) =>
+                  setManualRoll((p) => ({
+                    ...p,
+                    diceStr: e.target.value,
+                    characterId: cid,
+                  }))
+                }
+                placeholder="4, 5"
+              />
+            </div>
+            <div>
+              <span style={{ color: "#9ca3af", display: "block", marginBottom: 2 }}>
+                Outcome
+              </span>
+              <select
+                style={S.select}
+                value={manualRoll.outcome}
+                onChange={(e) =>
+                  setManualRoll((p) => ({
+                    ...p,
+                    outcome: e.target.value,
+                    characterId: cid,
+                  }))
+                }
+              >
+                <option value="CRITICAL_SUCCESS">Critical</option>
+                <option value="FULL_SUCCESS">Full</option>
+                <option value="PARTIAL_SUCCESS">Partial</option>
+                <option value="FAILURE">Failure</option>
+                <option value="BOTCH">Botch</option>
+              </select>
+            </div>
+            <button
+              type="button"
+              onClick={() => onManualRollCreate(cid)}
+              style={S.btnPrimary}
+              disabled={manualRollSaving}
+            >
+              {manualRollSaving ? "Saving..." : "Add manual roll"}
+            </button>
+          </div>
+    );
+  };
+
+  /** Per-PC XP management for expand XP tab (mirrors Session XP, locked to character). */
+  const renderPcExpandXpPanel = (characterId, xpClocks = {}) => {
+    const cid = Number(characterId);
+    const counts =
+      pcXpTriggerCountsByCharacter.get(cid) || {
+        BELIEFS: 0,
+        STRUGGLE: 0,
+        PLAYBOOK: 0,
+      };
+    const fullSheet =
+      (characters || []).find((c) => Number(c?.id) === cid) ||
+      (campaignChars || []).find((c) => Number(c?.id) === cid) ||
+      {};
+    const pbDisp = fullSheet?.playbook ?? "Stand";
+    const rawArch =
+      fullSheet?.playbookXpArchetypes ?? fullSheet?.playbook_xp_archetypes;
+    const archKeys = normalizePlaybookXpArchetypeKeys(pbDisp, rawArch);
+    const archCaption = archKeys.length
+      ? archetypeLabelsJoined(archKeys, pbDisp)
+      : "";
+    const triggerRows = [
+      {
+        label: "Playbook-specific (abilities)",
+        detail: archCaption,
+        trigger: PLAYBOOK_SESSION_TOGGLE_TRIGGER,
+        v: counts.PLAYBOOK,
+      },
+      {
+        label: "Beliefs / drives / heritage",
+        detail: "",
+        trigger: "BELIEFS",
+        v: counts.BELIEFS,
+      },
+      {
+        label: "Struggle (vice / trauma / entanglement)",
+        detail: "",
+        trigger: "STRUGGLE",
+        v: counts.STRUGGLE,
+      },
+    ];
+    const reqLines = pcXpRequirementsByCharacter.get(cid) || [];
+    const title =
+      charDisplayNameById.get(cid) ||
+      fullSheet.true_name ||
+      fullSheet.name ||
+      `PC ${cid}`;
+    const projectsForPc = (gmPlayerProjectClocks || []).filter(
+      (clk) => Number(clk.character) === cid,
+    );
+    const histForPc = (sessionAdvancementHistory || []).filter(
+      (e) => Number(e.character) === cid,
+    );
+    const buyInForPc = renderSessionLedgerBucketUl(
+      histForPc,
+      "initial",
+      charDisplayNameById,
+      { expanded: true },
+    );
+    const paidForPc = renderSessionLedgerBucketUl(
+      histForPc,
+      "expenditure",
+      charDisplayNameById,
+      { expanded: true },
+    );
+    const cidStr = String(characterId);
+
+    return (
+      <div style={{ minWidth: 0, maxWidth: "100%" }}>
+        <div style={lbl}>XP tracks</div>
+        <div style={{ fontSize: 10, color: "#9ca3af", marginBottom: 10 }}>
+          In {xpClocks.insight ?? 0} · Pw {xpClocks.prowess ?? 0} · Re{" "}
+          {xpClocks.resolve ?? 0} · Pb {xpClocks.playbook ?? 0}
+        </div>
+
+        {manualXp != null && setManualXp != null && onManualXpGrant != null ? (
+          <>
+            <div style={{ ...lbl, marginBottom: 6 }}>Add manual award</div>
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 8,
+                alignItems: "flex-end",
+                fontSize: 11,
+                marginBottom: 12,
+              }}
+            >
+              <div>
+                <span style={{ color: "#9ca3af", display: "block", marginBottom: 2 }}>
+                  XP track
+                </span>
+                <select
+                  style={S.select}
+                  value={manualXp.track}
+                  onChange={(e) =>
+                    setManualXp((p) => ({
+                      ...p,
+                      track: e.target.value,
+                      characterId: cidStr,
+                    }))
+                  }
+                >
+                  <option value="playbook">Playbook</option>
+                  <option value="insight">Insight</option>
+                  <option value="prowess">Prowess</option>
+                  <option value="resolve">Resolve</option>
+                </select>
+              </div>
+              <div>
+                <span style={{ color: "#9ca3af", display: "block", marginBottom: 2 }}>
+                  Amount (1–20)
+                </span>
+                <input
+                  type="number"
+                  min={1}
+                  max={20}
+                  style={{ ...S.inp, width: 64 }}
+                  value={manualXp.amount}
+                  onChange={(e) =>
+                    setManualXp((p) => ({
+                      ...p,
+                      amount: e.target.value,
+                      characterId: cidStr,
+                    }))
+                  }
+                />
+              </div>
+              <div style={{ flex: "1 1 140px", minWidth: 0 }}>
+                <span style={{ color: "#9ca3af", display: "block", marginBottom: 2 }}>
+                  Reason / note
+                </span>
+                <input
+                  style={{ ...S.inp, width: "100%", maxWidth: "100%", boxSizing: "border-box" }}
+                  value={manualXp.reason}
+                  onChange={(e) =>
+                    setManualXp((p) => ({
+                      ...p,
+                      reason: e.target.value,
+                      characterId: cidStr,
+                    }))
+                  }
+                  placeholder="why awarded"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => onManualXpGrant(cidStr)}
+                style={S.btnPrimary}
+                disabled={manualXpSaving}
+              >
+                {manualXpSaving ? "Saving..." : "Add XP"}
+              </button>
+            </div>
+          </>
+        ) : null}
+
+        <div style={{ ...lbl, marginBottom: 6 }}>
+          End-of-session XP triggers
+        </div>
+        {xpToggleError ? (
+          <div style={{ color: "#fca5a5", fontSize: 10, marginBottom: 6 }}>
+            {xpToggleError}
+          </div>
+        ) : null}
+        <div
+          style={{
+            marginBottom: 12,
+            padding: 6,
+            border: "1px solid #1f2937",
+            borderRadius: 4,
+          }}
+        >
+          {triggerRows.map((row) => {
+            const busy =
+              xpToggleBusy.cid === cid &&
+              xpToggleBusy.trigger === row.trigger;
+            return (
+              <div
+                key={`pc-xp-tog-${cid}-${row.trigger}`}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "3px 0",
+                }}
+              >
+                <span style={{ color: "#9ca3af", fontSize: 10 }}>
+                  {row.label}
+                  {row.detail ? (
+                    <span
+                      style={{
+                        display: "block",
+                        fontSize: 9,
+                        color: "#6b7280",
+                        marginTop: 2,
+                      }}
+                    >
+                      {row.detail}
+                    </span>
+                  ) : null}
+                </span>
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                  }}
+                >
+                  {[0, 1].map((idx) => {
+                    const filled = idx < row.v;
+                    const action = filled ? -1 : 1;
+                    const isNextPip =
+                      (filled && idx === row.v - 1) ||
+                      (!filled && idx === row.v);
+                    const disabled = busy || !isNextPip;
+                    return (
+                      <button
+                        key={idx}
+                        type="button"
+                        disabled={disabled}
+                        onClick={() =>
+                          handleGmXpTriggerToggle(cid, row.trigger, action)
+                        }
+                        aria-label={`${filled ? "Revoke" : "Award"} ${row.trigger} XP for ${title}`}
+                        title={
+                          filled
+                            ? "Click to untoggle (-1 XP)"
+                            : "Click to award +1 XP"
+                        }
+                        style={{
+                          width: 14,
+                          height: 14,
+                          padding: 0,
+                          borderRadius: 3,
+                          border: filled
+                            ? "1px solid #a78bfa"
+                            : "1px solid #374151",
+                          background: filled ? "#7c3aed" : "transparent",
+                          cursor: disabled ? "not-allowed" : "pointer",
+                          opacity: disabled && !filled ? 0.45 : 1,
+                        }}
+                      />
+                    );
+                  })}
+                  <span
+                    style={{
+                      fontFamily: "monospace",
+                      color: "#e5e7eb",
+                      minWidth: 28,
+                      textAlign: "right",
+                      fontSize: 11,
+                    }}
+                  >
+                    {row.v} / 2
+                  </span>
+                </span>
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{ ...lbl, marginBottom: 6 }}>
+          Requirements logged (this session)
+        </div>
+        {xpEntryDeleteError ? (
+          <div style={{ color: "#fca5a5", fontSize: 10, marginBottom: 6 }}>
+            {xpEntryDeleteError}
+          </div>
+        ) : null}
+        <div style={{ marginBottom: 12, fontSize: 10, color: "#6b7280" }}>
+          {reqLines.length === 0 ? (
+            <span>No tracker rows for this PC yet.</span>
+          ) : (
+            <ul
+              style={{
+                margin: 0,
+                padding: 0,
+                listStyle: "none",
+                display: "flex",
+                flexDirection: "column",
+                gap: 3,
+              }}
+            >
+              {reqLines.map((entry, i) => {
+                const busy = xpEntryDeleteBusy === entry.id;
+                return (
+                  <li
+                    key={`pc-xp-req-${cid}-${entry.id ?? i}`}
+                    style={{
+                      display: "flex",
+                      alignItems: "flex-start",
+                      justifyContent: "space-between",
+                      gap: 6,
+                      background: "#0b1220",
+                      border: "1px solid #1f2937",
+                      borderRadius: 3,
+                      padding: "3px 6px",
+                    }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      {entry.triggerTag ? (
+                        <div
+                          style={{
+                            fontSize: 9,
+                            fontFamily:
+                              "ui-monospace, SFMono-Regular, Menlo, monospace",
+                            color: "#a78bfa",
+                            marginBottom: 2,
+                            fontWeight: 600,
+                          }}
+                        >
+                          {entry.triggerTag}
+                        </div>
+                      ) : null}
+                      <div style={{ color: "#d1d5db" }}>{entry.label}</div>
+                      <div
+                        style={{
+                          color:
+                            entry.awardHow === "Automatic"
+                              ? "#6b7280"
+                              : "#9ca3af",
+                          fontSize: 9,
+                          marginTop: 1,
+                        }}
+                      >
+                        {entry.awardHow} · {entry.sessionLabel}
+                      </div>
+                    </div>
+                    {entry.id ? (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteXpEntry(entry.id)}
+                        disabled={busy}
+                        aria-label="Delete XP entry"
+                        title="Delete this XP record"
+                        style={{
+                          flexShrink: 0,
+                          width: 18,
+                          height: 18,
+                          borderRadius: 3,
+                          border: "1px solid #7f1d1d",
+                          background: busy ? "#374151" : "#1f2937",
+                          color: "#fca5a5",
+                          cursor: busy ? "not-allowed" : "pointer",
+                          fontSize: 11,
+                          lineHeight: 1,
+                          padding: 0,
+                        }}
+                      >
+                        ×
+                      </button>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+
+        <div style={{ ...lbl, marginBottom: 6 }}>Player projects</div>
+        <div style={{ marginBottom: 12, fontSize: 10, color: "#6b7280" }}>
+          {!campaignWideClocksLoaded ? (
+            <span>Loading…</span>
+          ) : projectsForPc.length === 0 ? (
+            <span>No player projects for this PC.</span>
+          ) : (
+            <ul style={{ margin: 0, paddingLeft: 16 }}>
+              {projectsForPc.map((clk) => {
+                const done = progressClockIsDone(clk);
+                return (
+                  <li key={`pc-proj-${clk.id}`}>
+                    <span style={{ color: done ? "#6b7280" : "#d1d5db" }}>
+                      {clk.name || "Project"}
+                    </span>
+                    {` · ${Number(clk.filled_segments) || 0}/${Number(clk.max_segments) || 0}`}
+                    {done ? (
+                      <span style={{ color: "#22c55e", marginLeft: 4 }}>
+                        complete
+                      </span>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+
+        <div style={{ ...lbl, marginBottom: 6 }}>
+          Sheet changes (buy-in / XP-paid)
+        </div>
+        <div style={{ marginBottom: 10, fontSize: 10, color: "#6b7280" }}>
+          {!sessionAdvancementHistoryLoaded ? (
+            <span>Loading…</span>
+          ) : buyInForPc.length === 0 && paidForPc.length === 0 ? (
+            <span>No sheet advancement rows for this PC in the session window.</span>
+          ) : (
+            <>
+              {buyInForPc.length > 0 ? (
+                <>
+                  <div style={{ color: "#d1d5db", fontWeight: 600, marginBottom: 4 }}>
+                    Initial buy-in
+                  </div>
+                  <ul style={{ margin: "0 0 8px", paddingLeft: 16 }}>{buyInForPc}</ul>
+                </>
+              ) : null}
+              {paidForPc.length > 0 ? (
+                <>
+                  <div style={{ color: "#d1d5db", fontWeight: 600, marginBottom: 4 }}>
+                    Paid with XP
+                  </div>
+                  <ul style={{ margin: 0, paddingLeft: 16 }}>{paidForPc}</ul>
+                </>
+              ) : null}
+            </>
+          )}
+        </div>
+
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          <button
+            type="button"
+            style={{ ...S.btnGhost, fontSize: 10 }}
+            onClick={() => {
+              setXpLifetimeCharId(cidStr);
+              setXpLifetimeModalOpen(true);
+            }}
+          >
+            Open all-time XP log…
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+
   useEffect(() => {
     const next = {};
     (campaignChars || []).forEach((ch) => {
@@ -2353,6 +3458,29 @@ export default function SessionGMManagementPanels({
     [onRefresh, onSessionCharactersRefresh, setError],
   );
 
+  /** Toggle PC armor charge uses from session Harm tab (same fields as CharacterSheet). */
+  const handlePcArmorUsedChange = useCallback(
+    async (characterId, field, nextUsed, max) => {
+      const cap = Math.max(0, Math.floor(Number(max) || 0));
+      const next = Math.max(
+        0,
+        Math.min(cap, Math.floor(Number(nextUsed) || 0)),
+      );
+      setPcRosterSheetBusyId(characterId);
+      setError(null);
+      try {
+        await characterAPI.patchCharacter(characterId, { [field]: next });
+        await onSessionCharactersRefresh?.();
+        await onRefresh();
+      } catch (e) {
+        setError(e.message || "Could not update armor uses.");
+      } finally {
+        setPcRosterSheetBusyId(null);
+      }
+    },
+    [onRefresh, onSessionCharactersRefresh, setError],
+  );
+
   useEffect(() => {
     if (!goalAssignCharId) return;
     const v =
@@ -2383,6 +3511,159 @@ export default function SessionGMManagementPanels({
     },
     [onRefresh, setError],
   );
+
+  const handleSessionNpcFactionDrop = useCallback(
+    async (e, targetDropKey) => {
+      e.preventDefault();
+      setDragOverFactionKey(null);
+      setSessionNpcDragging(false);
+      const raw =
+        e.dataTransfer.getData(NPC_DRAG_MIME) ||
+        e.dataTransfer.getData("text/plain");
+      const npcId = parseInt(raw, 10);
+      if (!Number.isFinite(npcId)) return;
+      const sourceKey =
+        e.dataTransfer.getData(NPC_DRAG_SOURCE_MIME) || NO_FACTION_DROP_KEY;
+      if (String(sourceKey) === String(targetDropKey)) return;
+      const targetFactionId =
+        targetDropKey === NO_FACTION_DROP_KEY
+          ? null
+          : parseInt(String(targetDropKey), 10);
+      if (
+        targetDropKey !== NO_FACTION_DROP_KEY &&
+        !Number.isFinite(targetFactionId)
+      ) {
+        return;
+      }
+      const npc =
+        (campaignNPCs || []).find((n) => Number(n.id) === npcId) ||
+        { id: npcId };
+      await handleAssignNpcFaction(npc, targetFactionId);
+    },
+    [campaignNPCs, handleAssignNpcFaction],
+  );
+
+  const clearSessionNpcDrag = useCallback(() => {
+    setDragOverFactionKey(null);
+    setSessionNpcDragging(false);
+  }, []);
+
+  const patchHarmFromDraft = useCallback(
+    async (id) => {
+      const payload = harmPayloadFromDraft(harmDraftByChar[id]);
+      try {
+        await characterAPI.patchCharacter(id, payload);
+        await onSessionCharactersRefresh?.();
+        onRefresh();
+      } catch (e) {
+        setError(e.message || "Failed to save harm");
+      }
+    },
+    [harmDraftByChar, onSessionCharactersRefresh, onRefresh, setError],
+  );
+
+  const confirmResetHarmForPc = useCallback(
+    async (id, displayName) => {
+      const nm = String(displayName || `PC ${id}`).trim();
+      const ok = window.confirm(
+        `Clear all harm (levels 1–4) for ${nm}? This saves immediately to the character sheet.`,
+      );
+      if (!ok) return;
+      setError(null);
+      setSaving(true);
+      try {
+        let body = await characterAPI.patchCharacter(id, EMPTY_HARM_PAYLOAD);
+        if (!body || typeof body !== "object") body = {};
+        if (!("harm_level1_name" in body)) {
+          body = await characterAPI.getCharacter(id);
+        }
+        setHarmDraftByChar((prev) => ({
+          ...prev,
+          [id]: harmDraftFromApiCharacter(body),
+        }));
+        await onSessionCharactersRefresh?.();
+        onRefresh();
+      } catch (e) {
+        setError(e.message || "Failed to reset harm");
+      } finally {
+        setSaving(false);
+      }
+    },
+    [onSessionCharactersRefresh, onRefresh, setError],
+  );
+
+  const renderCompactHarmGrid = useCallback(
+    (id) => (
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: 6,
+          fontSize: 10,
+        }}
+      >
+        {COMPACT_HARM_FIELDS.map(([key, label, gridColumn]) => (
+          <input
+            key={`${id}-${key}`}
+            value={harmDraftByChar[id]?.[key] || ""}
+            onChange={(e) =>
+              setHarmDraftByChar((prev) => ({
+                ...prev,
+                [id]: { ...(prev[id] || {}), [key]: e.target.value },
+              }))
+            }
+            onBlur={() => patchHarmFromDraft(id)}
+            placeholder={label}
+            style={{
+              ...S.inp,
+              fontSize: 10,
+              padding: "4px 6px",
+              minWidth: 0,
+              ...compactHarmFieldStyle(key, harmDraftByChar[id]?.[key]),
+              ...(gridColumn ? { gridColumn } : {}),
+            }}
+          />
+        ))}
+      </div>
+    ),
+    [harmDraftByChar, patchHarmFromDraft, S],
+  );
+
+  const openNpcPhotoExpand = useCallback(
+    async (npc) => {
+      if (!npc?.id) return;
+      setExpandedNpcPhotoId(npc.id);
+      setNpcNestedTabById((p) => ({
+        ...p,
+        [npc.id]: p[npc.id] || "info",
+      }));
+      const thin =
+        npc.close_friend == null &&
+        npc.rival == null &&
+        npc.vice == null &&
+        !(npc.trauma && String(npc.trauma).length);
+      if (thin && !npcDetailById[npc.id]) {
+        try {
+          const full = await npcAPI.getNPC(npc.id);
+          if (full?.id) {
+            setNpcDetailById((p) => ({ ...p, [full.id]: full }));
+          }
+        } catch {
+          /* keep summary */
+        }
+      }
+    },
+    [npcDetailById],
+  );
+
+  const openAddNpcForFaction = useCallback((factionId) => {
+    setAddNpcTargetFactionId(
+      factionId === NO_FACTION_DROP_KEY || factionId == null
+        ? null
+        : factionId,
+    );
+    setShowAddNpc(true);
+  }, []);
 
   /** Create a campaign faction and assign every unfactioned NPC in the current "No faction" session group. */
   const handleCreateFactionAndAssignUngrouped = useCallback(async () => {
@@ -2616,7 +3897,9 @@ export default function SessionGMManagementPanels({
     setter((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const renderNpcSessionCard = (npc) => {
+  const renderNpcSessionCard = (npcIn) => {
+    if (!npcIn) return null;
+    const npc = { ...npcIn, ...(npcDetailById[npcIn.id] || {}) };
     const inv = invByNpc[npc.id] || {};
     const grades = rawStandToGrades(
       localNpcStandById[npc.id] || npc.stand_coin_stats,
@@ -2627,114 +3910,168 @@ export default function SessionGMManagementPanels({
     const vulnMax = Number(npc.vulnerability_clock_max) ?? 0;
     const vulnCur = Number(npc.vulnerability_clock_current) ?? 0;
     const vulnBusy = npcUiBusyKey === `vuln:${npc.id}`;
-    const npcPortraitSrc = resolveMediaUrl(npc.image || npc.image_url || "");
-    const npcCollapseKey = String(npc.id);
-    const npcCollapsed = !!collapsedNpcCards[npcCollapseKey];
+    const nestedTab = npcNestedTabById[npc.id] || "info";
+    const setNested = (id) =>
+      setNpcNestedTabById((p) => ({ ...p, [npc.id]: id }));
     return (
-      <div key={npc.id} style={card}>
+      <div
+        key={npc.id}
+        className="home-poc session-roster-tokens"
+        style={{ ...card, width: "100%", maxWidth: 420 }}
+      >
         <div
           style={{
             display: "flex",
-            alignItems: "center",
+            alignItems: "flex-start",
             justifyContent: "space-between",
             gap: 8,
+            marginBottom: 8,
           }}
         >
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontWeight: "bold" }}>{npc.name || `NPC ${npc.id}`}</div>
-            <div style={{ fontSize: 10, color: "#9ca3af" }}>
-              {npc.stand_name || "—"}
-            </div>
+          <div style={{ width: 120, flexShrink: 0 }}>
+            <SessionNpcToken npc={npc} selected />
           </div>
           <button
             type="button"
-            onClick={() => toggleCollapsedCard(setCollapsedNpcCards, npcCollapseKey)}
+            onClick={() =>
+              setExpandedNpcPhotoId((id) => (id === npc.id ? null : id))
+            }
             style={{ ...S.btnGhost, fontSize: 10, padding: "2px 8px" }}
-            title={npcCollapsed ? "Expand NPC card" : "Collapse NPC card"}
           >
-            {npcCollapsed ? "Expand" : "Collapse"}
+            Close
           </button>
         </div>
-        {!npcCollapsed ? (
-          <>
-            <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-          {npcPortraitSrc ? (
-            <img
-              src={npcPortraitSrc}
-              alt=""
-              style={{
-                width: 52,
-                height: 52,
-                flexShrink: 0,
-                objectFit: "cover",
-                borderRadius: 6,
-                border: "1px solid #30363d",
-                background: "#111",
-              }}
-              onError={(e) => {
-                e.currentTarget.style.display = "none";
-              }}
-            />
-          ) : null}
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <a
-              href={buildRouteHref("npcs", { npcId: npc.id })}
-              onClick={(e) => handleSpaNavClick(e, () => onNavigateToNPC?.(npc.id))}
-              style={{
-                ...S.btnGhost,
-                fontSize: 10,
-                marginTop: 4,
-                display: "inline-block",
-                textDecoration: "none",
+        <NestedTabBar
+          tabs={NPC_NESTED_TABS}
+          active={nestedTab}
+          onChange={setNested}
+        />
+        {nestedTab === "info" ? (
+          <div style={{ display: "grid", gap: 6, fontSize: 11 }}>
+            <div>
+              <span style={lbl}>Heritage</span>
+              <div style={{ color: "#d1d5db" }}>
+                {npc.heritage || npc.heritage_name || "—"}
+              </div>
+            </div>
+            <div>
+              <span style={lbl}>Close friend</span>
+              <div style={{ color: "#d1d5db" }}>{npc.close_friend || "—"}</div>
+            </div>
+            <div>
+              <span style={lbl}>Rival</span>
+              <div style={{ color: "#d1d5db" }}>{npc.rival || "—"}</div>
+            </div>
+            <div>
+              <span style={lbl}>Vice</span>
+              <div style={{ color: "#d1d5db" }}>{npc.vice || "—"}</div>
+            </div>
+            <div>
+              <span style={lbl}>Trauma</span>
+              <div style={{ color: "#d1d5db" }}>
+                {Array.isArray(npc.trauma)
+                  ? npc.trauma.join(", ") || "—"
+                  : npc.trauma || "—"}
+              </div>
+            </div>
+            <div style={{ display: "flex", justifyContent: "center" }}>
+              <NpcsStandCoin
+                grades={grades}
+                readouts={readoutsFromGrades(grades)}
+                onStep={(k, d) => handleNpcStandStep(npc, k, d)}
+                readOnly={!canEditStand}
+                variant="npc"
+              />
+            </div>
+            {busy ? (
+              <div style={{ fontSize: 10, color: "#a78bfa" }}>Saving…</div>
+            ) : null}
+          </div>
+        ) : null}
+        {nestedTab === "abilities" ? (
+          <div>
+            <div style={lbl}>Abilities</div>
+            <ul style={{ margin: "4px 0 8px", paddingLeft: 16, color: "#9ca3af" }}>
+              {(npc.abilities || []).map((a, i) => (
+                <li key={i}>{(a && a.name) || JSON.stringify(a).slice(0, 40)}</li>
+              ))}
+              {(!npc.abilities || npc.abilities.length === 0) && <li>—</li>}
+            </ul>
+            <div style={lbl}>Premade templates (narrative)</div>
+            <div style={{ fontSize: 10, color: "#6b7280", marginBottom: 6 }}>
+              Pick a name to copy onto the NPC sheet later — no dice.
+            </div>
+            <select
+              style={{ ...S.select, width: "100%", fontSize: 11 }}
+              defaultValue=""
+              onChange={async (e) => {
+                const name = e.target.value;
+                e.target.value = "";
+                if (!name) return;
+                const next = [
+                  ...(Array.isArray(npc.abilities) ? npc.abilities : []),
+                  { name, description: "", type: "standard" },
+                ];
+                try {
+                  await npcAPI.patchNPC(npc.id, { abilities: next });
+                  onRefresh();
+                } catch (err) {
+                  setError(err?.message || "Could not add ability.");
+                }
               }}
             >
-              Full sheet
-            </a>
-            <div style={{ marginTop: 8 }}>
-              <div style={lbl}>Faction (campaign)</div>
-              <select
-                value={npcFactionSelectValue(npc)}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  const nextId = v === "" ? null : parseInt(v, 10);
-                  if (!Number.isFinite(nextId) && nextId !== null) return;
-                  const cur = npcFactionSelectValue(npc);
-                  if (v === cur) return;
-                  handleAssignNpcFaction(npc, nextId);
-                }}
-                style={{ ...S.select, width: "100%", fontSize: 11, marginTop: 4 }}
-                disabled={
-                  saving || npcFactionSavingId === npc.id || !campaign?.id
-                }
-              >
-                <option value="">— None —</option>
-                {(campaign?.factions || []).map((f) => (
-                  <option key={f.id} value={String(f.id)}>
-                    {f.name || `Faction ${f.id}`}
-                  </option>
-                ))}
-              </select>
-              {(!campaign?.factions || campaign.factions.length === 0) && (
-                <div style={{ fontSize: 9, color: "#6b7280", marginTop: 4 }}>
-                  {`No factions yet — use "Create faction & assign" in the No faction group above, or add one from campaign management.`}
-                </div>
-              )}
-            </div>
+              <option value="">+ Add from standard list…</option>
+              {standardAbilities.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
           </div>
-        </div>
-        <div style={{ display: "flex", justifyContent: "center" }}>
-          <NpcsStandCoin
-            grades={grades}
-            readouts={readoutsFromGrades(grades)}
-            onStep={(k, d) => handleNpcStandStep(npc, k, d)}
-            readOnly={!canEditStand}
-            variant="npc"
-          />
-        </div>
-        {busy && (
-          <div style={{ fontSize: 10, color: "#a78bfa" }}>Saving…</div>
-        )}
-        <div style={lbl}>Player visibility (this session)</div>
+        ) : null}
+        {nestedTab === "items" ? (
+          <div>
+            <div style={lbl}>Items / equipment</div>
+            {(() => {
+              const inv = Array.isArray(npc.inventory)
+                ? npc.inventory
+                : Array.isArray(npc.equipment)
+                  ? npc.equipment
+                  : [];
+              const lines = inv
+                .map((row) =>
+                  typeof rosterFormatInventoryLine === "function"
+                    ? rosterFormatInventoryLine(row)
+                    : row?.name || String(row),
+                )
+                .filter(Boolean);
+              if (!lines.length) {
+                return (
+                  <p style={{ fontSize: 11, color: "#6b7280", margin: "6px 0" }}>
+                    No inventory or equipment on this NPC.
+                  </p>
+                );
+              }
+              return (
+                <ul
+                  style={{
+                    margin: "6px 0 0",
+                    paddingLeft: 16,
+                    color: "#9ca3af",
+                    fontSize: 11,
+                  }}
+                >
+                  {lines.map((line, i) => (
+                    <li key={`npc-item-${npc.id}-${i}`}>{line}</li>
+                  ))}
+                </ul>
+              );
+            })()}
+          </div>
+        ) : null}
+        {nestedTab === "more" ? (
+          <div>
+            <div style={lbl}>Player visibility (this session)</div>
         <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
           <input
             type="checkbox"
@@ -2778,13 +4115,62 @@ export default function SessionGMManagementPanels({
           />
           <span>All abilities</span>
         </label>
-        <div style={lbl}>Abilities (preview)</div>
-        <ul style={{ margin: 0, paddingLeft: 16, color: "#9ca3af" }}>
-          {(npc.abilities || []).slice(0, 4).map((a, i) => (
-            <li key={i}>{(a && a.name) || JSON.stringify(a).slice(0, 40)}</li>
-          ))}
-          {(!npc.abilities || npc.abilities.length === 0) && <li>—</li>}
-        </ul>
+            <div style={{ marginTop: 8 }}>
+              <div style={lbl}>Faction (campaign)</div>
+              <select
+                value={npcFactionSelectValue(npc)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  const nextId = v === "" ? null : parseInt(v, 10);
+                  if (!Number.isFinite(nextId) && nextId !== null) return;
+                  const cur = npcFactionSelectValue(npc);
+                  if (v === cur) return;
+                  handleAssignNpcFaction(npc, nextId);
+                }}
+                style={{ ...S.select, width: "100%", fontSize: 11, marginTop: 4 }}
+                disabled={
+                  saving || npcFactionSavingId === npc.id || !campaign?.id
+                }
+              >
+                <option value="">— None —</option>
+                {(campaign?.factions || []).map((f) => (
+                  <option key={f.id} value={String(f.id)}>
+                    {f.name || `Faction ${f.id}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <a
+              href={buildRouteHref("npcs", { npcId: npc.id })}
+              onClick={(e) =>
+                handleSpaNavClick(e, () => onNavigateToNPC?.(npc.id))
+              }
+              style={{
+                ...S.btnGhost,
+                fontSize: 10,
+                marginTop: 8,
+                display: "inline-block",
+                textDecoration: "none",
+              }}
+            >
+              Full sheet
+            </a>
+            <button
+              type="button"
+              onClick={() => {
+                const next = npcInvolvements.filter((i) => i.npc !== npc.id);
+                patchSessionInv(next);
+                setExpandedNpcPhotoId(null);
+              }}
+              style={{ ...S.btnDanger, fontSize: 10, marginTop: 8, alignSelf: "flex-start" }}
+              disabled={saving}
+            >
+              Remove from session
+            </button>
+          </div>
+        ) : null}
+        {nestedTab === "clocks" ? (
+          <div>
         <div style={lbl}>Clocks</div>
         <div style={{ fontSize: 10, color: "#d1d5db" }}>
           <div
@@ -3144,34 +4530,252 @@ export default function SessionGMManagementPanels({
             Conflict / alt clocks stay on the full NPC sheet.
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            const next = npcInvolvements.filter((i) => i.npc !== npc.id);
-            patchSessionInv(next);
-          }}
-          style={{ ...S.btnDanger, fontSize: 10, alignSelf: "flex-start" }}
-          disabled={saving}
-        >
-          Remove from session
-        </button>
-          </>
+          </div>
         ) : null}
+      </div>
+    );
+  };
+
+  const campaignCharsForTabs = campaignChars || [];
+
+  const renderArmorTab = () => (
+    <div style={S.card}>
+      <span style={S.sectionLbl}>Armor charges</span>
+      <p style={{ fontSize: 11, color: "#6b7280", margin: "4px 0 10px" }}>
+        Physical / stand path uses vs max from each PC sheet (session roster fields).
+      </p>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(min(220px, 100%), 1fr))",
+          gap: 10,
+        }}
+      >
+        {campaignCharsForTabs.length === 0 ? (
+          <div style={{ color: "#6b7280", fontSize: 12 }}>No PCs in campaign.</div>
+        ) : (
+          campaignCharsForTabs.map((full) => {
+            const grades = rawStandToGrades(full.stand_coin_stats);
+            const standArmorMax = rosterStandArmorMaxFromDurabilityGrade(
+              grades.durability,
+            );
+            const standArmorUsed = Math.max(
+              0,
+              Math.floor(Number(full.stand_armor_used) || 0),
+            );
+            const hasPhyArmor = !!full.has_physical_armor_item;
+            const phyArmorMax = Math.min(
+              6,
+              Math.max(
+                0,
+                Math.floor(Number(full.physical_armor_bonus_charges) || 0),
+              ),
+            );
+            const phyArmorUsed = Math.min(
+              6,
+              Math.max(0, Math.floor(Number(full.physical_armor_used) || 0)),
+            );
+            const isStandUser = hasPlaybook(
+              full.playbook,
+              full.secondary_playbook ?? full.secondaryPlaybook,
+              "Stand",
+            );
+            const spinMax = Math.max(0, Math.floor(Number(full.spin_armor_max) || 0));
+            const spinUsed = Math.max(0, Math.floor(Number(full.spin_armor_used) || 0));
+            const hamonMax = Math.max(0, Math.floor(Number(full.hamon_armor_max) || 0));
+            const hamonUsed = Math.max(
+              0,
+              Math.floor(Number(full.hamon_armor_used) || 0),
+            );
+            const name = full.true_name || full.name || `PC ${full.id}`;
+            return (
+              <div
+                key={`armor-${full.id}`}
+                style={{
+                  border: "1px solid #374151",
+                  borderRadius: 8,
+                  padding: 10,
+                  background: "#0b1220",
+                  fontSize: 11,
+                }}
+              >
+                <div style={{ fontWeight: 700, marginBottom: 6 }}>{name}</div>
+                <div style={{ color: "#9ca3af", lineHeight: 1.45 }}>
+                  Physical{" "}
+                  {hasPhyArmor ? `${phyArmorUsed}/${phyArmorMax || "—"}` : "—"}
+                  <br />
+                  Stand{" "}
+                  {isStandUser && standArmorMax > 0
+                    ? `${standArmorUsed}/${standArmorMax}`
+                    : "—"}
+                  {spinMax > 0 ? (
+                    <>
+                      <br />
+                      Spin {spinUsed}/{spinMax}
+                    </>
+                  ) : null}
+                  {hamonMax > 0 ? (
+                    <>
+                      <br />
+                      Hamon {hamonUsed}/{hamonMax}
+                    </>
+                  ) : null}
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+
+  const renderLedgerFilterTab = (kind) => {
+    const rows = campaignCharsForTabs.map((full) => {
+      const name = full.true_name || full.name || `PC ${full.id}`;
+      if (kind === "items") {
+        const lines = (Array.isArray(full.inventory) ? full.inventory : [])
+          .map(rosterFormatInventoryLine)
+          .filter(Boolean);
+        return { id: full.id, name, body: lines.length ? lines.join(" · ") : "—" };
+      }
+      if (kind === "coin") {
+        const hand = countSheetBoolSlots(full.coin_boxes);
+        const stash = countSheetBoolSlots(full.stash_slots);
+        return {
+          id: full.id,
+          name,
+          body: `Hand ${hand} · Stash ${stash}`,
+        };
+      }
+      // rep — crew + personal notes if any
+      const crewId = full.crew ?? full.crew_id;
+      const crew = (crews || []).find((c) => Number(c.id) === Number(crewId));
+      const rels = Array.isArray(crew?.faction_relationships)
+        ? crew.faction_relationships
+            .map((r) => `${r.faction_name || r.faction_id}: ${r.reputation_value}`)
+            .join(" · ")
+        : "";
+      return {
+        id: full.id,
+        name,
+        body: rels || (crew ? `Crew: ${crew.name || crew.id}` : "—"),
+      };
+    });
+    const title =
+      kind === "items" ? "Items" : kind === "coin" ? "Coin" : "Reputation";
+    return (
+      <div style={S.card}>
+        <span style={S.sectionLbl}>{title}</span>
+        <p style={{ fontSize: 11, color: "#6b7280", margin: "4px 0 10px" }}>
+          Session ledger snapshot from current PC sheets
+          {kind === "rep" ? " / crew faction standing" : ""}.
+        </p>
+        <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: 8 }}>
+          {rows.length === 0 ? (
+            <li style={{ color: "#6b7280", fontSize: 12 }}>No PCs.</li>
+          ) : (
+            rows.map((r) => (
+              <li
+                key={`${kind}-${r.id}`}
+                style={{
+                  border: "1px solid #374151",
+                  borderRadius: 6,
+                  padding: "8px 10px",
+                  background: "#0b1220",
+                  fontSize: 11,
+                }}
+              >
+                <div style={{ fontWeight: 700, marginBottom: 4 }}>{r.name}</div>
+                <div style={{ color: "#9ca3af", lineHeight: 1.4 }}>{r.body}</div>
+              </li>
+            ))
+          )}
+        </ul>
       </div>
     );
   };
 
   return (
     <>
+      <SessionShellTabBar
+        tabs={SESSION_SHELL_TABS}
+        active={sessionShellTab}
+        onChange={setSessionShellTab}
+        leading={
+          sessionShellTab === "rosters" ? (
+            <>
+              <span style={{ fontSize: 11, color: "#9ca3af" }}>Show</span>
+              <button
+                type="button"
+                aria-pressed={rosterShowNpc}
+                onClick={() => {
+                  if (rosterShowNpc && !rosterShowPc) return;
+                  setRosterShowNpc((v) => !v);
+                }}
+                style={{
+                  ...S.btnGhost,
+                  fontSize: 11,
+                  fontWeight: 600,
+                  background: rosterShowNpc ? "#4338ca" : "transparent",
+                  color: rosterShowNpc ? "#fff" : "#9ca3af",
+                  borderColor: rosterShowNpc ? "#4338ca" : "#374151",
+                }}
+                title={
+                  rosterShowNpc && !rosterShowPc
+                    ? "Keep at least one roster visible"
+                    : rosterShowNpc
+                      ? "Hide NPC roster"
+                      : "Show NPC roster"
+                }
+              >
+                NPC
+              </button>
+              <button
+                type="button"
+                aria-pressed={rosterShowPc}
+                onClick={() => {
+                  if (rosterShowPc && !rosterShowNpc) return;
+                  setRosterShowPc((v) => !v);
+                }}
+                style={{
+                  ...S.btnGhost,
+                  fontSize: 11,
+                  fontWeight: 600,
+                  background: rosterShowPc ? "#4338ca" : "transparent",
+                  color: rosterShowPc ? "#fff" : "#9ca3af",
+                  borderColor: rosterShowPc ? "#4338ca" : "#374151",
+                }}
+                title={
+                  rosterShowPc && !rosterShowNpc
+                    ? "Keep at least one roster visible"
+                    : rosterShowPc
+                      ? "Hide PC roster"
+                      : "Show PC roster"
+                }
+              >
+                PC
+              </button>
+            </>
+          ) : null
+        }
+      />
+      <div style={{ minWidth: 0 }}>
+      {sessionShellTab === "rosters" || sessionShellTab === "crew" ? (
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(min(280px, 100%), 1fr))",
+          gridTemplateColumns:
+            sessionShellTab === "crew"
+              ? "1fr"
+              : rosterShowNpc && rosterShowPc
+                ? "1fr 1fr"
+                : "1fr",
           gap: 16,
           marginBottom: 12,
           alignItems: "start",
         }}
       >
+      {sessionShellTab === "rosters" && rosterShowNpc ? (
       <div style={S.card}>
         <div
           style={{
@@ -3199,17 +4803,11 @@ export default function SessionGMManagementPanels({
         </div>
         {!npcRosterSectionCollapsed ? (
           <>
-            <p style={{ fontSize: 11, color: "#6b7280", margin: "4px 0 0" }}>
-              NPCs grouped by faction (one faction card when multiple NPCs share it).
-              Use + to add from the campaign roster. Assign faction from each NPC card, or
-              use Create faction & assign in the No faction block to add a campaign faction
-              and attach every unfactioned NPC here at once. Toggle what players can see;
-              quick-edit Stand coin, vulnerability, and session progress clocks (GM or
-              that NPC&apos;s owner).
-            </p>
             <div
+              className="home-poc session-roster-tokens"
               style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 10 }}
             >
+          <div className="home-faction-grid">
           {sessionFactionNpcGroups.factionPairs.map(([fid, npcList]) => {
             const fac =
               factionsById[fid] ||
@@ -3242,37 +4840,42 @@ export default function SessionGMManagementPanels({
               scheduleFactionAutosave(fid);
             };
             const factionCollapseKey = String(fid);
-            const factionCollapsed = !!collapsedFactionCards[factionCollapseKey];
+            const dropKey = String(fid);
+            const factionExpanded = !!collapsedFactionCards[factionCollapseKey];
+            const isDragOver = dragOverFactionKey === dropKey;
             return (
-              <div key={`faction-${fid}`} style={factionGroupWrap}>
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: 8,
-                    marginBottom: factionCollapsed ? 0 : 10,
-                  }}
-                >
-                  <div style={{ fontWeight: "bold", fontSize: 13, color: "#a78bfa" }}>
-                    {name}{" "}
-                    <span style={{ color: "#9ca3af", fontWeight: 500 }}>
-                      ({npcList.length} NPC{npcList.length === 1 ? "" : "s"})
-                    </span>
+              <React.Fragment key={`faction-${fid}`}>
+                <SessionFactionToken
+                  faction={fac}
+                  name={name}
+                  npcList={npcList}
+                  isExpanded={factionExpanded}
+                  isDragOver={isDragOver}
+                  dropKey={dropKey}
+                  addDisabled={saving}
+                  onToggleExpand={() =>
+                    toggleCollapsedCard(setCollapsedFactionCards, factionCollapseKey)
+                  }
+                  onNpcThumbClick={(npc) => openNpcPhotoExpand(npc)}
+                  onAddNpc={() => openAddNpcForFaction(fid)}
+                  onDragOver={() => setDragOverFactionKey(dropKey)}
+                  onDragLeave={() =>
+                    setDragOverFactionKey((k) => (k === dropKey ? null : k))
+                  }
+                  onDrop={(e) => handleSessionNpcFactionDrop(e, dropKey)}
+                  onNpcDragBegin={() => setSessionNpcDragging(true)}
+                  onNpcDragEnd={clearSessionNpcDrag}
+                />
+                {expandedNpcPhotoId &&
+                npcList.some((n) => n.id === expandedNpcPhotoId) ? (
+                  <div className="session-npc-expand-panel" style={factionGroupWrap}>
+                    {renderNpcSessionCard(
+                      npcList.find((n) => n.id === expandedNpcPhotoId),
+                    )}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      toggleCollapsedCard(setCollapsedFactionCards, factionCollapseKey)
-                    }
-                    style={{ ...S.btnGhost, fontSize: 10, padding: "2px 8px" }}
-                    title={factionCollapsed ? "Expand faction card" : "Collapse faction card"}
-                  >
-                    {factionCollapsed ? "Expand" : "Collapse"}
-                  </button>
-                </div>
-                {!factionCollapsed ? (
-                  <>
+                ) : null}
+                {factionExpanded ? (
+                  <div className="session-faction-expand-panel" style={factionGroupWrap}>
                     <div style={{ marginBottom: 10 }}>
                   <div
                     style={{
@@ -3327,29 +4930,74 @@ export default function SessionGMManagementPanels({
                         onChange={(e) => setDraftField("reputation", e.target.value)}
                       />
                     </div>
-                    <div style={{ gridColumn: "1 / span 2" }}>
+                    <div
+                      style={{
+                        gridColumn: "1 / -1",
+                        minWidth: 0,
+                        maxWidth: "100%",
+                        boxSizing: "border-box",
+                      }}
+                    >
                       <div style={lbl}>Notes</div>
                       <textarea
-                        style={{ ...S.inp, width: "100%", minHeight: 56, border: "1px solid #374151", padding: 6 }}
+                        style={{
+                          ...S.inp,
+                          width: "100%",
+                          maxWidth: "100%",
+                          minWidth: 0,
+                          boxSizing: "border-box",
+                          minHeight: 56,
+                          border: "1px solid #374151",
+                          padding: 6,
+                        }}
                         value={draft.notes}
                         onChange={(e) => setDraftField("notes", e.target.value)}
                       />
                     </div>
-                    <div style={{ gridColumn: "3 / span 2" }}>
+                    <div
+                      style={{
+                        gridColumn: "1 / -1",
+                        minWidth: 0,
+                        maxWidth: "100%",
+                        boxSizing: "border-box",
+                      }}
+                    >
                       <div style={lbl}>Crew notes</div>
                       <textarea
-                        style={{ ...S.inp, width: "100%", minHeight: 56, border: "1px solid #374151", padding: 6 }}
+                        style={{
+                          ...S.inp,
+                          width: "100%",
+                          maxWidth: "100%",
+                          minWidth: 0,
+                          boxSizing: "border-box",
+                          minHeight: 56,
+                          border: "1px solid #374151",
+                          padding: 6,
+                        }}
                         value={draft.crew_notes}
                         onChange={(e) => setDraftField("crew_notes", e.target.value)}
                       />
                     </div>
-                    <div style={{ display: "flex", alignItems: "flex-end", paddingBottom: 4 }}>
+                    <div
+                      style={{
+                        gridColumn: "1 / -1",
+                        display: "flex",
+                        flexWrap: "wrap",
+                        alignItems: "center",
+                        gap: 10,
+                        minWidth: 0,
+                        maxWidth: "100%",
+                        boxSizing: "border-box",
+                        paddingBottom: 4,
+                      }}
+                    >
                       <label
                         style={{
                           display: "flex",
                           gap: 6,
                           alignItems: "center",
                           fontSize: 11,
+                          whiteSpace: "nowrap",
                           opacity: canToggleFactionVisibleToPlayers ? 1 : 0.55,
                           cursor: canToggleFactionVisibleToPlayers
                             ? "pointer"
@@ -3385,6 +5033,7 @@ export default function SessionGMManagementPanels({
                             gap: 6,
                             alignItems: "center",
                             fontSize: 11,
+                            whiteSpace: "nowrap",
                             opacity:
                               canToggleFactionVisibleToPlayers &&
                               !!draft.visible_to_players
@@ -3407,26 +5056,74 @@ export default function SessionGMManagementPanels({
                         </label>
                       ))}
                     </div>
-                    <div style={{ gridColumn: "1 / span 2" }}>
+                    <div
+                      style={{
+                        gridColumn: "1 / -1",
+                        minWidth: 0,
+                        maxWidth: "100%",
+                        boxSizing: "border-box",
+                      }}
+                    >
                       <div style={lbl}>Contacts (JSON)</div>
                       <textarea
-                        style={{ ...S.inp, width: "100%", minHeight: 88, border: "1px solid #374151", padding: 6 }}
+                        style={{
+                          ...S.inp,
+                          width: "100%",
+                          maxWidth: "100%",
+                          minWidth: 0,
+                          boxSizing: "border-box",
+                          minHeight: 88,
+                          border: "1px solid #374151",
+                          padding: 6,
+                        }}
                         value={draft.contacts}
                         onChange={(e) => setDraftField("contacts", e.target.value)}
                       />
                     </div>
-                    <div style={{ gridColumn: "3 / span 2" }}>
+                    <div
+                      style={{
+                        gridColumn: "1 / -1",
+                        minWidth: 0,
+                        maxWidth: "100%",
+                        boxSizing: "border-box",
+                      }}
+                    >
                       <div style={lbl}>Inventory (JSON)</div>
                       <textarea
-                        style={{ ...S.inp, width: "100%", minHeight: 88, border: "1px solid #374151", padding: 6 }}
+                        style={{
+                          ...S.inp,
+                          width: "100%",
+                          maxWidth: "100%",
+                          minWidth: 0,
+                          boxSizing: "border-box",
+                          minHeight: 88,
+                          border: "1px solid #374151",
+                          padding: 6,
+                        }}
                         value={draft.inventory}
                         onChange={(e) => setDraftField("inventory", e.target.value)}
                       />
                     </div>
-                    <div style={{ gridColumn: "5 / span 1" }}>
+                    <div
+                      style={{
+                        gridColumn: "1 / -1",
+                        minWidth: 0,
+                        maxWidth: "100%",
+                        boxSizing: "border-box",
+                      }}
+                    >
                       <div style={lbl}>Status (JSON)</div>
                       <textarea
-                        style={{ ...S.inp, width: "100%", minHeight: 88, border: "1px solid #374151", padding: 6 }}
+                        style={{
+                          ...S.inp,
+                          width: "100%",
+                          maxWidth: "100%",
+                          minWidth: 0,
+                          boxSizing: "border-box",
+                          minHeight: 88,
+                          border: "1px solid #374151",
+                          padding: 6,
+                        }}
                         value={draft.faction_status}
                         onChange={(e) => setDraftField("faction_status", e.target.value)}
                       />
@@ -3443,111 +5140,131 @@ export default function SessionGMManagementPanels({
                     </span>
                   </div>
                     </div>
-                    <div style={grid}>{npcList.map((npc) => renderNpcSessionCard(npc))}</div>
-                  </>
+                  </div>
                 ) : null}
-              </div>
+              </React.Fragment>
             );
           })}
+          </div>
 
-          {sessionFactionNpcGroups.ungrouped.length > 0 && (
-            <div style={factionGroupWrap}>
-              {(() => {
-                const ungroupedCollapseKey = "ungrouped";
-                const ungroupedCollapsed = !!collapsedFactionCards[ungroupedCollapseKey];
-                const ungroupedCount = sessionFactionNpcGroups.ungrouped.length;
-                return (
-                  <>
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        gap: 8,
-                        marginBottom: ungroupedCollapsed ? 0 : 8,
-                      }}
-                    >
-                      <div style={{ fontWeight: "bold", fontSize: 13, color: "#a78bfa" }}>
-                        No faction{" "}
-                        <span style={{ color: "#9ca3af", fontWeight: 500 }}>
-                          ({ungroupedCount} NPC{ungroupedCount === 1 ? "" : "s"})
-                        </span>
+          {sessionFactionNpcGroups.ungrouped.length > 0 ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 8,
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}
+              >
+                <span style={{ ...S.sectionLbl, marginBottom: 0, fontSize: 11 }}>
+                  Unassigned NPCs
+                </span>
+                <AddNpcStripTile
+                  disabled={saving}
+                  onClick={() => openAddNpcForFaction(null)}
+                />
+              </div>
+              <div className="home-card-grid">
+                {sessionFactionNpcGroups.ungrouped.map((npc) => (
+                  <React.Fragment key={`ungrouped-npc-${npc.id}`}>
+                    <SessionNpcToken
+                      npc={npc}
+                      selected={expandedNpcPhotoId === npc.id}
+                      draggable
+                      sourceFactionKey={NO_FACTION_DROP_KEY}
+                      onOpen={() => openNpcPhotoExpand(npc)}
+                      onDragBegin={() => setSessionNpcDragging(true)}
+                      onDragEnd={clearSessionNpcDrag}
+                    />
+                    {expandedNpcPhotoId === npc.id ? (
+                      <div className="session-npc-expand-panel">
+                        {renderNpcSessionCard(npc)}
                       </div>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          toggleCollapsedCard(setCollapsedFactionCards, ungroupedCollapseKey)
-                        }
-                        style={{ ...S.btnGhost, fontSize: 10, padding: "2px 8px" }}
-                        title={
-                          ungroupedCollapsed
-                            ? "Expand ungrouped faction card"
-                            : "Collapse ungrouped faction card"
-                        }
-                      >
-                        {ungroupedCollapsed ? "Expand" : "Collapse"}
-                      </button>
-                    </div>
-                    {!ungroupedCollapsed ? (
-                      <>
-                        <div
-                          style={{
-                            marginBottom: 12,
-                            padding: 10,
-                            background: "#111827",
-                            borderRadius: 6,
-                            border: "1px solid #374151",
-                          }}
-                        >
-                          <div style={{ ...lbl, marginBottom: 6 }}>Create faction & assign</div>
-                          <div
-                            style={{
-                              display: "flex",
-                              flexWrap: "wrap",
-                              gap: 8,
-                              alignItems: "center",
-                            }}
-                          >
-                            <input
-                              type="text"
-                              value={sessionQuickFactionName}
-                              onChange={(e) => setSessionQuickFactionName(e.target.value)}
-                              placeholder="New faction name"
-                              style={{ ...S.inp, flex: "1 1 160px", minWidth: 140, fontSize: 11 }}
-                              disabled={sessionQuickFactionBusy || saving}
-                            />
-                            <button
-                              type="button"
-                              style={{ ...S.btnPrimary, fontSize: 11 }}
-                              onClick={handleCreateFactionAndAssignUngrouped}
-                              disabled={
-                                sessionQuickFactionBusy ||
-                                saving ||
-                                !campaign?.id ||
-                                !sessionQuickFactionName.trim()
-                              }
-                            >
-                              {sessionQuickFactionBusy
-                                ? "Working…"
-                                : `Create & assign ${sessionFactionNpcGroups.ungrouped.length} NPC(s)`}
-                            </button>
-                          </div>
-                          <div style={{ fontSize: 9, color: "#6b7280", marginTop: 6 }}>
-                            {`Adds a campaign faction and sets every unfactioned NPC listed below to it (same as choosing it in each card's dropdown after refresh).`}
-                          </div>
-                        </div>
-                        <div style={grid}>
-                          {sessionFactionNpcGroups.ungrouped.map((npc) => renderNpcSessionCard(npc))}
-                        </div>
-                      </>
                     ) : null}
-                  </>
-                );
-              })()}
+                  </React.Fragment>
+                ))}
+              </div>
+              <div
+                style={{
+                  padding: 10,
+                  background: "#111827",
+                  borderRadius: 6,
+                  border: "1px solid #374151",
+                }}
+              >
+                <div style={{ ...lbl, marginBottom: 6 }}>
+                  Create faction & assign
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: 8,
+                    alignItems: "center",
+                  }}
+                >
+                  <input
+                    type="text"
+                    value={sessionQuickFactionName}
+                    onChange={(e) => setSessionQuickFactionName(e.target.value)}
+                    placeholder="New faction name"
+                    style={{
+                      ...S.inp,
+                      flex: "1 1 160px",
+                      minWidth: 140,
+                      fontSize: 11,
+                    }}
+                    disabled={sessionQuickFactionBusy || saving}
+                  />
+                  <button
+                    type="button"
+                    style={{ ...S.btnPrimary, fontSize: 11 }}
+                    onClick={handleCreateFactionAndAssignUngrouped}
+                    disabled={
+                      sessionQuickFactionBusy ||
+                      saving ||
+                      !campaign?.id ||
+                      !sessionQuickFactionName.trim() ||
+                      sessionFactionNpcGroups.ungrouped.length === 0
+                    }
+                  >
+                    {sessionQuickFactionBusy
+                      ? "Working…"
+                      : `Create & assign ${sessionFactionNpcGroups.ungrouped.length} NPC(s)`}
+                  </button>
+                </div>
+              </div>
             </div>
-          )}
+          ) : null}
 
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "stretch" }}>
+          {sessionNpcDragging ? (
+            <div
+              className={`session-unassign-drop${
+                dragOverFactionKey === NO_FACTION_DROP_KEY
+                  ? " session-token-drag-over"
+                  : ""
+              }`}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+                setDragOverFactionKey(NO_FACTION_DROP_KEY);
+              }}
+              onDragLeave={() =>
+                setDragOverFactionKey((k) =>
+                  k === NO_FACTION_DROP_KEY ? null : k,
+                )
+              }
+              onDrop={(e) =>
+                handleSessionNpcFactionDrop(e, NO_FACTION_DROP_KEY)
+              }
+            >
+              Drop to unassign faction
+            </div>
+          ) : null}
+
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "start" }}>
             <button
               type="button"
               onClick={handleAddNpcCardClick}
@@ -3583,7 +5300,9 @@ export default function SessionGMManagementPanels({
           </>
         ) : null}
       </div>
+      ) : null}
 
+      {(sessionShellTab === "crew" || rosterShowPc) ? (
       <div style={S.card}>
         <div
           style={{
@@ -3611,11 +5330,6 @@ export default function SessionGMManagementPanels({
         </div>
         {!playerRosterSectionCollapsed ? (
           <>
-            <p style={{ fontSize: 11, color: "#6b7280", margin: "4px 0 0" }}>
-              Quick view: portrait, stand coin, action dots, XP tracks, personal coin
-              &amp; stash, session clocks. Crew pool coin/stash in each crew card. PCs
-              in this crew&apos;s campaign below.
-            </p>
             {(crews || []).length === 0 ? (
           <div style={{ fontSize: 12, color: "#6b7280", marginTop: 10 }}>
             No crews linked to this campaign.
@@ -3661,34 +5375,50 @@ export default function SessionGMManagementPanels({
                   }}
                 >
                   <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() =>
+                      toggleCollapsedCard(setCollapsedCrewCards, crewCollapseKey)
+                    }
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        toggleCollapsedCard(setCollapsedCrewCards, crewCollapseKey);
+                      }
+                    }}
                     style={{
                       display: "flex",
                       justifyContent: "space-between",
                       alignItems: "center",
                       gap: 8,
                       flexWrap: "wrap",
+                      cursor: "pointer",
                     }}
+                    title={crewCollapsed ? "Collapse crew" : "Expand crew"}
                   >
-                    <span style={{ fontWeight: "bold", color: "#a78bfa", fontSize: 12 }}>
-                      Crew · {(d.name ?? crew.name)?.trim() || `Crew ${crew.id}`}
-                    </span>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", minWidth: 0 }}>
+                      <SessionPortraitThumb
+                        src={entityPortraitSrc(crew)}
+                        label={(d.name ?? crew.name) || `Crew ${crew.id}`}
+                        size={48}
+                        onClick={() =>
+                          toggleCollapsedCard(setCollapsedCrewCards, crewCollapseKey)
+                        }
+                      />
+                      <span style={{ fontWeight: "bold", color: "#a78bfa", fontSize: 12 }}>
+                        Crew · {(d.name ?? crew.name)?.trim() || `Crew ${crew.id}`}
+                      </span>
+                    </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       {busy ? (
                         <span style={{ fontSize: 10, color: "#9ca3af" }}>Saving…</span>
                       ) : null}
-                      <button
-                        type="button"
-                        onClick={() =>
-                          toggleCollapsedCard(setCollapsedCrewCards, crewCollapseKey)
-                        }
-                        style={S.btnGhost}
-                        title={crewCollapsed ? "Expand crew card" : "Collapse crew card"}
-                      >
-                        {crewCollapsed ? "Expand" : "Collapse"}
-                      </button>
+                      <span style={{ ...S.btnGhost, fontSize: 10, padding: "2px 8px" }}>
+                        {crewCollapsed ? "▾" : "▸"}
+                      </span>
                     </div>
                   </div>
-                  {!crewCollapsed ? (
+                  {crewCollapsed ? (
                     <>
                       <div
                         style={{
@@ -4011,14 +5741,73 @@ export default function SessionGMManagementPanels({
             })}
           </div>
         )}
-        <div style={grid}>
-          {campaignChars.map((ch) => {
-            const cid = ch?.id != null ? Number(ch.id) : NaN;
-            const full =
-              (characters || []).find((c) => Number(c?.id) === cid) || ch;
-            const portraitSrc = resolveMediaUrl(
-              full.image || full.image_url || "",
-            );
+        <div className="home-poc session-roster-tokens" style={{ marginTop: 10 }}>
+          {(() => {
+            const filterQ = pcRosterFilter.trim().toLowerCase();
+            const pcEntries = (campaignChars || [])
+              .map((ch) => {
+                const cid = ch?.id != null ? Number(ch.id) : NaN;
+                const full =
+                  (characters || []).find((c) => Number(c?.id) === cid) || ch;
+                const name = full.true_name || full.name || `PC ${full.id}`;
+                const standName = full.stand?.name || full.stand_name || "";
+                return { ch, full, name, standName };
+              })
+              .filter(({ name, standName }) => {
+                if (!filterQ) return true;
+                return (
+                  String(name).toLowerCase().includes(filterQ) ||
+                  String(standName).toLowerCase().includes(filterQ)
+                );
+              })
+              .sort((a, b) =>
+                String(a.name).localeCompare(String(b.name), undefined, {
+                  sensitivity: "base",
+                }),
+              );
+            const focusPc = (full) => {
+              const key = `quick-${full.id}`;
+              setCollapsedPcCards((p) => ({ ...p, [key]: true }));
+              requestAnimationFrame(() => {
+                pcCardElsRef.current[full.id]?.scrollIntoView({
+                  block: "nearest",
+                  behavior: "smooth",
+                });
+              });
+            };
+            return (
+              <>
+                <div className="session-pc-finder">
+                  <input
+                    type="search"
+                    value={pcRosterFilter}
+                    onChange={(e) => setPcRosterFilter(e.target.value)}
+                    placeholder="Filter PCs…"
+                    aria-label="Filter player characters"
+                    style={{
+                      ...S.inp,
+                      fontSize: 11,
+                      flex: "1 1 140px",
+                      minWidth: 120,
+                      maxWidth: 220,
+                    }}
+                  />
+                  <div className="session-pc-finder-chips">
+                    {pcEntries.map(({ full, name }) => (
+                      <button
+                        key={`chip-${full.id}`}
+                        type="button"
+                        className="session-pc-finder-chip"
+                        onClick={() => focusPc(full)}
+                        title={`Open ${name}`}
+                      >
+                        {name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="home-card-grid">
+                  {pcEntries.map(({ full, name }) => {
             const stand = full.stand || {};
             const grades = rawStandToGrades({
               power: stand.power,
@@ -4049,17 +5838,30 @@ export default function SessionGMManagementPanels({
             );
             const xp = full.xp_clocks || {};
             const ad = full.action_dots || {};
-            const ipr = insightProwessResolveFromActionDots(ad);
-            const name = full.true_name || full.name || `PC ${full.id}`;
             const invLines = (Array.isArray(full.inventory) ? full.inventory : [])
               .map(rosterFormatInventoryLine)
               .filter(Boolean);
             const noteSections = rosterCharacterNoteSections(full);
-            const pcClks = (clocks || []).filter(
-              (c) =>
-                Number(c.character) === Number(full.id) &&
-                Number(c.session) === Number(session.id),
-            );
+            /** Active / in-progress clocks for this PC (session + character-assigned). */
+            const pcClks = (() => {
+              const cid = Number(full.id);
+              const byId = new Map();
+              for (const c of clocks || []) {
+                if (Number(c.character) === cid) byId.set(c.id, c);
+              }
+              for (const c of campaignWideClocks || []) {
+                if (Number(c.character) !== cid) continue;
+                if (!byId.has(c.id)) byId.set(c.id, c);
+              }
+              return [...byId.values()]
+                .filter((c) => !progressClockIsDone(c))
+                .sort((a, b) =>
+                  String(a.name || "").localeCompare(String(b.name || "")),
+                );
+            })();
+            const doneClocksForPc = (
+              gmCompletedClocksThisSession || []
+            ).filter((clk) => Number(clk.character) === Number(full.id));
             const canSRank = full.gm_can_have_s_rank_stand_stats === true;
             const isStandUser = hasPlaybook(
               full.playbook,
@@ -4067,50 +5869,50 @@ export default function SessionGMManagementPanels({
               "Stand",
             );
             const pcCollapseKey = `quick-${full.id}`;
-            const pcCollapsed = !!collapsedPcCards[pcCollapseKey];
+            const pcExpanded = !!collapsedPcCards[pcCollapseKey];
+            const pcNested = pcNestedTabById[full.id] || "actions";
+            const setPcNested = (id) => {
+              setPcNestedTabById((p) => ({ ...p, [full.id]: id }));
+              if (id === "roll" && setManualRoll) {
+                setManualRoll((p) => ({
+                  ...p,
+                  characterId: String(full.id),
+                }));
+              }
+              if (id === "xp" && setManualXp) {
+                setManualXp((p) => ({
+                  ...p,
+                  characterId: String(full.id),
+                }));
+              }
+            };
             const pcStandBusy =
               saving || pcStandForceBusyId === full.id;
             return (
-              <div key={full.id} style={{ ...card, width: 300 }}>
+              <React.Fragment key={full.id}>
                 <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: 8,
+                  ref={(el) => {
+                    if (el) pcCardElsRef.current[full.id] = el;
+                    else delete pcCardElsRef.current[full.id];
                   }}
                 >
-                  <div style={{ fontWeight: "bold", minWidth: 0 }}>{name}</div>
-                  <button
-                    type="button"
-                    onClick={() => toggleCollapsedCard(setCollapsedPcCards, pcCollapseKey)}
-                    style={{ ...S.btnGhost, fontSize: 10, padding: "2px 8px" }}
-                    title={pcCollapsed ? "Expand PC card" : "Collapse PC card"}
-                  >
-                    {pcCollapsed ? "Expand" : "Collapse"}
-                  </button>
+                <SessionPcToken
+                  character={full}
+                  name={name}
+                  isExpanded={pcExpanded}
+                  onToggleExpand={() =>
+                    toggleCollapsedCard(setCollapsedPcCards, pcCollapseKey)
+                  }
+                />
                 </div>
-                {!pcCollapsed ? (
-                  <>
+                {pcExpanded ? (
+                  <div className="session-pc-expand-panel" style={{ ...card, width: "100%", maxWidth: "100%", marginTop: 8 }}>
+                    <NestedTabBar
+                      tabs={PC_NESTED_TABS}
+                      active={pcNested}
+                      onChange={setPcNested}
+                    />
                     <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-                      {portraitSrc ? (
-                        <img
-                          src={portraitSrc}
-                          alt=""
-                          style={{
-                            width: 64,
-                            height: 64,
-                            flexShrink: 0,
-                            objectFit: "cover",
-                            borderRadius: 6,
-                            border: "1px solid #30363d",
-                            background: "#111",
-                          }}
-                          onError={(e) => {
-                            e.currentTarget.style.display = "none";
-                          }}
-                        />
-                      ) : null}
                       <div style={{ minWidth: 0, flex: 1 }}>
                         <a
                           href={buildRouteHref("character", { characterId: full.id })}
@@ -4129,6 +5931,56 @@ export default function SessionGMManagementPanels({
                         </a>
                       </div>
                     </div>
+                    <div style={{ display: pcNested === "actions" ? "block" : "none" }}>
+                    {(() => {
+                      const heritageName =
+                        full.heritage_details?.name ||
+                        full.heritage_name ||
+                        full.heritage ||
+                        "—";
+                      const heritageLines = rosterHeritageAbilityLines(full);
+                      return (
+                        <>
+                          <div style={lbl}>Heritage</div>
+                          <div style={{ fontSize: 11, color: "#e5e7eb", marginBottom: 6 }}>
+                            {heritageName}
+                          </div>
+                          {heritageLines.length > 0 ? (
+                            <ul
+                              style={{
+                                margin: "0 0 10px",
+                                paddingLeft: 16,
+                                fontSize: 10,
+                                color: "#9ca3af",
+                                lineHeight: 1.35,
+                              }}
+                            >
+                              {heritageLines.map((h, i) => (
+                                <li key={`herit-${full.id}-${i}`}>
+                                  {h.kind === "detriment" ? "− " : "+ "}
+                                  {h.name}
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <div
+                              style={{
+                                fontSize: 10,
+                                color: "#52525b",
+                                marginBottom: 10,
+                              }}
+                            >
+                              No heritage abilities on payload
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
+                    <div style={{ marginTop: 4, marginBottom: 8 }}>
+                      <SessionPcActionDotsReadout actionDots={ad} />
+                    </div>
+                    </div>
+                    <div style={{ display: pcNested === "playbook" ? "block" : "none" }}>
                     {isStandUser ? (
                       <div style={{ display: "flex", justifyContent: "center" }}>
                         <NpcsStandCoin
@@ -4156,32 +6008,174 @@ export default function SessionGMManagementPanels({
                         playbook (not a Stand user).
                       </div>
                     )}
-                    <div style={lbl}>Actions (dot ratings)</div>
-                    <div style={{ fontSize: 10, color: "#9ca3af", maxHeight: 56, overflow: "auto" }}>
-                      {flatActionDots(ad)
-                        .map(([a, d]) => `${a}: ${d}`)
-                        .join(" · ") || "—"}
+                    {(() => {
+                      const groups = rosterPlaybookAbilityGroups(full);
+                      if (!groups.length) {
+                        return (
+                          <div
+                            style={{
+                              fontSize: 10,
+                              color: "#52525b",
+                              marginTop: 8,
+                            }}
+                          >
+                            No playbook abilities on payload
+                          </div>
+                        );
+                      }
+                      return groups.map((g) => (
+                        <div key={`pb-${full.id}-${g.label}`} style={{ marginTop: 8 }}>
+                          <div style={lbl}>{g.label}</div>
+                          <ul
+                            style={{
+                              margin: 0,
+                              paddingLeft: 16,
+                              fontSize: 10,
+                              color: "#9ca3af",
+                              lineHeight: 1.35,
+                            }}
+                          >
+                            {g.items.map((name, i) => (
+                              <li key={`pb-item-${full.id}-${g.label}-${i}`}>
+                                {name}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ));
+                    })()}
                     </div>
-                    <div style={lbl}>Attribute ratings (from dots)</div>
-                    <div style={{ fontSize: 10, color: "#9ca3af", lineHeight: 1.35 }}>
-                      Insight {ipr.insight} · Prowess {ipr.prowess} · Resolve {ipr.resolve}{" "}
-                      <span style={{ color: "#6b7280" }}>
-                        (actions with ≥1 dot in each group)
-                      </span>
+                    <div style={{ display: pcNested === "harm" ? "block" : "none" }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        gap: 8,
+                        marginBottom: 6,
+                      }}
+                    >
+                      <div style={{ ...lbl, marginBottom: 0 }}>Harm (compact)</div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          confirmResetHarmForPc(
+                            full.id,
+                            full.true_name || full.name || `PC ${full.id}`,
+                          )
+                        }
+                        style={{ ...S.btnGhost, fontSize: 10 }}
+                        disabled={saving}
+                        title="Clear every harm line for this PC (confirmation required)"
+                      >
+                        Reset harm
+                      </button>
                     </div>
-                    <div style={lbl}>Armor uses</div>
-                    <div style={{ fontSize: 10, color: "#9ca3af", lineHeight: 1.35 }}>
-                      Physical{" "}
-                      {hasPhyArmor ? `${phyArmorUsed}/${phyArmorMax}` : "—"} · Stand{" "}
-                      {isStandUser && standArmorMax > 0
-                        ? `${standArmorUsed}/${standArmorMax}`
-                        : "—"}
+                    {renderCompactHarmGrid(full.id)}
+                    <div style={{ ...lbl, marginTop: 10 }}>Armor uses</div>
+                    <div
+                      style={{
+                        display: "grid",
+                        gap: 8,
+                        fontSize: 10,
+                        color: "#9ca3af",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <span style={{ minWidth: 52 }}>Physical</span>
+                        {hasPhyArmor && phyArmorMax > 0 ? (
+                          <span
+                            style={{
+                              opacity:
+                                pcRosterSheetBusyId === full.id || saving
+                                  ? 0.5
+                                  : 1,
+                              pointerEvents:
+                                pcRosterSheetBusyId === full.id || saving
+                                  ? "none"
+                                  : "auto",
+                            }}
+                          >
+                            <ArmorChargeBoxes
+                              count={phyArmorMax}
+                              used={phyArmorUsed}
+                              onToggleAt={(i, spent) =>
+                                handlePcArmorUsedChange(
+                                  full.id,
+                                  "physical_armor_used",
+                                  spent ? i : i + 1,
+                                  phyArmorMax,
+                                )
+                              }
+                              spentColor="#0d1117"
+                              activeColor="#b45309"
+                              borderColor="#4b5563"
+                              spendTitle="Click to spend physical armor"
+                              restoreTitle="Used — click to restore"
+                            />
+                          </span>
+                        ) : (
+                          <span style={{ color: "#52525b" }}>—</span>
+                        )}
+                      </div>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <span style={{ minWidth: 52 }}>Stand</span>
+                        {isStandUser && standArmorMax > 0 ? (
+                          <span
+                            style={{
+                              opacity:
+                                pcRosterSheetBusyId === full.id || saving
+                                  ? 0.5
+                                  : 1,
+                              pointerEvents:
+                                pcRosterSheetBusyId === full.id || saving
+                                  ? "none"
+                                  : "auto",
+                            }}
+                          >
+                            <ArmorChargeBoxes
+                              count={standArmorMax}
+                              used={standArmorUsed}
+                              onToggleAt={(i, spent) =>
+                                handlePcArmorUsedChange(
+                                  full.id,
+                                  "stand_armor_used",
+                                  spent ? i : i + 1,
+                                  standArmorMax,
+                                )
+                              }
+                              spentColor="#0d1117"
+                              activeColor="#0d1117"
+                              borderColor="#4b5563"
+                              showCheck
+                              spendTitle="Click to spend Stand armor"
+                              restoreTitle="Used — click to restore"
+                            />
+                          </span>
+                        ) : (
+                          <span style={{ color: "#52525b" }}>—</span>
+                        )}
+                      </div>
                     </div>
-                    <div style={lbl}>XP tracks</div>
-                    <div style={{ fontSize: 10, color: "#9ca3af" }}>
-                      In {xp.insight ?? 0} · Pw {xp.prowess ?? 0} · Re {xp.resolve ?? 0} ·
-                      Pb {xp.playbook ?? 0}
                     </div>
+                    <div style={{ display: pcNested === "xp" ? "block" : "none" }}>
+                    {renderPcExpandXpPanel(full.id, xp)}
+                    </div>
+                    <div style={{ display: pcNested === "items" ? "block" : "none" }}>
                     <div style={lbl}>Inventory</div>
                     <div
                       style={{
@@ -4247,6 +6241,8 @@ export default function SessionGMManagementPanels({
                         }
                       />
                     </div>
+                    </div>
+                    <div style={{ display: pcNested === "notes" ? "block" : "none" }}>
                     <div style={lbl}>Notes (PC sheet)</div>
                     {(() => {
                       const serverNotes = String(
@@ -4406,6 +6402,8 @@ export default function SessionGMManagementPanels({
                         </div>
                       );
                     })()}
+                    </div>
+                    <div style={{ display: pcNested === "items" ? "block" : "none" }}>
                     <div style={lbl}>Coin &amp; stash (personal)</div>
                     <div
                       style={{
@@ -4503,159 +6501,191 @@ export default function SessionGMManagementPanels({
                     >
                       Matches sheet coin boxes / stash slots (filled from the left).
                     </div>
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        gap: 6,
-                        flexWrap: "wrap",
-                      }}
-                    >
-                      <div style={lbl}>Clocks (this session)</div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (pcSessionClockDraftFor === full.id) {
-                            setPcSessionClockDraftFor(null);
-                          } else {
-                            setPcSessionClockDraft({
-                              name: "",
-                              max_segments: 8,
-                              clock_type: "CUSTOM",
-                              visible_to_players: false,
-                            });
-                            setPcSessionClockDraftFor(full.id);
-                          }
-                        }}
-                        style={{
-                          ...S.btn,
-                          fontSize: 10,
-                          padding: "2px 8px",
-                          background: "#1e3a5f",
-                          color: "#bae6fd",
-                        }}
-                      >
-                        {pcSessionClockDraftFor === full.id ? "Close" : "+ Clock"}
-                      </button>
                     </div>
-                    {pcSessionClockDraftFor === full.id ? (
+                    <div style={{ display: pcNested === "clocks" ? "block" : "none" }}>
                       <div
                         style={{
-                          marginTop: 6,
-                          marginBottom: 8,
-                          padding: 8,
-                          borderRadius: 6,
-                          border: "1px solid #374151",
-                          background: "#0d1117",
-                          display: "grid",
-                          gap: 8,
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          gap: 6,
+                          flexWrap: "wrap",
+                          marginBottom: 6,
                         }}
                       >
-                        <input
-                          style={S.inp}
-                          placeholder="Clock name"
-                          value={pcSessionClockDraft.name}
-                          onChange={(e) =>
-                            setPcSessionClockDraft((d) => ({
-                              ...d,
-                              name: e.target.value,
-                            }))
-                          }
-                        />
-                        <div
-                          style={{ display: "flex", flexWrap: "wrap", gap: 8 }}
-                        >
-                          <label style={{ fontSize: 10, color: "#9ca3af" }}>
-                            Segments
-                            <select
-                              style={{ ...S.select, marginLeft: 6 }}
-                              value={pcSessionClockDraft.max_segments}
-                              onChange={(e) =>
-                                setPcSessionClockDraft((d) => ({
-                                  ...d,
-                                  max_segments: Number(e.target.value),
-                                }))
-                              }
-                            >
-                              {SESSION_PC_CLOCK_SEGMENTS.map((n) => (
-                                <option key={n} value={n}>
-                                  {n}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                          <label style={{ fontSize: 10, color: "#9ca3af" }}>
-                            Type
-                            <select
-                              style={{ ...S.select, marginLeft: 6 }}
-                              value={pcSessionClockDraft.clock_type}
-                              onChange={(e) =>
-                                setPcSessionClockDraft((d) => ({
-                                  ...d,
-                                  clock_type: e.target.value,
-                                }))
-                              }
-                            >
-                              {SESSION_PC_CLOCK_TYPES.map((o) => (
-                                <option key={o.value} value={o.value}>
-                                  {o.label}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
+                        <div style={{ ...lbl, marginBottom: 0 }}>
+                          Clocks (this PC)
                         </div>
-                        <label
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (pcSessionClockDraftFor === full.id) {
+                              setPcSessionClockDraftFor(null);
+                            } else {
+                              setPcSessionClockDraft({
+                                name: "",
+                                max_segments: 8,
+                                clock_type: "CUSTOM",
+                                visible_to_players: false,
+                              });
+                              setPcSessionClockDraftFor(full.id);
+                            }
+                          }}
                           style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 6,
+                            ...S.btn,
                             fontSize: 10,
-                            color: "#a7f3d0",
-                            cursor: "pointer",
+                            padding: "2px 8px",
+                            background: "#1e3a5f",
+                            color: "#bae6fd",
+                          }}
+                        >
+                          {pcSessionClockDraftFor === full.id ? "Close" : "+ Clock"}
+                        </button>
+                      </div>
+                      {pcSessionClockDraftFor === full.id ? (
+                        <div
+                          style={{
+                            marginTop: 6,
+                            marginBottom: 8,
+                            padding: 8,
+                            borderRadius: 6,
+                            border: "1px solid #374151",
+                            background: "#0d1117",
+                            display: "grid",
+                            gap: 8,
                           }}
                         >
                           <input
-                            type="checkbox"
-                            checked={pcSessionClockDraft.visible_to_players}
+                            style={S.inp}
+                            placeholder="Clock name"
+                            value={pcSessionClockDraft.name}
                             onChange={(e) =>
                               setPcSessionClockDraft((d) => ({
                                 ...d,
-                                visible_to_players: e.target.checked,
+                                name: e.target.value,
                               }))
                             }
                           />
-                          Visible to players
-                        </label>
-                        <div style={{ display: "flex", gap: 6 }}>
-                          <button
-                            type="button"
-                            style={S.btnPrimary}
-                            disabled={pcSessionClockBusyCharId === full.id}
-                            onClick={async () => {
-                              const nm = String(
-                                pcSessionClockDraft.name || "",
-                              ).trim();
-                              if (!nm) {
-                                setError("Enter a name for the clock.");
-                                return;
+                          <div
+                            style={{ display: "flex", flexWrap: "wrap", gap: 8 }}
+                          >
+                            <label style={{ fontSize: 10, color: "#9ca3af" }}>
+                              Segments
+                              <select
+                                style={{ ...S.select, marginLeft: 6 }}
+                                value={pcSessionClockDraft.max_segments}
+                                onChange={(e) =>
+                                  setPcSessionClockDraft((d) => ({
+                                    ...d,
+                                    max_segments: Number(e.target.value),
+                                  }))
+                                }
+                              >
+                                {SESSION_PC_CLOCK_SEGMENTS.map((n) => (
+                                  <option key={n} value={n}>
+                                    {n}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            <label style={{ fontSize: 10, color: "#9ca3af" }}>
+                              Type
+                              <select
+                                style={{ ...S.select, marginLeft: 6 }}
+                                value={pcSessionClockDraft.clock_type}
+                                onChange={(e) =>
+                                  setPcSessionClockDraft((d) => ({
+                                    ...d,
+                                    clock_type: e.target.value,
+                                  }))
+                                }
+                              >
+                                {SESSION_PC_CLOCK_TYPES.map((o) => (
+                                  <option key={o.value} value={o.value}>
+                                    {o.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                          </div>
+                          <label
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 6,
+                              fontSize: 10,
+                              color: "#a7f3d0",
+                              cursor: "pointer",
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={pcSessionClockDraft.visible_to_players}
+                              onChange={(e) =>
+                                setPcSessionClockDraft((d) => ({
+                                  ...d,
+                                  visible_to_players: e.target.checked,
+                                }))
                               }
-                              setPcSessionClockBusyCharId(full.id);
-                              setError(null);
-                              try {
-                                await progressClockAPI.createProgressClock({
-                                  campaign: campaign.id,
-                                  session: session.id,
-                                  character: full.id,
-                                  name: nm,
-                                  clock_type:
-                                    pcSessionClockDraft.clock_type || "CUSTOM",
-                                  max_segments:
-                                    pcSessionClockDraft.max_segments || 8,
-                                  filled_segments: 0,
-                                  visible_to_players:
-                                    !!pcSessionClockDraft.visible_to_players,
-                                });
+                            />
+                            Visible to players
+                          </label>
+                          <div style={{ display: "flex", gap: 6 }}>
+                            <button
+                              type="button"
+                              style={S.btnPrimary}
+                              disabled={pcSessionClockBusyCharId === full.id}
+                              onClick={async () => {
+                                const nm = String(
+                                  pcSessionClockDraft.name || "",
+                                ).trim();
+                                if (!nm) {
+                                  setError("Enter a name for the clock.");
+                                  return;
+                                }
+                                setPcSessionClockBusyCharId(full.id);
+                                setError(null);
+                                try {
+                                  await progressClockAPI.createProgressClock({
+                                    campaign: campaign.id,
+                                    session: session.id,
+                                    character: full.id,
+                                    name: nm,
+                                    clock_type:
+                                      pcSessionClockDraft.clock_type || "CUSTOM",
+                                    max_segments:
+                                      pcSessionClockDraft.max_segments || 8,
+                                    filled_segments: 0,
+                                    visible_to_players:
+                                      !!pcSessionClockDraft.visible_to_players,
+                                  });
+                                  setPcSessionClockDraftFor(null);
+                                  setPcSessionClockDraft({
+                                    name: "",
+                                    max_segments: 8,
+                                    clock_type: "CUSTOM",
+                                    visible_to_players: false,
+                                  });
+                                  await refreshSessionClocks();
+                                  await reloadCampaignWideClocks();
+                                } catch (e) {
+                                  setError(
+                                    e?.message ||
+                                      "Could not create progress clock.",
+                                  );
+                                } finally {
+                                  setPcSessionClockBusyCharId(null);
+                                }
+                              }}
+                            >
+                              {pcSessionClockBusyCharId === full.id
+                                ? "Saving…"
+                                : "Create"}
+                            </button>
+                            <button
+                              type="button"
+                              style={S.btnGhost}
+                              onClick={() => {
                                 setPcSessionClockDraftFor(null);
                                 setPcSessionClockDraft({
                                   name: "",
@@ -4663,215 +6693,426 @@ export default function SessionGMManagementPanels({
                                   clock_type: "CUSTOM",
                                   visible_to_players: false,
                                 });
-                                await refreshSessionClocks();
-                              } catch (e) {
-                                setError(
-                                  e?.message ||
-                                    "Could not create progress clock.",
-                                );
-                              } finally {
-                                setPcSessionClockBusyCharId(null);
-                              }
-                            }}
-                          >
-                            {pcSessionClockBusyCharId === full.id
-                              ? "Saving…"
-                              : "Create"}
-                          </button>
-                          <button
-                            type="button"
-                            style={S.btnGhost}
-                            onClick={() => {
-                              setPcSessionClockDraftFor(null);
-                              setPcSessionClockDraft({
-                                name: "",
-                                max_segments: 8,
-                                clock_type: "CUSTOM",
-                                visible_to_players: false,
-                              });
-                            }}
-                          >
-                            Cancel
-                          </button>
+                              }}
+                            >
+                              Cancel
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    ) : null}
-                    <ul
-                      style={{
-                        margin: 0,
-                        paddingLeft: 14,
-                        color: "#6b7280",
-                        maxHeight: 120,
-                        overflowY: "auto",
-                      }}
-                    >
-                      {pcClks.map((c) => (
-                        <li
-                          key={c.id}
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 6,
-                            flexWrap: "wrap",
-                            marginBottom: 4,
-                          }}
-                        >
-                          <ProgressClock
-                            size={28}
-                            segments={c.max_segments}
-                            filled={c.filled_segments || 0}
-                            interactive={
-                              pcSessionClockBusyCharId !== full.id &&
-                              (Number(c.max_segments) || 0) > 0
-                            }
-                            onClick={
-                              pcSessionClockBusyCharId === full.id
-                                ? undefined
-                                : async (f) => {
-                                    setPcSessionClockBusyCharId(full.id);
-                                    try {
-                                      await progressClockAPI.updateProgressClock(
-                                        c.id,
-                                        { filled_segments: f },
-                                      );
-                                      await refreshSessionClocks();
-                                    } catch (e) {
-                                      setError(
-                                        e?.message || "Could not update clock.",
-                                      );
-                                    } finally {
-                                      setPcSessionClockBusyCharId(null);
-                                    }
-                                  }
-                            }
-                          />
-                          <span style={{ flex: "1 1 120px" }}>
-                            {c.name} ({c.filled_segments}/{c.max_segments})
-                            {progressClockShowsPlayersBadge(c, campaign?.gm) ? (
-                              <span style={{ color: "#6ee7b7", fontSize: 9 }}>
-                                {" "}
-                                · players
-                              </span>
-                            ) : null}
-                          </span>
-                          <span style={{ display: "flex", gap: 4 }}>
-                            <button
-                              type="button"
-                              style={{
-                                ...S.btnGhost,
-                                fontSize: 9,
-                                padding: "1px 6px",
-                              }}
-                              title="Fewer ticks"
-                              disabled={pcSessionClockBusyCharId === full.id}
-                              onClick={async () => {
-                                const next = Math.max(
-                                  0,
-                                  (Number(c.filled_segments) || 0) - 1,
-                                );
-                                setPcSessionClockBusyCharId(full.id);
-                                try {
-                                  await progressClockAPI.updateProgressClock(
-                                    c.id,
-                                    { filled_segments: next },
-                                  );
-                                  await refreshSessionClocks();
-                                } catch (e) {
-                                  setError(
-                                    e?.message || "Could not update clock.",
-                                  );
-                                } finally {
-                                  setPcSessionClockBusyCharId(null);
-                                }
-                              }}
-                            >
-                              −
-                            </button>
-                            <button
-                              type="button"
-                              style={{
-                                ...S.btnGhost,
-                                fontSize: 9,
-                                padding: "1px 6px",
-                              }}
-                              title="More ticks"
-                              disabled={pcSessionClockBusyCharId === full.id}
-                              onClick={async () => {
-                                const cap = Number(c.max_segments) || 8;
-                                const next = Math.min(
-                                  cap,
-                                  (Number(c.filled_segments) || 0) + 1,
-                                );
-                                setPcSessionClockBusyCharId(full.id);
-                                try {
-                                  await progressClockAPI.updateProgressClock(
-                                    c.id,
-                                    { filled_segments: next },
-                                  );
-                                  await refreshSessionClocks();
-                                } catch (e) {
-                                  setError(
-                                    e?.message || "Could not update clock.",
-                                  );
-                                } finally {
-                                  setPcSessionClockBusyCharId(null);
-                                }
-                              }}
-                            >
-                              +
-                            </button>
-                            <button
-                              type="button"
-                              style={{
-                                ...S.btnGhost,
-                                fontSize: 9,
-                                padding: "1px 6px",
-                                color: "#f87171",
-                              }}
-                              disabled={pcSessionClockBusyCharId === full.id}
-                              onClick={async () => {
-                                if (
-                                  !window.confirm(
-                                    `Delete clock "${c.name || "clock"}"?`,
-                                  )
-                                )
-                                  return;
-                                setPcSessionClockBusyCharId(full.id);
-                                try {
-                                  await progressClockAPI.deleteProgressClock(
-                                    c.id,
-                                  );
-                                  await refreshSessionClocks();
-                                } catch (e) {
-                                  setError(
-                                    e?.message || "Could not delete clock.",
-                                  );
-                                } finally {
-                                  setPcSessionClockBusyCharId(null);
-                                }
-                              }}
-                            >
-                              ✕
-                            </button>
-                          </span>
-                        </li>
-                      ))}
-                      {pcClks.length === 0 &&
-                      pcSessionClockDraftFor !== full.id ? (
-                        <li>—</li>
                       ) : null}
-                    </ul>
-                  </>
+{(() => {
+                        const bumpPcClockFilled = async (c, next) => {
+                          setPcSessionClockBusyCharId(full.id);
+                          try {
+                            await progressClockAPI.updateProgressClock(c.id, {
+                              filled_segments: next,
+                            });
+                            await refreshSessionClocks();
+                            await reloadCampaignWideClocks();
+                          } catch (e) {
+                            setError(
+                              e?.message || "Could not update clock.",
+                            );
+                          } finally {
+                            setPcSessionClockBusyCharId(null);
+                          }
+                        };
+                        const renderPcClockRow = (c) => (
+                          <li
+                            key={c.id}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 6,
+                              flexWrap: "wrap",
+                              marginBottom: 4,
+                            }}
+                          >
+                            <ProgressClock
+                              size={28}
+                              segments={c.max_segments}
+                              filled={c.filled_segments || 0}
+                              interactive={
+                                pcSessionClockBusyCharId !== full.id &&
+                                (Number(c.max_segments) || 0) > 0
+                              }
+                              onClick={
+                                pcSessionClockBusyCharId === full.id
+                                  ? undefined
+                                  : (f) => bumpPcClockFilled(c, f)
+                              }
+                            />
+                            <span style={{ flex: "1 1 120px", color: "#d1d5db" }}>
+                              {c.name} ({c.filled_segments}/{c.max_segments})
+                              {progressClockShowsPlayersBadge(c, campaign?.gm) ? (
+                                <span style={{ color: "#6ee7b7", fontSize: 9 }}>
+                                  {" "}
+                                  · players
+                                </span>
+                              ) : null}
+                            </span>
+                            <span style={{ display: "flex", gap: 4 }}>
+                              <button
+                                type="button"
+                                style={{
+                                  ...S.btnGhost,
+                                  fontSize: 9,
+                                  padding: "1px 6px",
+                                }}
+                                title="Fewer ticks"
+                                disabled={pcSessionClockBusyCharId === full.id}
+                                onClick={() => {
+                                  const next = Math.max(
+                                    0,
+                                    (Number(c.filled_segments) || 0) - 1,
+                                  );
+                                  bumpPcClockFilled(c, next);
+                                }}
+                              >
+                                −
+                              </button>
+                              <button
+                                type="button"
+                                style={{
+                                  ...S.btnGhost,
+                                  fontSize: 9,
+                                  padding: "1px 6px",
+                                }}
+                                title="More ticks"
+                                disabled={pcSessionClockBusyCharId === full.id}
+                                onClick={() => {
+                                  const cap = Number(c.max_segments) || 8;
+                                  const next = Math.min(
+                                    cap,
+                                    (Number(c.filled_segments) || 0) + 1,
+                                  );
+                                  bumpPcClockFilled(c, next);
+                                }}
+                              >
+                                +
+                              </button>
+                              <button
+                                type="button"
+                                style={{
+                                  ...S.btnGhost,
+                                  fontSize: 9,
+                                  padding: "1px 6px",
+                                  color: "#f87171",
+                                }}
+                                disabled={pcSessionClockBusyCharId === full.id}
+                                onClick={async () => {
+                                  if (
+                                    !window.confirm(
+                                      `Delete clock "${c.name || "clock"}"?`,
+                                    )
+                                  )
+                                    return;
+                                  setPcSessionClockBusyCharId(full.id);
+                                  try {
+                                    await progressClockAPI.deleteProgressClock(
+                                      c.id,
+                                    );
+                                    await refreshSessionClocks();
+                                    await reloadCampaignWideClocks();
+                                  } catch (e) {
+                                    setError(
+                                      e?.message || "Could not delete clock.",
+                                    );
+                                  } finally {
+                                    setPcSessionClockBusyCharId(null);
+                                  }
+                                }}
+                              >
+                                ✕
+                              </button>
+                            </span>
+                          </li>
+                        );
+                        return (
+                          <>
+                            <ul
+                              style={{
+                                margin: 0,
+                                paddingLeft: 14,
+                                color: "#6b7280",
+                                maxHeight: 160,
+                                overflowY: "auto",
+                              }}
+                            >
+                              {pcClks.map(renderPcClockRow)}
+                              {pcClks.length === 0 &&
+                              pcSessionClockDraftFor !== full.id ? (
+                                <li style={{ color: "#52525b" }}>
+                                  No active clocks for this PC.
+                                </li>
+                              ) : null}
+                            </ul>
+                            <div
+                              style={{
+                                ...lbl,
+                                marginTop: 12,
+                                marginBottom: 6,
+                              }}
+                            >
+                              Completed clocks (this session)
+                            </div>
+                            <div style={{ fontSize: 10, color: "#6b7280" }}>
+                              {!campaignWideClocksLoaded ? (
+                                <span>Loading…</span>
+                              ) : doneClocksForPc.length === 0 ? (
+                                <span>None for this PC.</span>
+                              ) : (
+                                <ul
+                                  style={{
+                                    margin: 0,
+                                    paddingLeft: 14,
+                                    maxHeight: 160,
+                                    overflowY: "auto",
+                                  }}
+                                >
+                                  {doneClocksForPc.map(renderPcClockRow)}
+                                </ul>
+                              )}
+                            </div>
+                          </>
+                        );
+                      })()}
+                    </div>
+                    <div style={{ display: pcNested === "roll" ? "block" : "none" }}>
+                      {(() => {
+                        const peRow =
+                          peMap[String(full.id)] || peMap[full.id] || null;
+                        const pePos = peRow?.position || defaultPos;
+                        const peEff = peRow?.effect || defaultEff;
+                        const hasPeOverride = !!peRow;
+                        const peHints = getPositionEffectModifierHints(full);
+                        const pePosHints = peHints.filter(
+                          (h) =>
+                            h.kind === "position" ||
+                            h.kind === "position/effect",
+                        );
+                        const peEffHints = peHints.filter(
+                          (h) =>
+                            h.kind === "effect" ||
+                            h.kind === "position/effect",
+                        );
+                        return (
+                          <div
+                            style={{
+                              border: "1px solid #374151",
+                              borderRadius: 8,
+                              padding: 10,
+                              background: "#0b1220",
+                              marginBottom: 12,
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                marginBottom: 8,
+                                gap: 8,
+                              }}
+                            >
+                              <div style={{ ...lbl, margin: 0 }}>
+                                Position / effect
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  mergePosEffect({ [full.id]: null })
+                                }
+                                style={{
+                                  ...S.btnGhost,
+                                  fontSize: 10,
+                                  padding: "6px 8px",
+                                }}
+                                disabled={saving || !hasPeOverride}
+                                title="Use session default position / effect for this PC"
+                              >
+                                PE default
+                              </button>
+                            </div>
+                            <div
+                              style={{
+                                display: "flex",
+                                gap: 14,
+                                flexWrap: "wrap",
+                              }}
+                            >
+                              <div
+                                style={{
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  alignItems: "flex-start",
+                                  gap: 6,
+                                }}
+                              >
+                                <PositionStack
+                                  activePosition={pePos}
+                                  readOnly={saving}
+                                  onSelect={(value) =>
+                                    mergePosEffect({
+                                      [full.id]: {
+                                        position: value,
+                                        effect: peEff,
+                                      },
+                                    })
+                                  }
+                                />
+                                {pePosHints.length > 0 ? (
+                                  <div
+                                    style={{
+                                      fontSize: 9,
+                                      color: "#6b7280",
+                                      lineHeight: 1.35,
+                                      maxWidth: 220,
+                                    }}
+                                  >
+                                    <div
+                                      style={{
+                                        fontWeight: 700,
+                                        color: "#71717a",
+                                        letterSpacing: "0.04em",
+                                        textTransform: "uppercase",
+                                        marginBottom: 2,
+                                      }}
+                                    >
+                                      Position modifiers (verify)
+                                    </div>
+                                    <div style={{ color: "#9ca3af" }}>
+                                      {pePosHints.map((h, i) => (
+                                        <span
+                                          key={`roll-pos-${h.bucket}-${h.name}`}
+                                        >
+                                          {i > 0 ? " · " : ""}
+                                          <span
+                                            title={`${peModifierBucketLabel(h.bucket)} ability — verify on character sheet`}
+                                          >
+                                            [{peModifierBucketLabel(h.bucket)}]{" "}
+                                            {h.name}
+                                          </span>
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ) : null}
+                              </div>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  alignItems: "flex-start",
+                                  gap: 6,
+                                }}
+                              >
+                                <EffectShapes
+                                  activeEffect={peEff}
+                                  readOnly={saving}
+                                  onSelect={(value) =>
+                                    mergePosEffect({
+                                      [full.id]: {
+                                        position: pePos,
+                                        effect: value,
+                                      },
+                                    })
+                                  }
+                                />
+                                {peEffHints.length > 0 ? (
+                                  <div
+                                    style={{
+                                      fontSize: 9,
+                                      color: "#6b7280",
+                                      lineHeight: 1.35,
+                                      maxWidth: 220,
+                                    }}
+                                  >
+                                    <div
+                                      style={{
+                                        fontWeight: 700,
+                                        color: "#71717a",
+                                        letterSpacing: "0.04em",
+                                        textTransform: "uppercase",
+                                        marginBottom: 2,
+                                      }}
+                                    >
+                                      Effect modifiers (verify)
+                                    </div>
+                                    <div style={{ color: "#9ca3af" }}>
+                                      {peEffHints.map((h, i) => (
+                                        <span
+                                          key={`roll-eff-${h.bucket}-${h.name}`}
+                                        >
+                                          {i > 0 ? " · " : ""}
+                                          <span
+                                            title={`${peModifierBucketLabel(h.bucket)} ability — verify on character sheet`}
+                                          >
+                                            [{peModifierBucketLabel(h.bucket)}]{" "}
+                                            {h.name}
+                                          </span>
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ) : null}
+                              </div>
+                            </div>
+                            <p
+                              style={{
+                                fontSize: 10,
+                                color: "#6b7280",
+                                margin: "8px 0 0",
+                              }}
+                            >
+                              {hasPeOverride
+                                ? "This PC has a position / effect override. Manual action rolls use it."
+                                : "Character locked to this PC. Session default position / effect apply to action rolls."}
+                            </p>
+                          </div>
+                        );
+                      })()}
+                      <div style={lbl}>Manual dice (offline)</div>
+                      {renderPcLockedManualRollForm(full.id)}
+                      {renderCharacterRecentRollsLog(full.id, { maxHeight: 160 })}
+                    </div>
+                  </div>
                 ) : null}
-              </div>
+              </React.Fragment>
             );
           })}
+                </div>
+                {pcEntries.length === 0 ? (
+                  <div style={{ fontSize: 12, color: "#6b7280", marginTop: 8 }}>
+                    No player characters match this filter.
+                  </div>
+                ) : null}
+              </>
+            );
+          })()}
         </div>
         </>
         ) : null}
       </div>
+      ) : null}
 
       </div>
+      ) : null}
+
+      {sessionShellTab === "armor" ? renderArmorTab() : null}
+      {sessionShellTab === "coin" ? renderLedgerFilterTab("coin") : null}
+      {sessionShellTab === "rep" ? renderLedgerFilterTab("rep") : null}
+      {sessionShellTab === "scorecard" ? (
+        <div style={S.card}>
+          <span style={S.sectionLbl}>Scorecard</span>
+          {scorecardPanel || (
+            <p style={{ fontSize: 12, color: "#6b7280" }}>
+              Scorecard unavailable for this view.
+            </p>
+          )}
+        </div>
+      ) : null}
+
       {showAddNpc && (
         <div
           style={{
@@ -5186,6 +7427,9 @@ export default function SessionGMManagementPanels({
       )}
 
 
+      {sessionShellTab === "rolls" ||
+      sessionShellTab === "xp" ||
+      sessionShellTab === "harm" ? (
       <div style={S.card}>
         <div
           style={{
@@ -5206,7 +7450,11 @@ export default function SessionGMManagementPanels({
               minWidth: 0,
             }}
           >
-            Bulk position / effect (per character)
+            {sessionShellTab === "harm"
+              ? "Compact harm (per character)"
+              : sessionShellTab === "xp"
+                ? "Session XP"
+                : "Bulk position / effect (per character)"}
           </span>
           <button
             type="button"
@@ -6814,70 +9062,6 @@ export default function SessionGMManagementPanels({
         <div style={{ display: "grid", gap: 10 }}>
           {campaignChars.map((ch) => {
             const id = ch.id;
-            const patchHarmFromDraft = async () => {
-              const d = harmDraftByChar[id] || {};
-              const payload = {
-                harm_level1_name: d.l1a || "",
-                harm_level1_used: !!(d.l1a || "").trim(),
-                harm_level1_slot2_name: d.l1b || "",
-                harm_level1_slot2_used: !!(d.l1b || "").trim(),
-                harm_level2_name: d.l2a || "",
-                harm_level2_used: !!(d.l2a || "").trim(),
-                harm_level2_slot2_name: d.l2b || "",
-                harm_level2_slot2_used: !!(d.l2b || "").trim(),
-                harm_level3_name: d.l3 || "",
-                harm_level3_used: !!(d.l3 || "").trim(),
-                harm_level4_name: d.l4 || "",
-                harm_level4_used: !!(d.l4 || "").trim(),
-              };
-              try {
-                await characterAPI.patchCharacter(id, payload);
-                await onSessionCharactersRefresh?.();
-                onRefresh();
-              } catch (e) {
-                setError(e.message || "Failed to save harm");
-              }
-            };
-            const emptyHarmPayload = {
-              harm_level1_name: "",
-              harm_level1_used: false,
-              harm_level1_slot2_name: "",
-              harm_level1_slot2_used: false,
-              harm_level2_name: "",
-              harm_level2_used: false,
-              harm_level2_slot2_name: "",
-              harm_level2_slot2_used: false,
-              harm_level3_name: "",
-              harm_level3_used: false,
-              harm_level4_name: "",
-              harm_level4_used: false,
-            };
-            const confirmResetHarmForPc = async () => {
-              const nm = (ch.true_name || ch.name || `PC ${id}`).trim();
-              const ok = window.confirm(
-                `Clear all harm (levels 1–4) for ${nm}? This saves immediately to the character sheet.`,
-              );
-              if (!ok) return;
-              setError(null);
-              setSaving(true);
-              try {
-                let body = await characterAPI.patchCharacter(id, emptyHarmPayload);
-                if (!body || typeof body !== "object") body = {};
-                if (!("harm_level1_name" in body)) {
-                  body = await characterAPI.getCharacter(id);
-                }
-                setHarmDraftByChar((prev) => ({
-                  ...prev,
-                  [id]: harmDraftFromApiCharacter(body),
-                }));
-                await onSessionCharactersRefresh?.();
-                onRefresh();
-              } catch (e) {
-                setError(e.message || "Failed to reset harm");
-              } finally {
-                setSaving(false);
-              }
-            };
             const row = peMap[String(id)] || peMap[id] || null;
             const pos = row?.position || defaultPos;
             const eff = row?.effect || defaultEff;
@@ -6932,7 +9116,12 @@ export default function SessionGMManagementPanels({
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                     <button
                       type="button"
-                      onClick={confirmResetHarmForPc}
+                      onClick={() =>
+                        confirmResetHarmForPc(
+                          id,
+                          ch.true_name || ch.name || `PC ${id}`,
+                        )
+                      }
                       style={{ ...S.btnGhost, fontSize: 10 }}
                       disabled={saving}
                       title="Clear every harm line for this PC (confirmation required)"
@@ -7317,49 +9506,7 @@ export default function SessionGMManagementPanels({
                   </div>
                   <div style={{ minWidth: 220, flex: "1 1 220px" }}>
                     <div style={lbl}>Harm (compact)</div>
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "1fr 1fr",
-                        gap: 6,
-                        fontSize: 10,
-                      }}
-                    >
-                      {(
-                        [
-                          ["l4", "L4", "1 / -1"],
-                          ["l3", "L3", "1 / -1"],
-                          ["l2a", "L2A", null],
-                          ["l2b", "L2B", null],
-                          ["l1a", "L1A", null],
-                          ["l1b", "L1B", null],
-                        ]
-                      ).map(([key, label, gridColumn]) => (
-                        <input
-                          key={`${id}-${key}`}
-                          value={harmDraftByChar[id]?.[key] || ""}
-                          onChange={(e) =>
-                            setHarmDraftByChar((prev) => ({
-                              ...prev,
-                              [id]: { ...(prev[id] || {}), [key]: e.target.value },
-                            }))
-                          }
-                          onBlur={patchHarmFromDraft}
-                          placeholder={label}
-                          style={{
-                            ...S.inp,
-                            fontSize: 10,
-                            padding: "4px 6px",
-                            minWidth: 0,
-                            ...compactHarmFieldStyle(
-                              key,
-                              harmDraftByChar[id]?.[key],
-                            ),
-                            ...(gridColumn ? { gridColumn } : {}),
-                          }}
-                        />
-                      ))}
-                    </div>
+                    {renderCompactHarmGrid(id)}
                   </div>
                   </div>
                 ) : null}
@@ -7370,6 +9517,8 @@ export default function SessionGMManagementPanels({
           </>
         ) : null}
       </div>
+      ) : null}
+      </div>{/* session shell scroll pane */}
       {xpLifetimeModalOpen && xpLifetimeCharId ? (
         <div
           style={{

@@ -13,7 +13,7 @@ const boxBase = {
   flexShrink: 0,
 };
 
-function ArmorChargeBoxes({
+export function ArmorChargeBoxes({
   count,
   used,
   onToggleAt,
