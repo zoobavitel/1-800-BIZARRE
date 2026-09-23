@@ -10,8 +10,16 @@ export const PATCH_NOTES = [
       {
         "title": "Added",
         "items": [
+          "tuck XP help into ? bubble",
+          "allow Heritage downtime Train (house rule)",
           "PC expand panels, token faces, roster polish",
           "downtime Train buttons for XP tracks"
+        ]
+      },
+      {
+        "title": "Maintenance",
+        "items": [
+          "refresh patch notes after train+session commits"
         ]
       },
       {
@@ -625,10 +633,7 @@ export const PATCH_NOTES = [
           "sync GM clock player visibility and refresh list faster",
           "satisfy trauma hydrate exhaustive-deps for CI",
           "protect sheet ground truth from poll/autosave races",
-          "stop poll/autosave wiping XP ticks",
-          "ticks spend free pool; drop +1 buttons",
-          "tick marks allocate pool xp",
-          "coerce xp_clocks in add-xp"
+          "stop poll/autosave wiping XP ticks"
         ]
       },
       {

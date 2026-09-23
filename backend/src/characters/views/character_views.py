@@ -1466,7 +1466,12 @@ class CharacterViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="assist-help")
     def assist_help(self, request, pk=None):
-        """Crew Assist: beneficiary is URL character; helper spends 1 stress; at most one pending +1d per beneficiary per active session."""
+        """Crew Assist (helper-initiated): URL = recipient; body helper_character_id spends 1 stress.
+
+        Sheet UX: helper picks a crewmate to help from their own sheet. At most one pending
+        +1d per beneficiary per active session. Only the helper's owner (or campaign GM/staff)
+        may grant.
+        """
         actor = self.get_object()
         helper_id = request.data.get("helper_character_id")
         session_raw = request.data.get("session_id")
@@ -1487,7 +1492,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 {"error": "Invalid session_id"}, status=status.HTTP_400_BAD_REQUEST
             )
         try:
-            helper = Character.objects.get(pk=int(helper_id))
+            helper = Character.objects.select_related("campaign").get(pk=int(helper_id))
         except (TypeError, ValueError):
             return Response(
                 {"error": "Invalid helper_character_id"}, status=status.HTTP_400_BAD_REQUEST
@@ -1526,6 +1531,17 @@ class CharacterViewSet(viewsets.ModelViewSet):
         if actor.id == helper.id:
             return Response(
                 {"error": "Cannot help yourself"}, status=status.HTTP_400_BAD_REQUEST
+            )
+        # Helper-driven UX: only the helper's player (or GM/staff) may spend that PC's stress.
+        if not _user_may_edit_character(request.user, helper):
+            return Response(
+                {
+                    "error": (
+                        "Only the assisting character's player (or campaign GM) "
+                        "may spend stress to Assist."
+                    )
+                },
+                status=status.HTTP_403_FORBIDDEN,
             )
         if actor.campaign_id != helper.campaign_id or not actor.campaign_id:
             return Response(

@@ -7957,6 +7957,25 @@ const CharacterSheetWrapper = ({
     );
   }, [charCampaign?.campaign_characters, characterId]);
 
+  /** Crewmate you already spent stress to assist (pending on their next ACTION roll). */
+  const outgoingAssistPending = useMemo(() => {
+    const roster = charCampaign?.campaign_characters || [];
+    for (const c of roster) {
+      if (String(c.id) === String(characterId)) continue;
+      const p = c.assist_help_pending ?? c.assistHelpPending;
+      if (!p) continue;
+      const hid = p.helper_character_id ?? p.helperCharacterId;
+      if (String(hid) === String(characterId)) {
+        return {
+          recipientId: c.id,
+          recipientName:
+            String(c.true_name || c.name || "").trim() || `PC ${c.id}`,
+        };
+      }
+    }
+    return null;
+  }, [charCampaign?.campaign_characters, characterId]);
+
   const applyRollPushMode = useCallback(
     (mode) => {
       setDevilBargainConfirmed(false);
@@ -19553,10 +19572,10 @@ const CharacterSheetWrapper = ({
                             <strong style={{ color: "#d1d5db" }}>
                               Teamwork — Assist:
                             </strong>{" "}
-                            pick a same-crew teammate who spends 1 stress to give
-                            you +1d on your next ACTION roll this session. Only one
-                            character may assist a given roll; it applies when you
-                            press Roll below.
+                            pick a same-crew teammate to help — you spend 1 stress
+                            to give them +1d on their next ACTION roll this session.
+                            Only one character may assist a given roll; it applies
+                            when they press Roll on their sheet.
                           </div>
                           {assistHelpPending ? (
                             <div
@@ -19570,7 +19589,7 @@ const CharacterSheetWrapper = ({
                                 color: "#99f6e4",
                               }}
                             >
-                              Pending assist: +1d from{" "}
+                              Incoming assist: +1d from{" "}
                               <strong style={{ color: "#e5e7eb" }}>
                                 {String(
                                   assistHelpPending.helper_name ||
@@ -19580,7 +19599,27 @@ const CharacterSheetWrapper = ({
                               </strong>{" "}
                               (they already marked stress). Resolve it when you Roll
                               an action — or abandon it by rolling once without including
-                              the assist die.
+                              the assist die. It shows in your dice pool preview.
+                            </div>
+                          ) : null}
+                          {outgoingAssistPending ? (
+                            <div
+                              style={{
+                                marginBottom: "10px",
+                                padding: "8px 10px",
+                                borderRadius: "6px",
+                                border: "1px solid #0f766e",
+                                background: "#0f172a",
+                                fontSize: "11px",
+                                color: "#99f6e4",
+                              }}
+                            >
+                              You are assisting{" "}
+                              <strong style={{ color: "#e5e7eb" }}>
+                                {outgoingAssistPending.recipientName}
+                              </strong>{" "}
+                              (+1d on their next ACTION roll; you already marked
+                              stress).
                             </div>
                           ) : null}
                           <div
@@ -19598,25 +19637,46 @@ const CharacterSheetWrapper = ({
                               onChange={(e) => setAssistTargetId(e.target.value)}
                             >
                               <option value="">
-                                Choose crewmate — they spend 1 stress
+                                Choose crewmate to assist — you spend 1 stress
                               </option>
                               {helpCandidates.length === 0 ? (
                                 <option value="" disabled>
                                   No same-crew PCs available
                                 </option>
                               ) : null}
-                              {helpCandidates.map((c) => (
-                                <option key={c.id} value={String(c.id)}>
-                                  {c.true_name || c.name || `PC ${c.id}`}
-                                </option>
-                              ))}
+                              {helpCandidates.map((c) => {
+                                const already =
+                                  !!(c.assist_help_pending ?? c.assistHelpPending);
+                                const label =
+                                  c.true_name || c.name || `PC ${c.id}`;
+                                return (
+                                  <option
+                                    key={c.id}
+                                    value={String(c.id)}
+                                    disabled={already}
+                                  >
+                                    {already
+                                      ? `${label} (already has assist)`
+                                      : label}
+                                  </option>
+                                );
+                              })}
                             </select>
                             <button
                               type="button"
                               disabled={
-                                !!assistHelpPending ||
                                 !assistTargetId ||
-                                assistGrantBusy
+                                assistGrantBusy ||
+                                !!(
+                                  helpCandidates.find(
+                                    (c) =>
+                                      String(c.id) === String(assistTargetId),
+                                  )?.assist_help_pending ??
+                                  helpCandidates.find(
+                                    (c) =>
+                                      String(c.id) === String(assistTargetId),
+                                  )?.assistHelpPending
+                                )
                               }
                               onClick={async () => {
                                 if (!assistTargetId || !characterId) return;
@@ -19625,21 +19685,22 @@ const CharacterSheetWrapper = ({
                                 setAssistGrantMsg(null);
                                 setAssistGrantBusy(true);
                                 try {
+                                  // API: URL = recipient; body helper_character_id = self (pays stress).
                                   await characterAPI.assistHelp(
-                                    Number(characterId),
                                     parseInt(assistTargetId, 10),
+                                    Number(characterId),
                                     Number(activeSessionId),
                                   );
-                                  const helperPc = helpCandidates.find(
+                                  const recipientPc = helpCandidates.find(
                                     (c) =>
                                       String(c.id) === String(assistTargetId),
                                   );
-                                  const hn =
-                                    helperPc?.true_name ||
-                                    helperPc?.name ||
+                                  const rn =
+                                    recipientPc?.true_name ||
+                                    recipientPc?.name ||
                                     "Teammate";
                                   setAssistGrantMsg(
-                                    `${hn} spends 1 stress — you gain +1d when you roll an action while this session is active (shown in the dice preview).`,
+                                    `You spend 1 stress — ${rn} gains +1d on their next ACTION roll this session.`,
                                   );
                                   setAssistTargetId("");
                                   onCampaignRefresh?.();
@@ -19656,7 +19717,7 @@ const CharacterSheetWrapper = ({
                                 fontSize: "11px",
                               }}
                             >
-                              {assistGrantBusy ? "…" : "Grant +1d assist"}
+                              {assistGrantBusy ? "…" : "Assist (+1d, 1 stress)"}
                             </button>
                           </div>
                           {assistGrantMsg ? (

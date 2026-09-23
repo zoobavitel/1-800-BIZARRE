@@ -54,9 +54,12 @@ class AssistHelpPendingTests(TestCase):
         self.session = Session.objects.create(campaign=self.campaign, name="AHP S")
         self.campaign.active_session = self.session
         self.campaign.save(update_fields=["active_session"])
+        # Helper must see recipient via campaign queryset (same as live table play).
+        self.campaign.players.add(self.user_a, self.user_h)
 
     def test_assist_help_creates_pending_second_grant_rejected(self):
-        self.client.force_authenticate(user=self.user_a)
+        # UI: helper initiates from their sheet (self = helper_character_id; URL = recipient).
+        self.client.force_authenticate(user=self.user_h)
         url = f"/api/characters/{self.recipient.id}/assist-help/"
         r1 = self.client.post(
             url,
@@ -79,6 +82,19 @@ class AssistHelpPendingTests(TestCase):
         )
         self.assertEqual(r2.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(AssistHelpPending.objects.count(), 1)
+
+    def test_assist_help_rejects_beneficiary_spending_other_helper(self):
+        """Beneficiary cannot charge a teammate's stress; helper (or GM) must initiate."""
+        self.client.force_authenticate(user=self.user_a)
+        r = self.client.post(
+            f"/api/characters/{self.recipient.id}/assist-help/",
+            {"helper_character_id": self.helper.id, "session_id": self.session.id},
+            format="json",
+        )
+        self.assertEqual(r.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(AssistHelpPending.objects.count(), 0)
+        self.helper.refresh_from_db()
+        self.assertEqual(self.helper.stress, 4)
 
     def test_roll_with_pending_adds_die_without_second_stress(self):
         AssistHelpPending.objects.create(
@@ -156,7 +172,9 @@ class AssistHelpPendingTests(TestCase):
             },
             stress=0,
         )
-        self.client.force_authenticate(user=self.user_a)
+        outsider_user = User.objects.get(username="outsider_ahp")
+        self.campaign.players.add(outsider_user)
+        self.client.force_authenticate(user=outsider_user)
         r = self.client.post(
             f"/api/characters/{self.recipient.id}/assist-help/",
             {
