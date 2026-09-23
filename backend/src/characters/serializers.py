@@ -215,12 +215,31 @@ def _sync_character_progress_clocks(character, raw_clocks, user):
 
     Frontend sends `progress_clocks` as a list of dicts with `segments`/`filled` or
     `max_segments`/`filled_segments`. Omitted or non-list `raw_clocks` leaves DB unchanged.
+
+    Soft-dismissed and completed clocks are never hard-deleted via omission; dismissed
+    rows are skipped on upsert so a stale tab cannot clear dismiss or mutate them.
     """
     from django.db import transaction
 
     if raw_clocks is None or not isinstance(raw_clocks, list):
         return
     campaign_id = character.campaign_id
+    active_session = None
+    if character.campaign_id:
+        camp = getattr(character, "campaign", None)
+        if camp is not None and getattr(camp, "active_session_id", None):
+            active_session = camp.active_session
+        else:
+            try:
+                camp = Campaign.objects.only("id", "active_session_id").get(
+                    pk=character.campaign_id
+                )
+                if camp.active_session_id:
+                    active_session = Session.objects.filter(
+                        pk=camp.active_session_id
+                    ).first()
+            except Campaign.DoesNotExist:
+                pass
     kept_ids = []
     with transaction.atomic():
         for item in raw_clocks:
@@ -277,6 +296,9 @@ def _sync_character_progress_clocks(character, raw_clocks, user):
                     id=pk, character_id=character.id
                 ).first()
                 if existing:
+                    # Stale tab must not mutate or revive dismissed clocks.
+                    if existing.dismissed_at is not None:
+                        continue
                     existing.name = name
                     existing.clock_type = ct
                     existing.max_segments = max_segments
@@ -288,13 +310,13 @@ def _sync_character_progress_clocks(character, raw_clocks, user):
                         existing.session_id = session_id
                     elif item.get("session") is None:
                         existing.session_id = None
-                    existing.save()
+                    existing.save(active_session=active_session)
                     kept_ids.append(existing.id)
                     continue
             created_by_id = (
                 user.id if getattr(user, "is_authenticated", False) else None
             )
-            nu = ProgressClock.objects.create(
+            nu = ProgressClock(
                 name=name,
                 clock_type=ct,
                 max_segments=max_segments,
@@ -307,12 +329,15 @@ def _sync_character_progress_clocks(character, raw_clocks, user):
                 visible_to_players=vis_players,
                 created_by_id=created_by_id,
             )
+            nu.save(active_session=active_session)
             kept_ids.append(nu.id)
         qs = ProgressClock.objects.filter(character_id=character.id)
+        # Never hard-delete dismissed or completed via sheet omission.
+        deletable = qs.filter(dismissed_at__isnull=True, completed=False)
         if kept_ids:
-            qs.exclude(id__in=kept_ids).delete()
+            deletable.exclude(id__in=kept_ids).delete()
         else:
-            qs.delete()
+            deletable.delete()
 
 def _compute_npc_level(stand_coin_stats):
     """Derive NPC level from stand_coin_stats, defaulting missing stats to 'D'."""
@@ -1826,7 +1851,9 @@ class CharacterSerializer(serializers.ModelSerializer):
         rejected = getattr(self, "_rejected_sheet_fields", None)
         if rejected:
             data["rejected_fields"] = rejected
-        clocks = list(instance.progress_clocks.all().order_by("id"))
+        clocks = list(
+            instance.progress_clocks.filter(dismissed_at__isnull=True).order_by("id")
+        )
         data["progress_clocks"] = [
             {
                 "id": c.id,
@@ -1842,6 +1869,11 @@ class CharacterSerializer(serializers.ModelSerializer):
                 "session": c.session_id,
                 "campaign": c.campaign_id,
                 "completed": c.completed,
+                "completed_at": c.completed_at.isoformat() if c.completed_at else None,
+                "completed_session": c.completed_session_id,
+                "dismissed_at": (
+                    c.dismissed_at.isoformat() if c.dismissed_at else None
+                ),
                 "created_by": c.created_by_id,
             }
             for c in clocks
@@ -2942,6 +2974,10 @@ class ProgressClockSerializer(serializers.ModelSerializer):
     created_by_username = serializers.SerializerMethodField()
     created_by_character_name = serializers.SerializerMethodField()
     max_segments = serializers.IntegerField(min_value=1, max_value=12, default=4)
+    completed = serializers.BooleanField(read_only=True)
+    completed_at = serializers.DateTimeField(read_only=True, allow_null=True)
+    completed_session = serializers.PrimaryKeyRelatedField(read_only=True, allow_null=True)
+    dismissed_at = serializers.DateTimeField(read_only=True, allow_null=True)
 
     def to_internal_value(self, data):
         if hasattr(data, "copy"):
@@ -2953,6 +2989,14 @@ class ProgressClockSerializer(serializers.ModelSerializer):
             "",
         ):
             data["max_segments"] = data.get("segments")
+        # Clients must not write completion / dismiss fields.
+        for key in (
+            "completed",
+            "completed_at",
+            "completed_session",
+            "dismissed_at",
+        ):
+            data.pop(key, None)
         return super().to_internal_value(data)
 
     def validate(self, attrs):
@@ -2969,6 +3013,29 @@ class ProgressClockSerializer(serializers.ModelSerializer):
         if filled > max_seg:
             attrs["filled_segments"] = max_seg
         return attrs
+
+    def update(self, instance, validated_data):
+        for key in (
+            "completed",
+            "completed_at",
+            "completed_session",
+            "dismissed_at",
+        ):
+            validated_data.pop(key, None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        return instance
+
+    def create(self, validated_data):
+        for key in (
+            "completed",
+            "completed_at",
+            "completed_session",
+            "dismissed_at",
+        ):
+            validated_data.pop(key, None)
+        return ProgressClock.objects.create(**validated_data)
 
     class Meta:
         model = ProgressClock
@@ -2993,6 +3060,17 @@ class ProgressClockSerializer(serializers.ModelSerializer):
             "created_by_character_name",
             "created_at",
             "completed",
+            "completed_at",
+            "completed_session",
+            "dismissed_at",
+        ]
+        read_only_fields = [
+            "completed",
+            "completed_at",
+            "completed_session",
+            "dismissed_at",
+            "created_by",
+            "created_at",
         ]
 
     def get_created_by_username(self, obj):

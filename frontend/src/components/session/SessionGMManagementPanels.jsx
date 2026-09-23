@@ -128,10 +128,7 @@ function normalizeProgressClockSessionId(clk) {
 }
 
 function progressClockIsDone(clk) {
-  if (clk?.completed === true) return true;
-  const filled = Number(clk?.filled_segments) || 0;
-  const max = Number(clk?.max_segments) || 0;
-  return max > 0 && filled >= max;
+  return clk?.completed === true;
 }
 
 /**
@@ -1576,7 +1573,7 @@ export default function SessionGMManagementPanels({
     let cancelled = false;
     setCampaignWideClocksLoaded(false);
     progressClockAPI
-      .getProgressClocks({ campaign: campaign.id })
+      .getProgressClocks({ campaign: campaign.id, include_dismissed: 1 })
       .then((data) => {
         if (cancelled) return;
         setCampaignWideClocks(unwrapApiArray(data));
@@ -1606,6 +1603,20 @@ export default function SessionGMManagementPanels({
       return String(a.name || "").localeCompare(String(b.name || ""));
     });
   }, [campaignWideClocks, campaign?.gm]);
+
+  /** Completed clocks for GM ledger (this session via completed_session, plus legacy null). */
+  const gmCompletedClocksThisSession = useMemo(() => {
+    const sid = session?.id != null ? Number(session.id) : NaN;
+    const list = (campaignWideClocks || []).filter((c) => {
+      if (c?.completed !== true) return false;
+      if (!Number.isFinite(sid)) return true;
+      if (c.completed_session == null || c.completed_session === "") return true;
+      return Number(c.completed_session) === sid;
+    });
+    return [...list].sort((a, b) =>
+      String(a.name || "").localeCompare(String(b.name || "")),
+    );
+  }, [campaignWideClocks, session?.id]);
 
   /** Progress clocks on this session owned by an NPC (for roster quick ticks). */
   const npcSessionClocksByNpcId = useMemo(() => {
@@ -6062,6 +6073,74 @@ export default function SessionGMManagementPanels({
                         {done ? (
                           <span style={{ color: "#22c55e", marginLeft: 4 }}>
                             complete
+                          </span>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+            <div
+              style={{
+                fontSize: 10,
+                color: "#9ca3af",
+                marginBottom: 6,
+                fontWeight: "bold",
+              }}
+            >
+              Completed clocks (this session)
+            </div>
+            <div
+              style={{
+                fontSize: 10,
+                color: "#6b7280",
+                marginBottom: 10,
+                lineHeight: 1.45,
+              }}
+            >
+              {!campaignWideClocksLoaded ? (
+                <span>Loading completed clocks…</span>
+              ) : gmCompletedClocksThisSession.length === 0 ? (
+                <span>
+                  No completed clocks attributed to this session yet (uses{" "}
+                  <strong>completed_session</strong>, not creation session).
+                </span>
+              ) : (
+                <ul
+                  style={{
+                    margin: 0,
+                    paddingLeft: 18,
+                    color: "#9ca3af",
+                  }}
+                >
+                  {gmCompletedClocksThisSession.map((clk) => {
+                    const cs =
+                      clk.completed_session != null &&
+                      clk.completed_session !== ""
+                        ? Number(clk.completed_session)
+                        : null;
+                    const sessLabel =
+                      cs == null
+                        ? "completed session unknown"
+                        : Number(cs) === Number(session?.id)
+                          ? "this session"
+                          : `session #${cs}`;
+                    const dismissed = clk.dismissed_at != null;
+                    return (
+                      <li key={`gm-done-${clk.id}`}>
+                        <span style={{ color: "#d1d5db" }}>
+                          {clk.name || "Clock"}
+                        </span>
+                        {` · ${progressClockOwnerLabel(clk)} · `}
+                        {Number(clk.filled_segments) || 0}/
+                        {Number(clk.max_segments) || 0}
+                        <span style={{ color: "#71717a" }}>
+                          {` · ${sessLabel}`}
+                        </span>
+                        {dismissed ? (
+                          <span style={{ color: "#a78bfa", marginLeft: 4 }}>
+                            dismissed
                           </span>
                         ) : null}
                       </li>

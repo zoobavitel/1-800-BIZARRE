@@ -2758,6 +2758,59 @@ const CharacterSheetWrapper = ({
   const [newClockName, setNewClockName] = useState("");
   const [newClockSegments, setNewClockSegments] = useState(4);
   const [newClockShared, setNewClockShared] = useState(false);
+  const [hideCompletedClocks, setHideCompletedClocks] = useState(() =>
+    readCharSheetBool(characterId, "hide-completed-clocks", true),
+  );
+  const setHideCompletedClocksPersist = useCallback(
+    (updater) => {
+      setHideCompletedClocks((prev) => {
+        const next = typeof updater === "function" ? updater(prev) : updater;
+        writeCharSheetBool(characterId, "hide-completed-clocks", next);
+        return next;
+      });
+    },
+    [characterId],
+  );
+  const completedClockCount = useMemo(
+    () => (clocks || []).filter((c) => c?.completed === true).length,
+    [clocks],
+  );
+  const visibleClocks = useMemo(() => {
+    if (!hideCompletedClocks) return clocks || [];
+    return (clocks || []).filter((c) => c?.completed !== true);
+  }, [clocks, hideCompletedClocks]);
+  const removeOrDismissClock = useCallback(
+    async (clk) => {
+      markDirtyIntent();
+      bumpClocksHydrateGuard();
+      if (clk?.completed === true && isPersistedProgressClockId(clk.id)) {
+        try {
+          await progressClockAPI.dismissProgressClock(clk.id);
+        } catch {
+          /* still remove from UI; next hydrate reconciles */
+        }
+        setClocks((p) => p.filter((c) => c.id !== clk.id));
+        return;
+      }
+      setClocks((p) => p.filter((c) => c.id !== clk.id));
+    },
+    [markDirtyIntent, bumpClocksHydrateGuard],
+  );
+  const dismissAllCompletedClocks = useCallback(async () => {
+    const done = (clocks || []).filter(
+      (c) => c?.completed === true && isPersistedProgressClockId(c.id),
+    );
+    if (done.length === 0) return;
+    markDirtyIntent();
+    bumpClocksHydrateGuard();
+    await Promise.all(
+      done.map((c) =>
+        progressClockAPI.dismissProgressClock(c.id).catch(() => null),
+      ),
+    );
+    const doneIds = new Set(done.map((c) => c.id));
+    setClocks((p) => p.filter((c) => !doneIds.has(c.id)));
+  }, [clocks, markDirtyIntent, bumpClocksHydrateGuard]);
   const [customAbilityModal, setCustomAbilityModal] = useState(null); // { type, name, uses, items } or null
   // Standard ability picker (Option A: searchable dropdown + preview)
   const [standardAbilitySearch, setStandardAbilitySearch] = useState("");
@@ -13252,13 +13305,72 @@ const CharacterSheetWrapper = ({
                       <div id="character-sheet-clocks-panel">
                     <div
                       style={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        alignItems: "center",
+                        gap: "8px",
+                        marginBottom: "8px",
+                        fontSize: "10px",
+                        color: "#9ca3af",
+                      }}
+                    >
+                      <label
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "4px",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={hideCompletedClocks}
+                          onChange={(e) =>
+                            setHideCompletedClocksPersist(e.target.checked)
+                          }
+                        />
+                        Hide completed
+                      </label>
+                      {completedClockCount > 0 ? (
+                        <span
+                          title="Completed clocks still on sheet"
+                          style={{
+                            background: "#1e3a5f",
+                            color: "#93c5fd",
+                            borderRadius: "999px",
+                            padding: "1px 8px",
+                            fontWeight: 600,
+                          }}
+                        >
+                          {completedClockCount} done
+                        </span>
+                      ) : null}
+                      {canEditSheet && completedClockCount > 0 ? (
+                        <button
+                          type="button"
+                          onClick={dismissAllCompletedClocks}
+                          style={{
+                            ...S.btn,
+                            fontSize: "9px",
+                            padding: "2px 8px",
+                            background: "#3f1d1d",
+                            color: "#fca5a5",
+                          }}
+                          title="Soft-dismiss all completed clocks from this sheet"
+                        >
+                          Dismiss completed
+                        </button>
+                      ) : null}
+                    </div>
+                    <div
+                      style={{
                         display: "grid",
                         gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
                         gap: "6px",
                         marginBottom: "8px",
                       }}
                     >
-                      {clocks.map((clk) => {
+                      {visibleClocks.map((clk) => {
                         const gmManaged = isGmManagedProgressClock(
                           clk,
                           charCampaign?.gm,
@@ -13277,11 +13389,12 @@ const CharacterSheetWrapper = ({
                         <div
                           key={progressClockClientKey(clk)}
                           style={{
-                            background: "#374151",
+                            background: clk.completed ? "#1f2937" : "#374151",
                             padding: "4px",
                             borderRadius: "4px",
                             textAlign: "center",
                             minWidth: 0,
+                            opacity: clk.completed ? 0.75 : 1,
                           }}
                         >
                           <input
@@ -13410,11 +13523,7 @@ const CharacterSheetWrapper = ({
                           )}
                           <button
                             onClick={() => {
-                              markDirtyIntent();
-                              bumpClocksHydrateGuard();
-                              setClocks((p) =>
-                                p.filter((c) => c.id !== clk.id),
-                              );
+                              removeOrDismissClock(clk);
                             }}
                             style={{
                               color: "#f87171",
@@ -13424,6 +13533,11 @@ const CharacterSheetWrapper = ({
                               fontSize: "10px",
                               padding: "0",
                             }}
+                            title={
+                              clk.completed
+                                ? "Dismiss completed clock from sheet"
+                                : "Remove clock"
+                            }
                           >
                             ✕
                           </button>

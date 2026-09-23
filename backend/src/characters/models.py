@@ -1993,6 +1993,101 @@ class ProgressClock(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     completed = models.BooleanField(default=False)
+    completed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When this clock last transitioned to completed.",
+    )
+    completed_session = models.ForeignKey(
+        "Session",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="completed_progress_clocks",
+        help_text="Session where the clock finished (not where it was created).",
+    )
+    dismissed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Soft-hide from character sheet; retained for GM ledger.",
+    )
+
+    def _resolve_active_session(self, active_session=None):
+        """Prefer explicit session; else campaign/character campaign active_session."""
+        if active_session is not None:
+            return active_session
+        campaign = None
+        if self.campaign_id:
+            campaign = getattr(self, "campaign", None)
+            if campaign is None or getattr(campaign, "pk", None) != self.campaign_id:
+                try:
+                    campaign = Campaign.objects.only("id", "active_session_id").get(
+                        pk=self.campaign_id
+                    )
+                except Campaign.DoesNotExist:
+                    campaign = None
+        elif self.character_id:
+            char = getattr(self, "character", None)
+            if char is None or getattr(char, "pk", None) != self.character_id:
+                try:
+                    char = Character.objects.only("id", "campaign_id").get(
+                        pk=self.character_id
+                    )
+                except Character.DoesNotExist:
+                    char = None
+            if char and char.campaign_id:
+                try:
+                    campaign = Campaign.objects.only("id", "active_session_id").get(
+                        pk=char.campaign_id
+                    )
+                except Campaign.DoesNotExist:
+                    campaign = None
+        if campaign is None or not campaign.active_session_id:
+            return None
+        sess = getattr(campaign, "active_session", None)
+        if sess is not None and getattr(sess, "pk", None) == campaign.active_session_id:
+            return sess
+        try:
+            return Session.objects.get(pk=campaign.active_session_id)
+        except Session.DoesNotExist:
+            return None
+
+    def refresh_completion(self, active_session=None):
+        """Derive completed / completed_at / completed_session from filled vs max.
+
+        Returns the set of field names mutated (for save update_fields union).
+        """
+        mutated = set()
+        max_seg = int(self.max_segments or 0)
+        filled = int(self.filled_segments or 0)
+        is_done = max_seg > 0 and filled >= max_seg
+        if is_done:
+            if not self.completed:
+                self.completed = True
+                mutated.add("completed")
+                self.completed_at = timezone.now()
+                mutated.add("completed_at")
+                sess = self._resolve_active_session(active_session)
+                self.completed_session = sess
+                mutated.add("completed_session")
+        else:
+            if self.completed:
+                self.completed = False
+                mutated.add("completed")
+            if self.completed_at is not None:
+                self.completed_at = None
+                mutated.add("completed_at")
+            if self.completed_session_id is not None:
+                self.completed_session = None
+                mutated.add("completed_session")
+        return mutated
+
+    def save(self, *args, active_session=None, **kwargs):
+        update_fields = kwargs.get("update_fields")
+        mutated = self.refresh_completion(active_session=active_session)
+        if update_fields is not None and mutated:
+            kwargs["update_fields"] = list(set(update_fields) | mutated)
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.name} ({self.filled_segments}/{self.max_segments})"

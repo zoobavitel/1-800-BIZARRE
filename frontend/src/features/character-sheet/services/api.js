@@ -1005,6 +1005,14 @@ export const progressClockAPI = {
     apiRequest(`/progress-clocks/${id}/`, {
       method: "DELETE",
     }),
+  dismissProgressClock: (id) =>
+    apiRequest(`/progress-clocks/${id}/dismiss/`, {
+      method: "POST",
+    }),
+  undismissProgressClock: (id) =>
+    apiRequest(`/progress-clocks/${id}/undismiss/`, {
+      method: "POST",
+    }),
 };
 
 // Roll API (dice history; GM can PATCH position/effect, grant XP)
