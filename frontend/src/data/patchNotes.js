@@ -4,6 +4,25 @@
  */
 export const PATCH_NOTES = [
   {
+    "date": "2026-09-23",
+    "version": null,
+    "sections": [
+      {
+        "title": "Added",
+        "items": [
+          "PC expand panels, token faces, roster polish",
+          "downtime Train buttons for XP tracks"
+        ]
+      },
+      {
+        "title": "Other",
+        "items": [
+          "merge: bring sheet Train XP onto session-npc-photo-cards"
+        ]
+      }
+    ]
+  },
+  {
     "date": "2026-09-22",
     "version": null,
     "sections": [
@@ -609,8 +628,7 @@ export const PATCH_NOTES = [
           "stop poll/autosave wiping XP ticks",
           "ticks spend free pool; drop +1 buttons",
           "tick marks allocate pool xp",
-          "coerce xp_clocks in add-xp",
-          "ticks allocate from free pool"
+          "coerce xp_clocks in add-xp"
         ]
       },
       {
@@ -628,9 +646,7 @@ export const PATCH_NOTES = [
       {
         "title": "Added",
         "items": [
-          "untick XP tracks refunds free pool",
-          "add manual XP to free pool",
-          "add sheet edit undo/redo + XP/GM separation"
+          "untick XP tracks refunds free pool"
         ]
       }
     ]
