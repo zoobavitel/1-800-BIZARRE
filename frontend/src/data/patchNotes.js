@@ -10,6 +10,7 @@ export const PATCH_NOTES = [
       {
         "title": "Added",
         "items": [
+          "Manual XP column, ledger collapse, inventory picker, roster grid",
           "server-derived completion and soft-dismiss",
           "move crew description under name, upgrades into abilities",
           "split CREW MODE identity and factions",
@@ -609,8 +610,7 @@ export const PATCH_NOTES = [
           "ticks spend free pool; drop +1 buttons",
           "tick marks allocate pool xp",
           "coerce xp_clocks in add-xp",
-          "ticks allocate from free pool",
-          "expect heritage undo clamp at track cap"
+          "ticks allocate from free pool"
         ]
       },
       {
