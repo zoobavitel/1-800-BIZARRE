@@ -34,6 +34,7 @@ import {
   mergeEndLiveRowsWithScorecard,
   scorecardStatsByCharFromXpEntries,
   sumManualTrackXpForSession,
+  sumManualNonTrackXpForSession,
 } from "../features/campaign-management/sessionEndLiveXpPreview";
 
 const NPC_SESSION_RETURN_KEY = "hftf-npc-return-to-session";
@@ -4217,7 +4218,13 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
             .list({ character: ch.id })
             .catch(() => []);
           const arr = Array.isArray(raw) ? raw : raw?.results || [];
-          return [ch.id, sumManualTrackXpForSession(arr, sid)];
+          return [
+            ch.id,
+            {
+              track: sumManualTrackXpForSession(arr, sid),
+              nonTrack: sumManualNonTrackXpForSession(arr, sid),
+            },
+          ];
         }),
       );
       if (cancelled) return;
@@ -4261,7 +4268,15 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
 
   const clearActiveRowsWithManual = useMemo(() => {
     return (clearActiveEndLivePreview.perPcRows || []).map((row) => {
-      const manualSessionXp = clearActiveManualXpByChar[row.characterId] ?? 0;
+      const raw = clearActiveManualXpByChar[row.characterId];
+      const manualSessionXp =
+        typeof raw === "object" && raw != null
+          ? Number(raw.track) || 0
+          : Number(raw) || 0;
+      const manualNonTrackXp =
+        typeof raw === "object" && raw != null
+          ? Number(raw.nonTrack) || 0
+          : 0;
       const totalSessionXpPreview =
         (row.developmentPoolXp || 0) +
         (row.totalEncodedPlaybookXp || 0) +
@@ -4269,6 +4284,7 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
       return {
         ...row,
         manualSessionXp,
+        manualNonTrackXp,
         totalSessionXpPreview,
       };
     });
@@ -4876,6 +4892,28 @@ function SessionDetail({
   const [sessionManualXpByChar, setSessionManualXpByChar] = useState({});
   const [sessionManualXpSyncReady, setSessionManualXpSyncReady] =
     useState(false);
+  const [sessionEquipmentCatalog, setSessionEquipmentCatalog] = useState([]);
+
+  useEffect(() => {
+    if (!campaign?.id) {
+      setSessionEquipmentCatalog([]);
+      return undefined;
+    }
+    let cancelled = false;
+    equipmentAPI
+      .list({ campaign: campaign.id, available_for_campaign: true })
+      .then((list) => {
+        if (!cancelled) {
+          setSessionEquipmentCatalog(Array.isArray(list) ? list : []);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setSessionEquipmentCatalog([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [campaign?.id]);
 
   const refreshSessionCharacters = useCallback(async () => {
     if (!campaign?.id) return;
@@ -5136,7 +5174,15 @@ function SessionDetail({
 
   const endLiveRowsWithManual = useMemo(() => {
     return (endLivePreview.perPcRows || []).map((row) => {
-      const manualSessionXp = sessionManualXpByChar[row.characterId] ?? 0;
+      const raw = sessionManualXpByChar[row.characterId];
+      const manualSessionXp =
+        typeof raw === "object" && raw != null
+          ? Number(raw.track) || 0
+          : Number(raw) || 0;
+      const manualNonTrackXp =
+        typeof raw === "object" && raw != null
+          ? Number(raw.nonTrack) || 0
+          : 0;
       const totalSessionXpPreview =
         (row.developmentPoolXp || 0) +
         (row.totalEncodedPlaybookXp || 0) +
@@ -5144,6 +5190,7 @@ function SessionDetail({
       return {
         ...row,
         manualSessionXp,
+        manualNonTrackXp,
         totalSessionXpPreview,
       };
     });
@@ -5180,7 +5227,13 @@ function SessionDetail({
             .list({ character: ch.id })
             .catch(() => []);
           const arr = Array.isArray(raw) ? raw : raw?.results || [];
-          return [ch.id, sumManualTrackXpForSession(arr, sid)];
+          return [
+            ch.id,
+            {
+              track: sumManualTrackXpForSession(arr, sid),
+              nonTrack: sumManualNonTrackXpForSession(arr, sid),
+            },
+          ];
         }),
       );
       if (cancelled) return;
@@ -6213,7 +6266,10 @@ function SessionDetail({
                   <strong>Manual→tracks</strong> is the separate ledger of{" "}
                   <code>MANUAL</code>-trigger track grants ([insight]/[prowess]/[resolve]/[heritage]/[playbook])
                   added via the character sheet&apos;s <em>Add XP</em> action — never
-                  double-counted with the trigger toggles.
+                  double-counted with the trigger toggles.{" "}
+                  <strong>Manual XP</strong> is other MANUAL awards for this session
+                  (including <code>[pool]</code> free-pool grants) that are not on a
+                  named track.
                 </p>
               </>
             ) : null}
@@ -6495,6 +6551,7 @@ function SessionDetail({
         onSessionCharactersRefresh={refreshSessionCharacters}
         onSessionPanelRefresh={() => refetchSessionPanel("manual")}
         user={user}
+        equipmentCatalogItems={sessionEquipmentCatalog}
       />
 
       {/* Goals */}

@@ -126,6 +126,20 @@ export function sumManualTrackXpForSession(entries, sessionId) {
   }, 0);
 }
 
+/** MANUAL XP for a session that is not routed to a named track prefix (includes `[pool]`). */
+export function sumManualNonTrackXpForSession(entries, sessionId) {
+  const sid = Number(sessionId);
+  if (!Number.isFinite(sid)) return 0;
+  const re = /^\[(insight|prowess|resolve|heritage|playbook)\]/i;
+  const list = Array.isArray(entries) ? entries : entries?.results || [];
+  return list.reduce((sum, e) => {
+    if (Number(e?.session) !== sid) return sum;
+    if (String(e?.trigger || "").toUpperCase() !== "MANUAL") return sum;
+    if (re.test(String(e?.description || ""))) return sum;
+    return sum + (Number(e?.xp_gained) || 0);
+  }, 0);
+}
+
 /**
  * Normalize session `xp_entries` (array or `{ results }`) into a list.
  * @param {unknown} xpEntries
