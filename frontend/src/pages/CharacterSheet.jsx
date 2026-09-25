@@ -30,6 +30,7 @@ import {
 import NpcsStandCoin from "../components/NpcsStandCoin";
 import ProgressClock from "../components/ProgressClock";
 import AvatarCropModal from "../components/AvatarCropModal";
+import { SessionHelpTip } from "../components/session/sessionShellUi";
 import AdvancementPlanStrip from "../features/character-sheet/components/AdvancementPlanStrip";
 import AdvancementPlanPanel from "../features/character-sheet/components/AdvancementPlanPanel";
 import {
@@ -251,6 +252,7 @@ function progressToUpgrades(progress) {
       insight: false,
       prowess: false,
       resolve: false,
+      heritage: false,
       personal: false,
       mastery: false,
     },
@@ -1864,6 +1866,35 @@ const CharacterSheetWrapper = ({
   const [poolAllocateBusy, setPoolAllocateBusy] = useState(false);
   const [directAdvanceBusy, setDirectAdvanceBusy] = useState(false);
   const [poolTickError, setPoolTickError] = useState(null);
+  const [trainBusyTrack, setTrainBusyTrack] = useState(null);
+  const [trainError, setTrainError] = useState(null);
+  const [xpHelpOpen, setXpHelpOpen] = useState(false);
+  const [downtimeTrainedTracks, setDowntimeTrainedTracks] = useState(() =>
+    Array.isArray(character?.downtimeTrainedTracks)
+      ? character.downtimeTrainedTracks.map((t) =>
+          String(t || "")
+            .trim()
+            .toLowerCase(),
+        )
+      : [],
+  );
+
+  // XP card ? help: click outside or Escape closes
+  useEffect(() => {
+    if (!xpHelpOpen) return undefined;
+    const handlePointer = (e) => {
+      if (!e.target?.closest?.("[data-xp-help]")) setXpHelpOpen(false);
+    };
+    const handleKey = (e) => {
+      if (e.key === "Escape") setXpHelpOpen(false);
+    };
+    document.addEventListener("mousedown", handlePointer);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("mousedown", handlePointer);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [xpHelpOpen]);
 
   // Abort in-flight autosave when SSE says character / XP / pending advanced.
   useEffect(() => {
@@ -2065,6 +2096,19 @@ const CharacterSheetWrapper = ({
       setPendingAdvanceCounts({ ...counts });
     }
   }, [character?.id, character?.pendingAdvanceCounts, sheetDraftIsDirty]);
+
+  useEffect(() => {
+    const trained = character?.downtimeTrainedTracks;
+    if (Array.isArray(trained)) {
+      setDowntimeTrainedTracks(
+        trained.map((t) =>
+          String(t || "")
+            .trim()
+            .toLowerCase(),
+        ),
+      );
+    }
+  }, [character?.id, character?.downtimeTrainedTracks]);
 
   useEffect(() => {
     const plan = character?.advancementPlan;
@@ -2758,6 +2802,59 @@ const CharacterSheetWrapper = ({
   const [newClockName, setNewClockName] = useState("");
   const [newClockSegments, setNewClockSegments] = useState(4);
   const [newClockShared, setNewClockShared] = useState(false);
+  const [hideCompletedClocks, setHideCompletedClocks] = useState(() =>
+    readCharSheetBool(characterId, "hide-completed-clocks", true),
+  );
+  const setHideCompletedClocksPersist = useCallback(
+    (updater) => {
+      setHideCompletedClocks((prev) => {
+        const next = typeof updater === "function" ? updater(prev) : updater;
+        writeCharSheetBool(characterId, "hide-completed-clocks", next);
+        return next;
+      });
+    },
+    [characterId],
+  );
+  const completedClockCount = useMemo(
+    () => (clocks || []).filter((c) => c?.completed === true).length,
+    [clocks],
+  );
+  const visibleClocks = useMemo(() => {
+    if (!hideCompletedClocks) return clocks || [];
+    return (clocks || []).filter((c) => c?.completed !== true);
+  }, [clocks, hideCompletedClocks]);
+  const removeOrDismissClock = useCallback(
+    async (clk) => {
+      markDirtyIntent();
+      bumpClocksHydrateGuard();
+      if (clk?.completed === true && isPersistedProgressClockId(clk.id)) {
+        try {
+          await progressClockAPI.dismissProgressClock(clk.id);
+        } catch {
+          /* still remove from UI; next hydrate reconciles */
+        }
+        setClocks((p) => p.filter((c) => c.id !== clk.id));
+        return;
+      }
+      setClocks((p) => p.filter((c) => c.id !== clk.id));
+    },
+    [markDirtyIntent, bumpClocksHydrateGuard],
+  );
+  const dismissAllCompletedClocks = useCallback(async () => {
+    const done = (clocks || []).filter(
+      (c) => c?.completed === true && isPersistedProgressClockId(c.id),
+    );
+    if (done.length === 0) return;
+    markDirtyIntent();
+    bumpClocksHydrateGuard();
+    await Promise.all(
+      done.map((c) =>
+        progressClockAPI.dismissProgressClock(c.id).catch(() => null),
+      ),
+    );
+    const doneIds = new Set(done.map((c) => c.id));
+    setClocks((p) => p.filter((c) => !doneIds.has(c.id)));
+  }, [clocks, markDirtyIntent, bumpClocksHydrateGuard]);
   const [customAbilityModal, setCustomAbilityModal] = useState(null); // { type, name, uses, items } or null
   // Standard ability picker (Option A: searchable dropdown + preview)
   const [standardAbilitySearch, setStandardAbilitySearch] = useState("");
@@ -2860,6 +2957,7 @@ const CharacterSheetWrapper = ({
         insight: false,
         prowess: false,
         resolve: false,
+        heritage: false,
         personal: false,
         mastery: false,
       },
@@ -4557,6 +4655,90 @@ const CharacterSheetWrapper = ({
       setPoolTickError(msg);
     } finally {
       setPoolAllocateBusy(false);
+    }
+  };
+
+  const trainXpAmountForTrack = (trackKey) => {
+    const t = String(trackKey || "")
+      .trim()
+      .toLowerCase();
+    const training = crewData?.upgrades?.training || {};
+    if (t === "playbook") return training.personal ? 2 : 1;
+    if (
+      t === "insight" ||
+      t === "prowess" ||
+      t === "resolve" ||
+      t === "heritage"
+    ) {
+      return training[t] ? 2 : 1;
+    }
+    return 1;
+  };
+
+  const handleTrainTrack = async (trackKey) => {
+    const track = String(trackKey || "")
+      .trim()
+      .toLowerCase();
+    if (!characterId || !canEditSheet) return;
+    if (
+      !["insight", "prowess", "resolve", "heritage", "playbook"].includes(
+        track,
+      )
+    ) {
+      return;
+    }
+    if (downtimeTrainedTracks.includes(track)) {
+      setTrainError(
+        `Already trained ${track} this downtime phase (once per track).`,
+      );
+      return;
+    }
+    if (trainBusyTrack || poolAllocateBusy) return;
+
+    setTrainBusyTrack(track);
+    setTrainError(null);
+    setPoolTickError(null);
+    try {
+      const res = await characterAPI.train(characterId, {
+        track,
+        ...(activeSessionId ? { session_id: activeSessionId } : {}),
+      });
+      if (res?.xp_clocks && typeof res.xp_clocks === "object") {
+        setXp((prev) => ({ ...prev, ...res.xp_clocks }));
+        setCharData((prev) => ({
+          ...prev,
+          xp: { ...(prev.xp || {}), ...res.xp_clocks },
+        }));
+      }
+      if (Array.isArray(res?.downtime_trained_tracks)) {
+        const next = res.downtime_trained_tracks.map((t) =>
+          String(t || "")
+            .trim()
+            .toLowerCase(),
+        );
+        setDowntimeTrainedTracks(next);
+        setCharData((prev) => ({ ...prev, downtimeTrainedTracks: next }));
+      } else {
+        setDowntimeTrainedTracks((prev) =>
+          prev.includes(track) ? prev : [...prev, track],
+        );
+      }
+      if (
+        typeof res?.pendings_minted === "number" &&
+        res.pendings_minted > 0
+      ) {
+        setPendingAdvanceCounts((prev) => ({
+          ...prev,
+          [track]:
+            (Number(prev?.[track]) || 0) + Number(res.pendings_minted || 0),
+        }));
+      }
+    } catch (e) {
+      const msg = e?.message || "Could not train that track";
+      setTrainError(msg);
+      setPoolTickError(msg);
+    } finally {
+      setTrainBusyTrack(null);
     }
   };
 
@@ -7774,6 +7956,25 @@ const CharacterSheetWrapper = ({
     return (
       me?.assist_help_pending ?? me?.assistHelpPending ?? null
     );
+  }, [charCampaign?.campaign_characters, characterId]);
+
+  /** Crewmate you already spent stress to assist (pending on their next ACTION roll). */
+  const outgoingAssistPending = useMemo(() => {
+    const roster = charCampaign?.campaign_characters || [];
+    for (const c of roster) {
+      if (String(c.id) === String(characterId)) continue;
+      const p = c.assist_help_pending ?? c.assistHelpPending;
+      if (!p) continue;
+      const hid = p.helper_character_id ?? p.helperCharacterId;
+      if (String(hid) === String(characterId)) {
+        return {
+          recipientId: c.id,
+          recipientName:
+            String(c.true_name || c.name || "").trim() || `PC ${c.id}`,
+        };
+      }
+    }
+    return null;
   }, [charCampaign?.campaign_characters, characterId]);
 
   const applyRollPushMode = useCallback(
@@ -13252,13 +13453,72 @@ const CharacterSheetWrapper = ({
                       <div id="character-sheet-clocks-panel">
                     <div
                       style={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        alignItems: "center",
+                        gap: "8px",
+                        marginBottom: "8px",
+                        fontSize: "10px",
+                        color: "#9ca3af",
+                      }}
+                    >
+                      <label
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "4px",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={hideCompletedClocks}
+                          onChange={(e) =>
+                            setHideCompletedClocksPersist(e.target.checked)
+                          }
+                        />
+                        Hide completed
+                      </label>
+                      {completedClockCount > 0 ? (
+                        <span
+                          title="Completed clocks still on sheet"
+                          style={{
+                            background: "#1e3a5f",
+                            color: "#93c5fd",
+                            borderRadius: "999px",
+                            padding: "1px 8px",
+                            fontWeight: 600,
+                          }}
+                        >
+                          {completedClockCount} done
+                        </span>
+                      ) : null}
+                      {canEditSheet && completedClockCount > 0 ? (
+                        <button
+                          type="button"
+                          onClick={dismissAllCompletedClocks}
+                          style={{
+                            ...S.btn,
+                            fontSize: "9px",
+                            padding: "2px 8px",
+                            background: "#3f1d1d",
+                            color: "#fca5a5",
+                          }}
+                          title="Soft-dismiss all completed clocks from this sheet"
+                        >
+                          Dismiss completed
+                        </button>
+                      ) : null}
+                    </div>
+                    <div
+                      style={{
                         display: "grid",
                         gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
                         gap: "6px",
                         marginBottom: "8px",
                       }}
                     >
-                      {clocks.map((clk) => {
+                      {visibleClocks.map((clk) => {
                         const gmManaged = isGmManagedProgressClock(
                           clk,
                           charCampaign?.gm,
@@ -13277,11 +13537,12 @@ const CharacterSheetWrapper = ({
                         <div
                           key={progressClockClientKey(clk)}
                           style={{
-                            background: "#374151",
+                            background: clk.completed ? "#1f2937" : "#374151",
                             padding: "4px",
                             borderRadius: "4px",
                             textAlign: "center",
                             minWidth: 0,
+                            opacity: clk.completed ? 0.75 : 1,
                           }}
                         >
                           <input
@@ -13410,11 +13671,7 @@ const CharacterSheetWrapper = ({
                           )}
                           <button
                             onClick={() => {
-                              markDirtyIntent();
-                              bumpClocksHydrateGuard();
-                              setClocks((p) =>
-                                p.filter((c) => c.id !== clk.id),
-                              );
+                              removeOrDismissClock(clk);
                             }}
                             style={{
                               color: "#f87171",
@@ -13424,6 +13681,11 @@ const CharacterSheetWrapper = ({
                               fontSize: "10px",
                               padding: "0",
                             }}
+                            title={
+                              clk.completed
+                                ? "Dismiss completed clock from sheet"
+                                : "Remove clock"
+                            }
                           >
                             ✕
                           </button>
@@ -13778,41 +14040,45 @@ const CharacterSheetWrapper = ({
                       paddingBottom: "10px",
                     }}
                   >
-                    <span
-                      style={{
-                        color: "#f87171",
-                        fontSize: "11px",
-                        fontWeight: "bold",
-                        marginBottom: "6px",
-                        display: "block",
-                      }}
-                    >
-                      VICE ROLL
-                    </span>
                     <div
                       style={{
-                        fontSize: "11px",
-                        color: "#9ca3af",
-                        lineHeight: 1.45,
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "flex-start",
+                        gap: "8px",
                         marginBottom: "8px",
                       }}
                     >
-                      Roll dice equal to your{" "}
-                      <span style={{ color: "#e5e7eb", fontWeight: "bold" }}>
-                        lowest attribute
-                      </span>{" "}
-                      (Insight / Prowess / Resolve). Clear stress equal to the{" "}
-                      <span style={{ color: "#e5e7eb", fontWeight: "bold" }}>
-                        highest die
+                      <span
+                        style={{
+                          color: "#f87171",
+                          fontSize: "11px",
+                          fontWeight: "bold",
+                        }}
+                      >
+                        VICE ROLL
                       </span>
-                      . If that number is greater than stress you had marked,
-                      you{" "}
-                      <span style={{ color: "#fbbf24", fontWeight: "bold" }}>
-                        overindulge
-                      </span>
-                      . Skipping vice in downtime: take stress equal to your
-                      trauma ({traumaMarkedCount}); no trauma means vice cannot
-                      force stress yet.
+                      <SessionHelpTip
+                        label="Vice roll help"
+                        panelId="character-sheet-vice-roll-help"
+                      >
+                        Roll dice equal to your{" "}
+                        <span style={{ color: "#e5e7eb", fontWeight: "bold" }}>
+                          lowest attribute
+                        </span>{" "}
+                        (Insight / Prowess / Resolve). Clear stress equal to the{" "}
+                        <span style={{ color: "#e5e7eb", fontWeight: "bold" }}>
+                          highest die
+                        </span>
+                        . If that number is greater than stress you had marked,
+                        you{" "}
+                        <span style={{ color: "#fbbf24", fontWeight: "bold" }}>
+                          overindulge
+                        </span>
+                        . Skipping vice in downtime: take stress equal to your
+                        trauma ({traumaMarkedCount}); no trauma means vice cannot
+                        force stress yet.
+                      </SessionHelpTip>
                     </div>
                     {String(charData.vice || "").trim() ? (
                       <div
@@ -14688,8 +14954,113 @@ const CharacterSheetWrapper = ({
                 </div>
 
                 {/* XP & Advancement — free pool spendable with or without active session */}
-                <div style={S.card}>
-                  <span style={S.lbl}>EXPERIENCE TRACKS</span>
+                <div style={{ ...S.card, position: "relative" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "flex-start",
+                      gap: "8px",
+                      marginBottom: "4px",
+                    }}
+                  >
+                    <span style={{ ...S.lbl, marginBottom: 0 }}>
+                      EXPERIENCE TRACKS
+                    </span>
+                    <div data-xp-help style={{ position: "relative", flexShrink: 0 }}>
+                      <button
+                        type="button"
+                        aria-label="XP help"
+                        aria-expanded={xpHelpOpen}
+                        aria-controls="xp-help-panel"
+                        onClick={() => setXpHelpOpen((o) => !o)}
+                        style={{
+                          width: 22,
+                          height: 22,
+                          borderRadius: "50%",
+                          border: "1px solid #4b5563",
+                          background: xpHelpOpen ? "#1f2937" : "#111827",
+                          color: "#9ca3af",
+                          fontSize: "12px",
+                          fontWeight: "bold",
+                          lineHeight: 1,
+                          padding: 0,
+                          cursor: "pointer",
+                          fontFamily: "var(--font-mono, monospace)",
+                        }}
+                      >
+                        ?
+                      </button>
+                      {xpHelpOpen ? (
+                        <div
+                          id="xp-help-panel"
+                          role="region"
+                          aria-label="XP help"
+                          style={{
+                            position: "absolute",
+                            top: "calc(100% + 6px)",
+                            right: 0,
+                            zIndex: 20,
+                            width: "min(340px, calc(100vw - 48px))",
+                            maxHeight: "min(420px, 70vh)",
+                            overflowY: "auto",
+                            padding: "10px 12px",
+                            background: "#0d1117",
+                            border: "1px solid #4b5563",
+                            borderRadius: "6px",
+                            boxShadow: "0 8px 24px rgba(0,0,0,0.45)",
+                            fontSize: "10px",
+                            color: "#9ca3af",
+                            lineHeight: 1.45,
+                          }}
+                        >
+                          <p style={{ margin: "0 0 10px" }}>
+                            Free pool (not tied to a live session). Earned from
+                            scorecard and Stand Development; bank anytime onto the
+                            tracks below. Filling a track mints a pending advance —
+                            leftover marks stay. Take advance redeems a pending (no
+                            second XP spend). Desperate-roll XP marks attribute
+                            tracks automatically and never sits here.
+                          </p>
+                          <p style={{ margin: "0 0 10px" }}>
+                            Tick empty boxes to bank Available XP onto that track.
+                            Filling a track mints a pending advance (leftover stays).
+                            Take advance redeems one pending (attribute → +1 action
+                            dot; heritage → +1 HP; playbook → coin / ability /
+                            acquire Stand).
+                          </p>
+                          <p style={{ margin: "0 0 10px" }}>
+                            <strong style={{ color: "#e5e7eb" }}>
+                              XP REQUIREMENTS (SRD):
+                            </strong>{" "}
+                            Desperate ACTION → +1 on that attribute (group desperate
+                            too); 0-dot desperate → +2. Desperate Power / Speed /
+                            Precision stand dice → +1 playbook (innate, uncapped; not
+                            Range, Durability, or Dev). End-session toggles + Dev
+                            bonus → free pool (bank onto tracks later). Downtime
+                            Train buttons mark 1 XP (2 with crew Training upgrade)
+                            once per track per phase (Heritage Train is house-rule).
+                            Activity budget not tracked yet. Crew XP: use crew
+                            scorecard triggers.
+                          </p>
+                          <p style={{ margin: 0 }}>
+                            <strong style={{ color: "#e5e7eb" }}>
+                              Desperate roll → attribute (+1) · end-of-session (max
+                              2 each).
+                            </strong>{" "}
+                            Desperate rolls: +1 XP in the roll&apos;s attribute:
+                            Insight (Hunt, Study, Survey, Tinker), Prowess (Finesse,
+                            Prowl, Skirmish, Wreck), Resolve (Bizarre, Command,
+                            Consort, Sway). End of session: table review for beliefs
+                            / struggle / playbook, up to 2 XP in each category; you
+                            may place that XP on any track when you spend it. Numbers
+                            here come from the experience tracker (this session) and
+                            your desperate rolls in the dice log.
+                          </p>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
                   <div
                     style={{
                       marginBottom: "12px",
@@ -14727,21 +15098,6 @@ const CharacterSheetWrapper = ({
                         </span>
                       ) : null}
                     </div>
-                    <div
-                      style={{
-                        fontSize: "10px",
-                        color: "#9ca3af",
-                        lineHeight: 1.45,
-                        marginBottom: "8px",
-                      }}
-                    >
-                      Free pool (not tied to a live session). Earned from
-                      scorecard and Stand Development; bank anytime onto the
-                      tracks below. Filling a track mints a pending advance —
-                      leftover marks stay. Take advance redeems a pending (no
-                      second XP spend). Desperate-roll XP marks attribute tracks
-                      automatically and never sits here.
-                    </div>
                     {unallocatedXp <= 0 ? (
                       <div style={{ fontSize: "10px", color: "#6b7280" }}>
                         No free-pool XP right now. Scorecard / Dev awards land
@@ -14754,7 +15110,7 @@ const CharacterSheetWrapper = ({
                         Heritage / Playbook below to bank from this pool.
                       </div>
                     )}
-                    {poolTickError ? (
+                    {poolTickError || trainError ? (
                       <div
                         style={{
                           marginTop: 6,
@@ -14762,7 +15118,7 @@ const CharacterSheetWrapper = ({
                           color: "#f87171",
                         }}
                       >
-                        {poolTickError}
+                        {poolTickError || trainError}
                       </div>
                     ) : null}
                   </div>
@@ -14858,6 +15214,48 @@ const CharacterSheetWrapper = ({
                           ? ` · ${pendingCount} pending`
                           : ""}
                       </span>
+                      {canEditSheet && character?.id ? (
+                        <button
+                          type="button"
+                          disabled={
+                            !!trainBusyTrack ||
+                            poolAllocateBusy ||
+                            downtimeTrainedTracks.includes(key)
+                          }
+                          title={
+                            downtimeTrainedTracks.includes(key)
+                              ? "Already trained this track this downtime phase"
+                              : `Downtime train: +${trainXpAmountForTrack(key)} XP${
+                                  trainXpAmountForTrack(key) > 1
+                                    ? " (crew Training upgrade)"
+                                    : ""
+                                }. Once per track per phase.`
+                          }
+                          onClick={() => handleTrainTrack(key)}
+                          style={{
+                            ...S.btn,
+                            fontSize: "10px",
+                            padding: "2px 8px",
+                            background: downtimeTrainedTracks.includes(key)
+                              ? "#374151"
+                              : "#1e3a5f",
+                            color: downtimeTrainedTracks.includes(key)
+                              ? "#9ca3af"
+                              : "#93c5fd",
+                            fontWeight: "bold",
+                            opacity: trainBusyTrack === key ? 0.6 : 1,
+                            cursor: downtimeTrainedTracks.includes(key)
+                              ? "not-allowed"
+                              : "pointer",
+                          }}
+                        >
+                          {trainBusyTrack === key
+                            ? "…"
+                            : downtimeTrainedTracks.includes(key)
+                              ? "Trained"
+                              : `Train (+${trainXpAmountForTrack(key)})`}
+                        </button>
+                      ) : null}
                       {canTakeAdvance && canEditSheet && character?.id ? (
                         <button
                           type="button"
@@ -14904,20 +15302,6 @@ const CharacterSheetWrapper = ({
                     </div>
                     );
                   })}
-                  <div
-                    style={{
-                      fontSize: "10px",
-                      color: "#6b7280",
-                      marginBottom: "6px",
-                      lineHeight: 1.4,
-                    }}
-                  >
-                    Tick empty boxes to bank Available XP onto that track.
-                    Filling a track mints a pending advance (leftover stays).
-                    Take advance redeems one pending (attribute → +1 action
-                    dot; heritage → +1 HP; playbook → coin / ability / acquire
-                    Stand).
-                  </div>
 
                   <div
                     style={{
@@ -14933,22 +15317,6 @@ const CharacterSheetWrapper = ({
                   >
                     <div style={{ marginBottom: "8px" }}>
                       <span style={S.lbl}>XP REQUIREMENTS (SRD)</span>
-                      <div
-                        style={{
-                          fontSize: "10px",
-                          color: "#6b7280",
-                          marginTop: "4px",
-                          lineHeight: 1.45,
-                        }}
-                      >
-                        Desperate ACTION → +1 on that attribute (group desperate
-                        too); 0-dot desperate → +2. Desperate Power / Speed /
-                        Precision stand dice → +1 playbook (innate, uncapped; not
-                        Range, Durability, or Dev). End-session toggles + Dev
-                        bonus → free pool (bank onto tracks later). Downtime
-                        training not automated yet. Crew XP: use crew scorecard
-                        triggers.
-                      </div>
                     </div>
                     {!xpReqSnapshot.hasActiveSession && (
                       <div
@@ -15346,24 +15714,6 @@ const CharacterSheetWrapper = ({
                           <strong style={{ color: "#9ca3af" }}>vice, trauma, or crew</strong>{" "}
                           entanglements; plus playbook-specific marks at end of session.
                         </div>
-                        <details
-                          style={{ marginTop: "8px", fontSize: "10px", color: "#6b7280" }}
-                        >
-                          <summary style={{ cursor: "pointer", userSelect: "none" }}>
-                            Desperate roll → attribute (+1) · end-of-session (max 2 each)
-                          </summary>
-                          <p style={{ margin: "6px 0 0" }}>
-                            <strong>Desperate rolls:</strong> +1 XP in the roll&apos;s
-                            attribute: Insight (Hunt, Study, Survey, Tinker), Prowess
-                            (Finesse, Prowl, Skirmish, Wreck), Resolve (Bizarre, Command, Consort, Sway).
-                            {" "}
-                            <strong>End of session:</strong> table review for
-                            beliefs / struggle / playbook, up to 2 XP in each
-                            category; you may place that XP on any track when you
-                            spend it. Numbers here come from the experience tracker
-                            (this session) and your desperate rolls in the dice log.
-                          </p>
-                        </details>
                       </>
                     )}
                   </div>
@@ -19227,10 +19577,10 @@ const CharacterSheetWrapper = ({
                             <strong style={{ color: "#d1d5db" }}>
                               Teamwork — Assist:
                             </strong>{" "}
-                            pick a same-crew teammate who spends 1 stress to give
-                            you +1d on your next ACTION roll this session. Only one
-                            character may assist a given roll; it applies when you
-                            press Roll below.
+                            pick a same-crew teammate to help — you spend 1 stress
+                            to give them +1d on their next ACTION roll this session.
+                            Only one character may assist a given roll; it applies
+                            when they press Roll on their sheet.
                           </div>
                           {assistHelpPending ? (
                             <div
@@ -19244,7 +19594,7 @@ const CharacterSheetWrapper = ({
                                 color: "#99f6e4",
                               }}
                             >
-                              Pending assist: +1d from{" "}
+                              Incoming assist: +1d from{" "}
                               <strong style={{ color: "#e5e7eb" }}>
                                 {String(
                                   assistHelpPending.helper_name ||
@@ -19254,7 +19604,27 @@ const CharacterSheetWrapper = ({
                               </strong>{" "}
                               (they already marked stress). Resolve it when you Roll
                               an action — or abandon it by rolling once without including
-                              the assist die.
+                              the assist die. It shows in your dice pool preview.
+                            </div>
+                          ) : null}
+                          {outgoingAssistPending ? (
+                            <div
+                              style={{
+                                marginBottom: "10px",
+                                padding: "8px 10px",
+                                borderRadius: "6px",
+                                border: "1px solid #0f766e",
+                                background: "#0f172a",
+                                fontSize: "11px",
+                                color: "#99f6e4",
+                              }}
+                            >
+                              You are assisting{" "}
+                              <strong style={{ color: "#e5e7eb" }}>
+                                {outgoingAssistPending.recipientName}
+                              </strong>{" "}
+                              (+1d on their next ACTION roll; you already marked
+                              stress).
                             </div>
                           ) : null}
                           <div
@@ -19272,25 +19642,46 @@ const CharacterSheetWrapper = ({
                               onChange={(e) => setAssistTargetId(e.target.value)}
                             >
                               <option value="">
-                                Choose crewmate — they spend 1 stress
+                                Choose crewmate to assist — you spend 1 stress
                               </option>
                               {helpCandidates.length === 0 ? (
                                 <option value="" disabled>
                                   No same-crew PCs available
                                 </option>
                               ) : null}
-                              {helpCandidates.map((c) => (
-                                <option key={c.id} value={String(c.id)}>
-                                  {c.true_name || c.name || `PC ${c.id}`}
-                                </option>
-                              ))}
+                              {helpCandidates.map((c) => {
+                                const already =
+                                  !!(c.assist_help_pending ?? c.assistHelpPending);
+                                const label =
+                                  c.true_name || c.name || `PC ${c.id}`;
+                                return (
+                                  <option
+                                    key={c.id}
+                                    value={String(c.id)}
+                                    disabled={already}
+                                  >
+                                    {already
+                                      ? `${label} (already has assist)`
+                                      : label}
+                                  </option>
+                                );
+                              })}
                             </select>
                             <button
                               type="button"
                               disabled={
-                                !!assistHelpPending ||
                                 !assistTargetId ||
-                                assistGrantBusy
+                                assistGrantBusy ||
+                                !!(
+                                  helpCandidates.find(
+                                    (c) =>
+                                      String(c.id) === String(assistTargetId),
+                                  )?.assist_help_pending ??
+                                  helpCandidates.find(
+                                    (c) =>
+                                      String(c.id) === String(assistTargetId),
+                                  )?.assistHelpPending
+                                )
                               }
                               onClick={async () => {
                                 if (!assistTargetId || !characterId) return;
@@ -19299,21 +19690,22 @@ const CharacterSheetWrapper = ({
                                 setAssistGrantMsg(null);
                                 setAssistGrantBusy(true);
                                 try {
+                                  // API: URL = recipient; body helper_character_id = self (pays stress).
                                   await characterAPI.assistHelp(
-                                    Number(characterId),
                                     parseInt(assistTargetId, 10),
+                                    Number(characterId),
                                     Number(activeSessionId),
                                   );
-                                  const helperPc = helpCandidates.find(
+                                  const recipientPc = helpCandidates.find(
                                     (c) =>
                                       String(c.id) === String(assistTargetId),
                                   );
-                                  const hn =
-                                    helperPc?.true_name ||
-                                    helperPc?.name ||
+                                  const rn =
+                                    recipientPc?.true_name ||
+                                    recipientPc?.name ||
                                     "Teammate";
                                   setAssistGrantMsg(
-                                    `${hn} spends 1 stress — you gain +1d when you roll an action while this session is active (shown in the dice preview).`,
+                                    `You spend 1 stress — ${rn} gains +1d on their next ACTION roll this session.`,
                                   );
                                   setAssistTargetId("");
                                   onCampaignRefresh?.();
@@ -19330,7 +19722,7 @@ const CharacterSheetWrapper = ({
                                 fontSize: "11px",
                               }}
                             >
-                              {assistGrantBusy ? "…" : "Grant +1d assist"}
+                              {assistGrantBusy ? "…" : "Assist (+1d, 1 stress)"}
                             </button>
                           </div>
                           {assistGrantMsg ? (
