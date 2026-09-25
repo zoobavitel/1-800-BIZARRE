@@ -1,0 +1,118 @@
+/* Session roster tokens — reuse Home .f-card / .npc-card / .p-card under .home-poc */
+.session-roster-tokens.home-poc {
+  /* Keep home token vars available outside Home page */
+  --cream: var(--hftf-text-cream, #f5f0e8);
+  --dark-bg-card: #0d1117;
+  --dark-border: #30363d;
+  --light-bg-card: #0d1117;
+  --light-text: var(--hftf-text-cream, #f5f0e8);
+  --light-text-2: #9ca3af;
+  --light-border: #374151;
+  --purple: #a78bfa;
+  --p1: #7c3aed;
+  --p2: #6c3989;
+  --p4: #c45c26;
+  --stripe-1: #7c3aed;
+  --stripe-2: #6c3989;
+  --stripe-3: #c45c26;
+  --stripe-4: #e8b84a;
+}
+
+.session-roster-tokens .home-faction-grid,
+.session-roster-tokens .home-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(160px, 100%), 1fr));
+  gap: 12px;
+  align-items: start;
+}
+
+.session-roster-tokens .session-pc-finder {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.session-roster-tokens .session-pc-finder-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.session-roster-tokens .session-pc-finder-chip {
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid #374151;
+  background: #111827;
+  color: #e5e7eb;
+  cursor: pointer;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-roster-tokens .session-pc-finder-chip:hover {
+  border-color: #7c3aed;
+  color: #fff;
+}
+
+.session-unassign-drop {
+  margin-top: 10px;
+  padding: 14px 12px;
+  border: 1px dashed #4b5563;
+  border-radius: 8px;
+  background: #0d1117;
+  color: #9ca3af;
+  font-size: 12px;
+  text-align: center;
+}
+
+.session-roster-tokens .session-faction-npc-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+  align-items: center;
+}
+
+.session-roster-tokens .session-npc-strip-thumb {
+  width: 36px;
+  height: 36px;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--dark-border, #374151);
+  background: #111827;
+  padding: 0;
+  cursor: grab;
+  flex-shrink: 0;
+}
+
+.session-roster-tokens .session-npc-strip-thumb.is-selected {
+  outline: 2px solid var(--p1, #7c3aed);
+  outline-offset: 1px;
+}
+
+.session-roster-tokens .session-token-drag-over {
+  border-color: var(--p1, #7c3aed) !important;
+  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.35);
+}
+
+.session-roster-tokens .npc-card.is-selected,
+.session-roster-tokens .p-card.is-expanded,
+.session-roster-tokens .f-card.is-expanded {
+  border-color: var(--p1, #7c3aed);
+}
+
+.session-roster-tokens .session-pc-expand-panel,
+.session-roster-tokens .session-npc-expand-panel,
+.session-roster-tokens .session-faction-expand-panel {
+  grid-column: 1 / -1;
+  margin-top: 4px;
+  margin-bottom: 8px;
+  min-width: 0;
+}

@@ -1466,7 +1466,12 @@ class CharacterViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="assist-help")
     def assist_help(self, request, pk=None):
-        """Crew Assist: beneficiary is URL character; helper spends 1 stress; at most one pending +1d per beneficiary per active session."""
+        """Crew Assist (helper-initiated): URL = recipient; body helper_character_id spends 1 stress.
+
+        Sheet UX: helper picks a crewmate to help from their own sheet. At most one pending
+        +1d per beneficiary per active session. Only the helper's owner (or campaign GM/staff)
+        may grant.
+        """
         actor = self.get_object()
         helper_id = request.data.get("helper_character_id")
         session_raw = request.data.get("session_id")
@@ -1487,7 +1492,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 {"error": "Invalid session_id"}, status=status.HTTP_400_BAD_REQUEST
             )
         try:
-            helper = Character.objects.get(pk=int(helper_id))
+            helper = Character.objects.select_related("campaign").get(pk=int(helper_id))
         except (TypeError, ValueError):
             return Response(
                 {"error": "Invalid helper_character_id"}, status=status.HTTP_400_BAD_REQUEST
@@ -1526,6 +1531,17 @@ class CharacterViewSet(viewsets.ModelViewSet):
         if actor.id == helper.id:
             return Response(
                 {"error": "Cannot help yourself"}, status=status.HTTP_400_BAD_REQUEST
+            )
+        # Helper-driven UX: only the helper's player (or GM/staff) may spend that PC's stress.
+        if not _user_may_edit_character(request.user, helper):
+            return Response(
+                {
+                    "error": (
+                        "Only the assisting character's player (or campaign GM) "
+                        "may spend stress to Assist."
+                    )
+                },
+                status=status.HTTP_403_FORBIDDEN,
             )
         if actor.campaign_id != helper.campaign_id or not actor.campaign_id:
             return Response(
@@ -2869,6 +2885,130 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 "xp_clocks": locked.xp_clocks,
                 "experience_tracker_id": tracker.id,
                 "message": f"Added {amount} XP to {track} track",
+            }
+        )
+
+    @action(detail=True, methods=["post"], url_path="train")
+    def train(self, request, pk=None):
+        """
+        Downtime Train: mark 1 XP (2 with crew Training upgrade) on
+        Insight / Prowess / Resolve / Heritage / Playbook. Once per track
+        per downtime phase. Heritage Train is house-rule vs SRD.
+        Reuses credit_xp fill → pending advance.
+        """
+        from characters.services.advancement import AdvancementError, credit_xp
+        from characters.services.downtime_train import (
+            DowntimeTrainError,
+            assert_can_train,
+            record_train_activity,
+            tracks_trained_this_phase,
+            training_xp_amount,
+        )
+
+        character = self.get_object()
+        user = request.user
+        is_owner = character.user_id == user.id
+        is_gm = bool(
+            character.campaign_id and character.campaign.gm_id == user.id
+        )
+        if not (user.is_staff or is_owner or is_gm):
+            raise PermissionDenied(
+                "You may only train for your own character or as the campaign GM."
+            )
+
+        track = request.data.get("track") or request.data.get("xp_type") or ""
+        if not isinstance(track, str):
+            return Response(
+                {"error": "track is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        track = track.strip().lower()
+
+        try:
+            assert_can_train(character, track)
+        except DowntimeTrainError as exc:
+            return Response(
+                {"error": exc.message, "code": exc.code},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        amount = training_xp_amount(character, track)
+        session_obj = None
+        session_raw = request.data.get("session") or request.data.get(
+            "session_id"
+        )
+        if session_raw not in (None, "", False):
+            try:
+                sid = int(session_raw)
+            except (TypeError, ValueError):
+                return Response(
+                    {"error": "Invalid session id"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if character.campaign_id:
+                session_obj = Session.objects.filter(
+                    id=sid, campaign_id=character.campaign_id
+                ).first()
+
+        with transaction.atomic():
+            locked = (
+                Character.objects.select_for_update()
+                .select_related("crew", "campaign")
+                .get(pk=character.pk)
+            )
+            try:
+                assert_can_train(locked, track)
+            except DowntimeTrainError as exc:
+                return Response(
+                    {"error": exc.message, "code": exc.code},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            amount = training_xp_amount(locked, track)
+            token = bind_character_history_editor(user)
+            try:
+                credited = credit_xp(locked, track, amount, save=True)
+            except AdvancementError as exc:
+                return Response(
+                    {"error": str(exc)},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            finally:
+                reset_character_history_editor(token)
+
+            activity = record_train_activity(locked, track, amount=amount)
+            tracker = ExperienceTracker.objects.create(
+                character=locked,
+                session=session_obj,
+                roll=None,
+                trigger="MANUAL",
+                description=f"[train:{track}] Downtime train (+{amount} XP)",
+                xp_gained=amount,
+                awarded_by=user,
+                award_source=(
+                    "GM"
+                    if (is_gm and not is_owner)
+                    else ("PLAYER" if is_owner else "GM")
+                ),
+                clock_key=track,
+            )
+
+        locked.refresh_from_db()
+        trained = tracks_trained_this_phase(locked)
+        return Response(
+            {
+                "success": True,
+                "track": track,
+                "amount": amount,
+                "new_total": credited["marks"],
+                "pendings_minted": credited["pendings_minted"],
+                "xp_clocks": locked.xp_clocks,
+                "downtime_trained_tracks": trained,
+                "downtime_activity_id": activity.id,
+                "experience_tracker_id": tracker.id,
+                "message": (
+                    f"Trained {track}: +{amount} XP"
+                    + (" (crew Training upgrade)" if amount > 1 else "")
+                ),
             }
         )
 
