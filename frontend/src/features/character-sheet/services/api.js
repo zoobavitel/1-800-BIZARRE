@@ -323,7 +323,8 @@ export const characterAPI = {
     }),
 
   /**
-   * Crew Assist: recipient is `recipientCharacterId` (gets pending +1d); helper spends 1 stress.
+   * Crew Assist (helper-initiated): call from helper's sheet.
+   * URL = recipient (gets pending +1d); body helper_character_id = self (spends 1 stress).
    */
   assistHelp: (recipientCharacterId, helperCharacterId, sessionId) =>
     apiRequest(`/characters/${recipientCharacterId}/assist-help/`, {
@@ -339,6 +340,13 @@ export const characterAPI = {
     apiRequest(`/characters/${id}/add-xp/`, {
       method: "POST",
       body: JSON.stringify(xpData),
+    }),
+
+  /** Downtime Train: mark 1–2 XP on insight/prowess/resolve/playbook. */
+  train: (id, body) =>
+    apiRequest(`/characters/${id}/train/`, {
+      method: "POST",
+      body: JSON.stringify(body),
     }),
 
   allocatePoolXp: (id, body) =>
@@ -1005,6 +1013,14 @@ export const progressClockAPI = {
     apiRequest(`/progress-clocks/${id}/`, {
       method: "DELETE",
     }),
+  dismissProgressClock: (id) =>
+    apiRequest(`/progress-clocks/${id}/dismiss/`, {
+      method: "POST",
+    }),
+  undismissProgressClock: (id) =>
+    apiRequest(`/progress-clocks/${id}/undismiss/`, {
+      method: "POST",
+    }),
 };
 
 // Roll API (dice history; GM can PATCH position/effect, grant XP)
@@ -1451,6 +1467,15 @@ export const transformBackendToFrontend = (backendCharacter) => {
       typeof backendCharacter.pending_advance_counts === "object"
         ? { ...backendCharacter.pending_advance_counts }
         : {},
+    downtimeTrainedTracks: Array.isArray(
+      backendCharacter.downtime_trained_tracks,
+    )
+      ? backendCharacter.downtime_trained_tracks.map((t) =>
+          String(t || "")
+            .trim()
+            .toLowerCase(),
+        )
+      : [],
     advancementPlan: Array.isArray(backendCharacter.advancement_plan)
       ? backendCharacter.advancement_plan.map((item) => ({
           id: item.id,

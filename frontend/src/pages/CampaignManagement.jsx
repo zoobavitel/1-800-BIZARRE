@@ -34,7 +34,9 @@ import {
   mergeEndLiveRowsWithScorecard,
   scorecardStatsByCharFromXpEntries,
   sumManualTrackXpForSession,
+  sumManualNonTrackXpForSession,
 } from "../features/campaign-management/sessionEndLiveXpPreview";
+import { defaultPositionEffectFromSessionDetail } from "../features/character-sheet/utils/sessionPositionEffectDefaults";
 
 const NPC_SESSION_RETURN_KEY = "hftf-npc-return-to-session";
 
@@ -4217,7 +4219,13 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
             .list({ character: ch.id })
             .catch(() => []);
           const arr = Array.isArray(raw) ? raw : raw?.results || [];
-          return [ch.id, sumManualTrackXpForSession(arr, sid)];
+          return [
+            ch.id,
+            {
+              track: sumManualTrackXpForSession(arr, sid),
+              nonTrack: sumManualNonTrackXpForSession(arr, sid),
+            },
+          ];
         }),
       );
       if (cancelled) return;
@@ -4247,18 +4255,29 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
         clearActiveCampaignChars,
         clearActiveClocks,
         clearActiveChars,
+        clearActiveModalSession?.id ?? clearActiveSessionDetail?.id,
       ),
     [
       clearActiveRolls,
       clearActiveCampaignChars,
       clearActiveClocks,
       clearActiveChars,
+      clearActiveModalSession?.id,
+      clearActiveSessionDetail?.id,
     ],
   );
 
   const clearActiveRowsWithManual = useMemo(() => {
     return (clearActiveEndLivePreview.perPcRows || []).map((row) => {
-      const manualSessionXp = clearActiveManualXpByChar[row.characterId] ?? 0;
+      const raw = clearActiveManualXpByChar[row.characterId];
+      const manualSessionXp =
+        typeof raw === "object" && raw != null
+          ? Number(raw.track) || 0
+          : Number(raw) || 0;
+      const manualNonTrackXp =
+        typeof raw === "object" && raw != null
+          ? Number(raw.nonTrack) || 0
+          : 0;
       const totalSessionXpPreview =
         (row.developmentPoolXp || 0) +
         (row.totalEncodedPlaybookXp || 0) +
@@ -4266,6 +4285,7 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
       return {
         ...row,
         manualSessionXp,
+        manualNonTrackXp,
         totalSessionXpPreview,
       };
     });
@@ -4873,6 +4893,28 @@ function SessionDetail({
   const [sessionManualXpByChar, setSessionManualXpByChar] = useState({});
   const [sessionManualXpSyncReady, setSessionManualXpSyncReady] =
     useState(false);
+  const [sessionEquipmentCatalog, setSessionEquipmentCatalog] = useState([]);
+
+  useEffect(() => {
+    if (!campaign?.id) {
+      setSessionEquipmentCatalog([]);
+      return undefined;
+    }
+    let cancelled = false;
+    equipmentAPI
+      .list({ campaign: campaign.id, available_for_campaign: true })
+      .then((list) => {
+        if (!cancelled) {
+          setSessionEquipmentCatalog(Array.isArray(list) ? list : []);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setSessionEquipmentCatalog([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [campaign?.id]);
 
   const refreshSessionCharacters = useCallback(async () => {
     if (!campaign?.id) return;
@@ -5120,13 +5162,28 @@ function SessionDetail({
   );
 
   const endLivePreview = useMemo(
-    () => buildSessionEndLivePreview(rolls, campaignChars, clocks, characters),
-    [rolls, campaignChars, clocks, characters],
+    () =>
+      buildSessionEndLivePreview(
+        rolls,
+        campaignChars,
+        clocks,
+        characters,
+        session?.id,
+      ),
+    [rolls, campaignChars, clocks, characters, session?.id],
   );
 
   const endLiveRowsWithManual = useMemo(() => {
     return (endLivePreview.perPcRows || []).map((row) => {
-      const manualSessionXp = sessionManualXpByChar[row.characterId] ?? 0;
+      const raw = sessionManualXpByChar[row.characterId];
+      const manualSessionXp =
+        typeof raw === "object" && raw != null
+          ? Number(raw.track) || 0
+          : Number(raw) || 0;
+      const manualNonTrackXp =
+        typeof raw === "object" && raw != null
+          ? Number(raw.nonTrack) || 0
+          : 0;
       const totalSessionXpPreview =
         (row.developmentPoolXp || 0) +
         (row.totalEncodedPlaybookXp || 0) +
@@ -5134,6 +5191,7 @@ function SessionDetail({
       return {
         ...row,
         manualSessionXp,
+        manualNonTrackXp,
         totalSessionXpPreview,
       };
     });
@@ -5170,7 +5228,13 @@ function SessionDetail({
             .list({ character: ch.id })
             .catch(() => []);
           const arr = Array.isArray(raw) ? raw : raw?.results || [];
-          return [ch.id, sumManualTrackXpForSession(arr, sid)];
+          return [
+            ch.id,
+            {
+              track: sumManualTrackXpForSession(arr, sid),
+              nonTrack: sumManualNonTrackXpForSession(arr, sid),
+            },
+          ];
         }),
       );
       if (cancelled) return;
@@ -5411,18 +5475,13 @@ function SessionDetail({
     }
   };
 
-  const handleUpdateSession = async (data) => {
-    try {
-      const updated = await sessionAPI.patchSession(session.id, data);
-      setSessionData(updated);
-      onRefresh();
-    } catch (e) {
-      setError(e.message);
-    }
-  };
-
-  const handleManualRollCreate = async () => {
-    const cid = parseInt(manualRoll.characterId, 10);
+  const handleManualRollCreate = async (characterIdOverride = null) => {
+    const cid = parseInt(
+      characterIdOverride != null && characterIdOverride !== ""
+        ? characterIdOverride
+        : manualRoll.characterId,
+      10,
+    );
     if (!cid) {
       setError("Choose a character for the manual roll.");
       return;
@@ -5438,14 +5497,15 @@ function SessionDetail({
     setManualRollSaving(true);
     setError(null);
     const kind = String(manualRoll.rollKind || "ACTION").toUpperCase();
+    const peDefaults = defaultPositionEffectFromSessionDetail(cid, sessionData);
     const base = {
       character: cid,
       session: session.id,
       dice_pool: results.length,
       results,
       outcome: manualRoll.outcome,
-      position: sessionData?.default_position || "risky",
-      effect: sessionData?.default_effect || "standard",
+      position: peDefaults.position,
+      effect: peDefaults.effect,
     };
     try {
       if (kind === "RESISTANCE") {
@@ -5488,8 +5548,13 @@ function SessionDetail({
     }
   };
 
-  const handleManualXpGrant = async () => {
-    const cid = parseInt(manualXp.characterId, 10);
+  const handleManualXpGrant = async (characterIdOverride = null) => {
+    const cid = parseInt(
+      characterIdOverride != null && characterIdOverride !== ""
+        ? characterIdOverride
+        : manualXp.characterId,
+      10,
+    );
     if (!cid) {
       setError("Choose a character for the XP award.");
       return;
@@ -5580,6 +5645,323 @@ function SessionDetail({
       setError(e.message || "Failed to remove roll record.");
     }
   };
+
+  const scorecardPanel =
+        !isCurrentActiveSession || isGM ? (
+          <div
+            style={{
+              width: "100%",
+              marginTop: 0,
+              paddingTop: 0,
+            }}
+          >
+            <div
+              style={{
+                marginBottom: "8px",
+                fontSize: "12px",
+                fontWeight: 600,
+                color: "var(--text-muted)",
+                textTransform: "uppercase",
+                letterSpacing: "0.06em",
+              }}
+            >
+              {sessionEnded
+                ? "Session XP allocation (read-only)"
+                : isCurrentActiveSession
+                  ? "Session XP allocation (live preview — before XP is applied)"
+                  : "Session XP allocation (preview — before XP is applied)"}
+            </div>
+            {!sessionEnded ? (
+              <div
+                style={{
+                  marginBottom: "8px",
+                  fontSize: "11px",
+                  color: "var(--text-muted)",
+                  lineHeight: 1.45,
+                }}
+              >
+                {isCurrentActiveSession ? (
+                  <>
+                    While this episode is live, the table updates from rolls and
+                    trackers as they come in. Auto session XP (STRUGGLE from vice /
+                    trauma) and Development→pool settlement still run only when you
+                    end live (or mark complete) with the usual options.
+                  </>
+                ) : (
+                  <>
+                    This episode is not marked ended; the table is a running preview
+                    from rolls and trackers. Auto session XP (STRUGGLE from vice /
+                    trauma) and Development→pool settlement finalize when you end
+                    live (or mark complete) with the usual options.
+                  </>
+                )}
+              </div>
+            ) : null}
+            {sessionData?.auto_encoded_xp_settled ? (
+              <div
+                style={{
+                  marginBottom: "8px",
+                  fontSize: "11px",
+                  color: "var(--text-muted)",
+                  lineHeight: 1.45,
+                }}
+              >
+                Auto session XP pass was already settled for this session; table
+                still reflects the roll log and current character Development→pool
+                preview (for reference).
+              </div>
+            ) : null}
+            {sessionXpAllocationPanelMode === "no_roster" ? (
+              <div style={{ color: "var(--text-muted)", fontSize: "12px", marginBottom: "4px" }}>
+                No PCs in this campaign roster.
+              </div>
+            ) : null}
+            {!sessionManualXpSyncReady &&
+            sessionXpAllocationPanelMode === "table" ? (
+              <div
+                style={{
+                  color: "var(--text-dim)",
+                  fontSize: "11px",
+                  marginBottom: "4px",
+                }}
+              >
+                Updating manual track XP totals…
+              </div>
+            ) : null}
+            {sessionXpAllocationPanelMode === "empty_session" ? (
+              <div style={{ color: "var(--text-muted)", fontSize: "12px", marginBottom: "4px" }}>
+                No rolls logged and no session XP (auto STRUGGLE, Development→pool,
+                or manual track awards) recorded for this session.
+              </div>
+            ) : null}
+            {sessionXpAllocationPanelMode === "table" ? (
+              <>
+                <SessionXpAllocationTable rows={endLiveRowsWithBeliefs} />
+                <p style={{ margin: "4px 0 0", fontSize: "11px", color: "var(--text-muted)" }}>
+                  <strong>Total</strong> = every XP record logged this session
+                  (Beliefs/Playbook/Struggle toggles + heritage / vice / trauma /
+                  desperate-roll auto + manual GM track grants + dev-pool entry on
+                  settle) <em>plus</em> the encoded STRUGGLE XP the end-live settle
+                  would still add on top (only while not yet settled).
+                </p>
+                <p
+                  style={{
+                    margin: "4px 0 0",
+                    fontSize: "10px",
+                    color: "var(--text-dim)",
+                    lineHeight: 1.45,
+                  }}
+                >
+                  <strong style={{ color: "var(--text-muted)" }}>BELIEFS</strong> = expressed
+                  beliefs/drives/heritage/background ·{" "}
+                  <strong style={{ color: "var(--text-muted)" }}>PLAYBOOK</strong> =
+                  playbook-specific end-of-session marks (experience-tracker toggles;
+                  no roll-log auto for this column) ·{" "}
+                  <strong style={{ color: "var(--text-muted)" }}>STRUGGLE</strong> = vice
+                  overindulgence, trauma, or entanglements. Each capped at 2
+                  XP/session. The headline number in each column is the
+                  experience-tracker XP recorded for that trigger (the same rows
+                  shown in &quot;By PC — requirements logged&quot; below — delete a
+                  row to roll it back). The &quot;(auto N)&quot; hint on STRUGGLE is
+                  the count of pre-settle roll signals (vice-overindulgence /
+                  vice-failure / new trauma) that the end-live encoded pass will
+                  still apply on top, capped to the remaining 2/session.{" "}
+                  <strong>Manual→tracks</strong> is the separate ledger of{" "}
+                  <code>MANUAL</code>-trigger track grants ([insight]/[prowess]/[resolve]/[heritage]/[playbook])
+                  added via the character sheet&apos;s <em>Add XP</em> action — never
+                  double-counted with the trigger toggles.{" "}
+                  <strong>Manual XP</strong> is other MANUAL awards for this session
+                  (including <code>[pool]</code> free-pool grants) that are not on a
+                  named track.
+                </p>
+              </>
+            ) : null}
+            {(sessionXpAllocationPanelMode === "table" ||
+              sessionXpAllocationPanelMode === "empty_session") &&
+            (campaignChars || []).length > 0 ? (
+              <div
+                style={{
+                  marginTop:
+                    sessionXpAllocationPanelMode === "table" ? "14px" : "10px",
+                  paddingTop:
+                    sessionXpAllocationPanelMode === "table" ? "12px" : "0",
+                  borderTop:
+                    sessionXpAllocationPanelMode === "table"
+                      ? "1px solid var(--border)"
+                      : "none",
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() =>
+                    setScorecardReqLoggedCollapsed((v) => !v)
+                  }
+                  aria-expanded={!scorecardReqLoggedCollapsed}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    fontSize: "11px",
+                    color: "var(--text-muted)",
+                    marginBottom: "6px",
+                    fontWeight: "bold",
+                    background: "transparent",
+                    border: "none",
+                    padding: 0,
+                    cursor: "pointer",
+                    textAlign: "left",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      display: "inline-block",
+                      width: 10,
+                      color: "var(--text-dim)",
+                    }}
+                  >
+                    {scorecardReqLoggedCollapsed ? "▸" : "▾"}
+                  </span>
+                  By PC — requirements logged (experience tracker)
+                  {scorecardReqLoggedCollapsed &&
+                  scorecardHasAnyTrackerLines ? (
+                    <span
+                      style={{
+                        color: "var(--text-dim)",
+                        fontWeight: 400,
+                        fontSize: 10,
+                      }}
+                    >
+                      (hidden — click to show)
+                    </span>
+                  ) : null}
+                </button>
+                <div
+                  hidden={scorecardReqLoggedCollapsed}
+                  style={{
+                    fontSize: "10px",
+                    color: "var(--text-dim)",
+                    marginBottom: "4px",
+                    lineHeight: 1.45,
+                  }}
+                >
+                  {scorecardHasAnyTrackerLines ? (
+                    (campaignChars || []).map((ch) => {
+                      const cid = Number(ch.id);
+                      const lines =
+                        pcXpRequirementsByCharacterForScorecard.get(cid);
+                      if (!lines?.length) return null;
+                      const title =
+                        charDisplayNameByIdScorecard.get(cid) ||
+                        ch.true_name ||
+                        ch.name ||
+                        `PC ${cid}`;
+                      return (
+                        <div
+                          key={`scorecard-xp-req-${cid}`}
+                          style={{ marginBottom: "8px" }}
+                        >
+                          <div
+                            style={{
+                              color: "var(--hftf-text-cream)",
+                              fontWeight: 600,
+                              marginBottom: "4px",
+                            }}
+                          >
+                            {title}
+                          </div>
+                          <ul
+                            style={{
+                              margin: 0,
+                              padding: 0,
+                              listStyle: "none",
+                              color: "var(--text-muted)",
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: 3,
+                            }}
+                          >
+                            {lines.map((entry, i) => {
+                              const busy =
+                                scorecardXpDeleteBusy === entry.id;
+                              return (
+                                <li
+                                  key={`${cid}-${entry.id ?? i}`}
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "flex-start",
+                                    justifyContent: "space-between",
+                                    gap: 6,
+                                    background: "var(--hftf-deep)",
+                                    border: "1px solid var(--bg-header)",
+                                    borderRadius: 3,
+                                    padding: "3px 6px",
+                                  }}
+                                >
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ color: "var(--hftf-text-cream)" }}>
+                                      {entry.label}
+                                    </div>
+                                    <div
+                                      style={{
+                                        color: "var(--text-dim)",
+                                        fontSize: 9,
+                                        marginTop: 1,
+                                      }}
+                                    >
+                                      {entry.who} · {entry.sessionLabel}
+                                    </div>
+                                  </div>
+                                  {entry.id && (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        handleScorecardDeleteXp(entry.id)
+                                      }
+                                      disabled={busy}
+                                      aria-label="Delete XP entry"
+                                      title="Delete this XP record"
+                                      style={{
+                                        flexShrink: 0,
+                                        width: 18,
+                                        height: 18,
+                                        borderRadius: 3,
+                                        border: "1px solid #7f1d1d",
+                                        background: busy
+                                          ? "var(--border)"
+                                          : "var(--bg-header)",
+                                        color: "#fca5a5",
+                                        cursor: busy
+                                          ? "not-allowed"
+                                          : "pointer",
+                                        fontSize: 11,
+                                        lineHeight: 1,
+                                        padding: 0,
+                                      }}
+                                    >
+                                      ×
+                                    </button>
+                                  )}
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <span>
+                      No tracker rows for this session yet. Auto awards (e.g.
+                      desperate rolls, heritage on rolls) and manual grants show
+                      here once the backend logs them.
+                    </span>
+                  )}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : null;
 
   return (
     <div>
@@ -5920,7 +6302,7 @@ function SessionDetail({
         </div>
       )}
 
-      <div style={S.card}>
+      <div style={{ ...S.card, marginBottom: 12 }}>
         {isGM ? (
           <div style={{ marginBottom: "10px" }}>
             <div style={{ ...S.sectionLbl, marginBottom: "6px" }}>
@@ -6080,319 +6462,6 @@ function SessionDetail({
             </span>
           )}
         </div>
-        {!isCurrentActiveSession || isGM ? (
-          <div
-            style={{
-              width: "100%",
-              marginTop: "12px",
-              paddingTop: "12px",
-              borderTop: "1px solid var(--border)",
-            }}
-          >
-            <div
-              style={{
-                marginBottom: "8px",
-                fontSize: "12px",
-                fontWeight: 600,
-                color: "var(--text-muted)",
-                textTransform: "uppercase",
-                letterSpacing: "0.06em",
-              }}
-            >
-              {sessionEnded
-                ? "Session XP allocation (read-only)"
-                : isCurrentActiveSession
-                  ? "Session XP allocation (live preview — before XP is applied)"
-                  : "Session XP allocation (preview — before XP is applied)"}
-            </div>
-            {!sessionEnded ? (
-              <div
-                style={{
-                  marginBottom: "8px",
-                  fontSize: "11px",
-                  color: "var(--text-muted)",
-                  lineHeight: 1.45,
-                }}
-              >
-                {isCurrentActiveSession ? (
-                  <>
-                    While this episode is live, the table updates from rolls and
-                    trackers as they come in. Auto session XP (STRUGGLE from vice /
-                    trauma) and Development→pool settlement still run only when you
-                    end live (or mark complete) with the usual options.
-                  </>
-                ) : (
-                  <>
-                    This episode is not marked ended; the table is a running preview
-                    from rolls and trackers. Auto session XP (STRUGGLE from vice /
-                    trauma) and Development→pool settlement finalize when you end
-                    live (or mark complete) with the usual options.
-                  </>
-                )}
-              </div>
-            ) : null}
-            {sessionData?.auto_encoded_xp_settled ? (
-              <div
-                style={{
-                  marginBottom: "8px",
-                  fontSize: "11px",
-                  color: "var(--text-muted)",
-                  lineHeight: 1.45,
-                }}
-              >
-                Auto session XP pass was already settled for this session; table
-                still reflects the roll log and current character Development→pool
-                preview (for reference).
-              </div>
-            ) : null}
-            {sessionXpAllocationPanelMode === "no_roster" ? (
-              <div style={{ color: "var(--text-muted)", fontSize: "12px", marginBottom: "4px" }}>
-                No PCs in this campaign roster.
-              </div>
-            ) : null}
-            {!sessionManualXpSyncReady &&
-            sessionXpAllocationPanelMode === "table" ? (
-              <div
-                style={{
-                  color: "var(--text-dim)",
-                  fontSize: "11px",
-                  marginBottom: "4px",
-                }}
-              >
-                Updating manual track XP totals…
-              </div>
-            ) : null}
-            {sessionXpAllocationPanelMode === "empty_session" ? (
-              <div style={{ color: "var(--text-muted)", fontSize: "12px", marginBottom: "4px" }}>
-                No rolls logged and no session XP (auto STRUGGLE, Development→pool,
-                or manual track awards) recorded for this session.
-              </div>
-            ) : null}
-            {sessionXpAllocationPanelMode === "table" ? (
-              <>
-                <SessionXpAllocationTable rows={endLiveRowsWithBeliefs} />
-                <p style={{ margin: "4px 0 0", fontSize: "11px", color: "var(--text-muted)" }}>
-                  <strong>Total</strong> = every XP record logged this session
-                  (Beliefs/Playbook/Struggle toggles + heritage / vice / trauma /
-                  desperate-roll auto + manual GM track grants + dev-pool entry on
-                  settle) <em>plus</em> the encoded STRUGGLE XP the end-live settle
-                  would still add on top (only while not yet settled).
-                </p>
-                <p
-                  style={{
-                    margin: "4px 0 0",
-                    fontSize: "10px",
-                    color: "var(--text-dim)",
-                    lineHeight: 1.45,
-                  }}
-                >
-                  <strong style={{ color: "var(--text-muted)" }}>BELIEFS</strong> = expressed
-                  beliefs/drives/heritage/background ·{" "}
-                  <strong style={{ color: "var(--text-muted)" }}>PLAYBOOK</strong> =
-                  playbook-specific end-of-session marks (experience-tracker toggles;
-                  no roll-log auto for this column) ·{" "}
-                  <strong style={{ color: "var(--text-muted)" }}>STRUGGLE</strong> = vice
-                  overindulgence, trauma, or entanglements. Each capped at 2
-                  XP/session. The headline number in each column is the
-                  experience-tracker XP recorded for that trigger (the same rows
-                  shown in &quot;By PC — requirements logged&quot; below — delete a
-                  row to roll it back). The &quot;(auto N)&quot; hint on STRUGGLE is
-                  the count of pre-settle roll signals (vice-overindulgence /
-                  vice-failure / new trauma) that the end-live encoded pass will
-                  still apply on top, capped to the remaining 2/session.{" "}
-                  <strong>Manual→tracks</strong> is the separate ledger of{" "}
-                  <code>MANUAL</code>-trigger track grants ([insight]/[prowess]/[resolve]/[heritage]/[playbook])
-                  added via the character sheet&apos;s <em>Add XP</em> action — never
-                  double-counted with the trigger toggles.
-                </p>
-              </>
-            ) : null}
-            {(sessionXpAllocationPanelMode === "table" ||
-              sessionXpAllocationPanelMode === "empty_session") &&
-            (campaignChars || []).length > 0 ? (
-              <div
-                style={{
-                  marginTop:
-                    sessionXpAllocationPanelMode === "table" ? "14px" : "10px",
-                  paddingTop:
-                    sessionXpAllocationPanelMode === "table" ? "12px" : "0",
-                  borderTop:
-                    sessionXpAllocationPanelMode === "table"
-                      ? "1px solid var(--border)"
-                      : "none",
-                }}
-              >
-                <button
-                  type="button"
-                  onClick={() =>
-                    setScorecardReqLoggedCollapsed((v) => !v)
-                  }
-                  aria-expanded={!scorecardReqLoggedCollapsed}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                    fontSize: "11px",
-                    color: "var(--text-muted)",
-                    marginBottom: "6px",
-                    fontWeight: "bold",
-                    background: "transparent",
-                    border: "none",
-                    padding: 0,
-                    cursor: "pointer",
-                    textAlign: "left",
-                    fontFamily: "inherit",
-                  }}
-                >
-                  <span
-                    aria-hidden="true"
-                    style={{
-                      display: "inline-block",
-                      width: 10,
-                      color: "var(--text-dim)",
-                    }}
-                  >
-                    {scorecardReqLoggedCollapsed ? "▸" : "▾"}
-                  </span>
-                  By PC — requirements logged (experience tracker)
-                  {scorecardReqLoggedCollapsed &&
-                  scorecardHasAnyTrackerLines ? (
-                    <span
-                      style={{
-                        color: "var(--text-dim)",
-                        fontWeight: 400,
-                        fontSize: 10,
-                      }}
-                    >
-                      (hidden — click to show)
-                    </span>
-                  ) : null}
-                </button>
-                <div
-                  hidden={scorecardReqLoggedCollapsed}
-                  style={{
-                    fontSize: "10px",
-                    color: "var(--text-dim)",
-                    marginBottom: "4px",
-                    lineHeight: 1.45,
-                  }}
-                >
-                  {scorecardHasAnyTrackerLines ? (
-                    (campaignChars || []).map((ch) => {
-                      const cid = Number(ch.id);
-                      const lines =
-                        pcXpRequirementsByCharacterForScorecard.get(cid);
-                      if (!lines?.length) return null;
-                      const title =
-                        charDisplayNameByIdScorecard.get(cid) ||
-                        ch.true_name ||
-                        ch.name ||
-                        `PC ${cid}`;
-                      return (
-                        <div
-                          key={`scorecard-xp-req-${cid}`}
-                          style={{ marginBottom: "8px" }}
-                        >
-                          <div
-                            style={{
-                              color: "var(--hftf-text-cream)",
-                              fontWeight: 600,
-                              marginBottom: "4px",
-                            }}
-                          >
-                            {title}
-                          </div>
-                          <ul
-                            style={{
-                              margin: 0,
-                              padding: 0,
-                              listStyle: "none",
-                              color: "var(--text-muted)",
-                              display: "flex",
-                              flexDirection: "column",
-                              gap: 3,
-                            }}
-                          >
-                            {lines.map((entry, i) => {
-                              const busy =
-                                scorecardXpDeleteBusy === entry.id;
-                              return (
-                                <li
-                                  key={`${cid}-${entry.id ?? i}`}
-                                  style={{
-                                    display: "flex",
-                                    alignItems: "flex-start",
-                                    justifyContent: "space-between",
-                                    gap: 6,
-                                    background: "var(--hftf-deep)",
-                                    border: "1px solid var(--bg-header)",
-                                    borderRadius: 3,
-                                    padding: "3px 6px",
-                                  }}
-                                >
-                                  <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div style={{ color: "var(--hftf-text-cream)" }}>
-                                      {entry.label}
-                                    </div>
-                                    <div
-                                      style={{
-                                        color: "var(--text-dim)",
-                                        fontSize: 9,
-                                        marginTop: 1,
-                                      }}
-                                    >
-                                      {entry.who} · {entry.sessionLabel}
-                                    </div>
-                                  </div>
-                                  {entry.id && (
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        handleScorecardDeleteXp(entry.id)
-                                      }
-                                      disabled={busy}
-                                      aria-label="Delete XP entry"
-                                      title="Delete this XP record"
-                                      style={{
-                                        flexShrink: 0,
-                                        width: 18,
-                                        height: 18,
-                                        borderRadius: 3,
-                                        border: "1px solid #7f1d1d",
-                                        background: busy
-                                          ? "var(--border)"
-                                          : "var(--bg-header)",
-                                        color: "#fca5a5",
-                                        cursor: busy
-                                          ? "not-allowed"
-                                          : "pointer",
-                                        fontSize: 11,
-                                        lineHeight: 1,
-                                        padding: 0,
-                                      }}
-                                    >
-                                      ×
-                                    </button>
-                                  )}
-                                </li>
-                              );
-                            })}
-                          </ul>
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <span>
-                      No tracker rows for this session yet. Auto awards (e.g.
-                      desperate rolls, heritage on rolls) and manual grants show
-                      here once the backend logs them.
-                    </span>
-                  )}
-                </div>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
         <div
           style={{
             marginTop: "12px",
@@ -6485,10 +6554,9 @@ function SessionDetail({
         onSessionCharactersRefresh={refreshSessionCharacters}
         onSessionPanelRefresh={() => refetchSessionPanel("manual")}
         user={user}
+        equipmentCatalogItems={sessionEquipmentCatalog}
+        scorecardPanel={scorecardPanel}
       />
-
-      {/* Goals */}
-      <GoalsEditor sessionData={sessionData} onSave={handleUpdateSession} />
 
       {/* Fortune rolls */}
       <div style={S.card}>
@@ -6643,77 +6711,6 @@ function SessionDetail({
         setError={setError}
         campaignGmId={campaign?.gm?.id ?? campaign?.gm ?? null}
       />
-    </div>
-  );
-}
-
-function GoalsEditor({ sessionData, onSave }) {
-  const [form, setForm] = useState({
-    objective: "",
-    proposed_score_target: "",
-    proposed_score_description: "",
-  });
-  useEffect(() => {
-    setForm({
-      objective: sessionData?.objective || "",
-      proposed_score_target: sessionData?.proposed_score_target || "",
-      proposed_score_description: sessionData?.proposed_score_description || "",
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionData?.id]);
-  return (
-    <div style={S.card}>
-      <span style={S.sectionLbl}>Goals / Items</span>
-      <div style={{ marginBottom: "8px" }}>
-        <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>Objective</span>
-        <textarea
-          style={{
-            ...S.inp,
-            height: "50px",
-            border: "1px solid var(--border)",
-            padding: "6px",
-          }}
-          value={form.objective}
-          onChange={(e) =>
-            setForm((p) => ({ ...p, objective: e.target.value }))
-          }
-        />
-      </div>
-      <div style={{ marginBottom: "8px" }}>
-        <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-          Proposed score target
-        </span>
-        <input
-          style={S.inp}
-          value={form.proposed_score_target}
-          onChange={(e) =>
-            setForm((p) => ({ ...p, proposed_score_target: e.target.value }))
-          }
-        />
-      </div>
-      <div style={{ marginBottom: "8px" }}>
-        <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-          Proposed score description
-        </span>
-        <textarea
-          style={{
-            ...S.inp,
-            height: "40px",
-            border: "1px solid var(--border)",
-            padding: "6px",
-          }}
-          value={form.proposed_score_description}
-          onChange={(e) =>
-            setForm((p) => ({
-              ...p,
-              proposed_score_description: e.target.value,
-            }))
-          }
-        />
-      </div>
-      <button onClick={() => onSave(form)} style={S.btnPrimary}>
-        Save goals
-      </button>
     </div>
   );
 }

@@ -3,6 +3,8 @@ import {
   buildSessionEndLiveSummary,
   scorecardStatsByCharFromXpEntries,
   mergeEndLiveRowsWithScorecard,
+  sumManualTrackXpForSession,
+  sumManualNonTrackXpForSession,
 } from "./sessionEndLiveXpPreview";
 
 describe("sessionEndLiveXpPreview", () => {
@@ -95,5 +97,46 @@ describe("sessionEndLiveXpPreview", () => {
     expect(merged[0].struggleToggleCount).toBe(1);
     expect(merged[0].totalSessionXpPreview).toBe(1);
     expect(merged[0].unsettledPreviewAdd).toBe(0);
+  });
+
+  test("manual track vs non-track partition includes [pool] in Manual XP", () => {
+    const entries = [
+      {
+        session: 5,
+        trigger: "MANUAL",
+        description: "[insight] table award",
+        xp_gained: 2,
+      },
+      {
+        session: 5,
+        trigger: "MANUAL",
+        description: "[pool] offline award",
+        xp_gained: 3,
+      },
+      {
+        session: 5,
+        trigger: "MANUAL",
+        description: "freeform note",
+        xp_gained: 1,
+      },
+      {
+        session: 5,
+        trigger: "BELIEFS",
+        description: "[pool] should ignore",
+        xp_gained: 9,
+      },
+      {
+        session: 6,
+        trigger: "MANUAL",
+        description: "[pool] other session",
+        xp_gained: 4,
+      },
+    ];
+    expect(sumManualTrackXpForSession(entries, 5)).toBe(2);
+    expect(sumManualNonTrackXpForSession(entries, 5)).toBe(4);
+    expect(
+      sumManualTrackXpForSession(entries, 5) +
+        sumManualNonTrackXpForSession(entries, 5),
+    ).toBe(6);
   });
 });
