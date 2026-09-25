@@ -1,0 +1,236 @@
+/* Session roster tokens — reuse Home .f-card / .npc-card / .p-card under .home-poc */
+.session-roster-tokens.home-poc {
+  /* Keep home token vars available outside Home page */
+  --cream: var(--hftf-text-cream, #f5f0e8);
+  --dark-bg-card: #0d1117;
+  --dark-border: #30363d;
+  --light-bg-card: #0d1117;
+  --light-text: var(--hftf-text-cream, #f5f0e8);
+  --light-text-2: #9ca3af;
+  --light-border: #374151;
+  --purple: #a78bfa;
+  --p1: #7c3aed;
+  --p2: #6c3989;
+  --p4: #c45c26;
+  --stripe-1: #7c3aed;
+  --stripe-2: #6c3989;
+  --stripe-3: #c45c26;
+  --stripe-4: #e8b84a;
+  /* Home page uses 100vh; session rosters must hug content */
+  min-height: 0;
+  height: auto;
+}
+
+.session-roster-tokens .home-faction-grid,
+.session-roster-tokens .home-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(140px, 100%), 1fr));
+  gap: 10px;
+  align-items: start;
+  overflow: visible;
+}
+
+/* One grid cell: face + floating expand (expand out of flow so peers stay put) */
+.session-roster-tokens .session-roster-cell {
+  position: relative;
+  min-width: 0;
+}
+
+/* Nested PC/NPC expand tab chrome (compact purple pills) */
+.session-nested-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+  padding-right: 28px; /* room for × close */
+}
+
+.session-nested-tab {
+  font-size: 10px;
+  font-weight: 500;
+  padding: 3px 7px;
+  border-radius: 4px;
+  border: 1px solid #374151;
+  background: transparent;
+  color: #9ca3af;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.session-nested-tab:hover {
+  border-color: #6b7280;
+  color: #e5e7eb;
+}
+
+.session-nested-tab.is-active {
+  font-weight: 700;
+  border-color: #7c3aed;
+  background: #7c3aed;
+  color: #fff;
+}
+
+.session-expand-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 4px;
+  border: 1px solid #4b5563;
+  background: #1f1630;
+  color: #e5e7eb;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.session-expand-close:hover {
+  border-color: #7c3aed;
+  background: #7c3aed;
+  color: #fff;
+}
+
+/* Session faction faces: Home uses tall 3/4 media — keep compact here */
+.session-roster-tokens .f-card-media {
+  aspect-ratio: 5 / 4;
+  max-height: 110px;
+}
+
+.session-roster-tokens .f-card-body {
+  padding: 8px 8px 10px;
+}
+
+.session-roster-tokens .f-card-name {
+  font-size: 13px;
+}
+
+.session-roster-tokens .f-card-type {
+  font-size: 10px;
+}
+
+.session-roster-tokens .session-pc-finder {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.session-roster-tokens .session-pc-finder-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.session-roster-tokens .session-pc-finder-chip {
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid #374151;
+  background: #111827;
+  color: #e5e7eb;
+  cursor: pointer;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-roster-tokens .session-pc-finder-chip:hover {
+  border-color: #7c3aed;
+  color: #fff;
+}
+
+.session-unassign-drop {
+  margin-top: 10px;
+  padding: 14px 12px;
+  border: 1px dashed #4b5563;
+  border-radius: 8px;
+  background: #0d1117;
+  color: #9ca3af;
+  font-size: 12px;
+  text-align: center;
+}
+
+.session-roster-tokens .session-faction-npc-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+  align-items: center;
+}
+
+.session-roster-tokens .session-npc-strip-thumb {
+  width: 36px;
+  height: 36px;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--dark-border, #374151);
+  background: #111827;
+  padding: 0;
+  cursor: grab;
+  flex-shrink: 0;
+}
+
+.session-roster-tokens .session-npc-strip-thumb.is-selected {
+  outline: 2px solid var(--p1, #7c3aed);
+  outline-offset: 1px;
+}
+
+.session-roster-tokens .session-token-drag-over {
+  border-color: var(--p1, #7c3aed) !important;
+  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.35);
+}
+
+.session-roster-tokens .session-make-faction-tile,
+.session-roster-tokens .session-add-npc-tile {
+  background: #0d1117;
+  border: 1px dashed #4b5563;
+  border-radius: 4px;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.session-roster-tokens .session-make-faction-tile:hover,
+.session-roster-tokens .session-add-npc-tile:hover {
+  transform: none;
+  box-shadow: none;
+  border-color: #7c3aed;
+}
+
+.session-roster-tokens .session-add-npc-tile:disabled {
+  opacity: 0.55;
+}
+
+/* Float under the selected cell — compact card width, no grid reflow */
+.session-roster-tokens .session-pc-expand-panel,
+.session-roster-tokens .session-npc-expand-panel,
+.session-roster-tokens .session-faction-expand-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: auto;
+  z-index: 40;
+  width: 458px;
+  max-width: min(458px, calc(100vw - 40px));
+  max-height: min(72vh, 780px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  margin: 0;
+  min-width: 0;
+  box-sizing: border-box;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
+}
+
+.session-roster-tokens .session-faction-expand-panel {
+  width: min(640px, calc(100vw - 40px));
+  max-width: min(640px, calc(100vw - 40px));
+}
