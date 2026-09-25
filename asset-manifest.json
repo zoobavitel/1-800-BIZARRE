@@ -1,0 +1,13 @@
+{
+  "files": {
+    "main.css": "/1-800-BIZARRE/static/css/main.676cd9c2.css",
+    "main.js": "/1-800-BIZARRE/static/js/main.01c97467.js",
+    "index.html": "/1-800-BIZARRE/index.html",
+    "main.676cd9c2.css.map": "/1-800-BIZARRE/static/css/main.676cd9c2.css.map",
+    "main.01c97467.js.map": "/1-800-BIZARRE/static/js/main.01c97467.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.676cd9c2.css",
+    "static/js/main.01c97467.js"
+  ]
+}
