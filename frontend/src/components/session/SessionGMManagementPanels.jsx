@@ -1418,6 +1418,11 @@ export default function SessionGMManagementPanels({
   }, []);
 
   const [showAddNpc, setShowAddNpc] = useState(false);
+  /** Modal pane: pick existing campaign NPC, or quick-create. */
+  const [addNpcModalMode, setAddNpcModalMode] = useState("pick");
+  /** Choice menu on the dashed Add-NPC grid tile. */
+  const [addNpcChooserOpen, setAddNpcChooserOpen] = useState(false);
+  const addNpcChooserRef = useRef(null);
   /** Quick-create NPC when every campaign NPC is already in this session */
   const [quickNpcName, setQuickNpcName] = useState("");
   const [quickNpcRole, setQuickNpcRole] = useState("");
@@ -1675,11 +1680,34 @@ export default function SessionGMManagementPanels({
     setQuickNpcAbilitiesText("");
     setQuickNpcConflictClock(false);
     setQuickNpcAltClock(false);
-    setQuickNpcFactionId("");
+    setQuickNpcFactionId(
+      addNpcTargetFactionId != null &&
+        Number.isFinite(Number(addNpcTargetFactionId))
+        ? String(addNpcTargetFactionId)
+        : "",
+    );
     setQuickNpcNewFactionName("");
     setQuickNpcFactionCreateBusy(false);
     setQuickNpcCreateBusy(false);
-  }, [showAddNpc]);
+  }, [showAddNpc, addNpcTargetFactionId]);
+
+  useEffect(() => {
+    if (!addNpcChooserOpen) return undefined;
+    const handlePointer = (e) => {
+      if (!addNpcChooserRef.current?.contains(e.target)) {
+        setAddNpcChooserOpen(false);
+      }
+    };
+    const handleKey = (e) => {
+      if (e.key === "Escape") setAddNpcChooserOpen(false);
+    };
+    document.addEventListener("mousedown", handlePointer);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("mousedown", handlePointer);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [addNpcChooserOpen]);
 
   const handleCreateQuickNpcModalFaction = async () => {
     const trimmed = String(quickNpcNewFactionName || "").trim();
@@ -1769,26 +1797,20 @@ export default function SessionGMManagementPanels({
     }
   };
 
-  const handleAddNpcCardClick = () => {
-    const totalCampaignNpcs = (campaignNPCs || []).length;
-    if (totalCampaignNpcs === 0) {
-      if (!campaign?.id) {
-        setError("Campaign is missing; cannot open NPC creation.");
-        return;
-      }
-      if (typeof onNavigateToNPC !== "function") {
-        setError("NPC creation link is not available from this view.");
-        return;
-      }
-      const ok = window.confirm(
-        "This campaign has no NPCs yet. Open the NPC sheet to create one for this campaign? After you save the NPC, come back here and use Add NPC to session again.",
-      );
-      if (!ok) return;
-      onNavigateToNPC(null, { campaignId: campaign.id });
-      return;
-    }
-    setAddNpcTargetFactionId(null);
+  const openAddNpcModal = useCallback((mode, factionId = null) => {
+    setAddNpcTargetFactionId(
+      factionId === NO_FACTION_DROP_KEY || factionId == null
+        ? null
+        : factionId,
+    );
+    setAddNpcModalMode(mode === "create" ? "create" : "pick");
+    setAddNpcChooserOpen(false);
     setShowAddNpc(true);
+  }, []);
+
+  const handleAddNpcTileClick = () => {
+    if (saving) return;
+    setAddNpcChooserOpen((open) => !open);
   };
 
   const updateInv = (npcId, partial) => {
@@ -3852,14 +3874,12 @@ export default function SessionGMManagementPanels({
     [npcDetailById],
   );
 
-  const openAddNpcForFaction = useCallback((factionId) => {
-    setAddNpcTargetFactionId(
-      factionId === NO_FACTION_DROP_KEY || factionId == null
-        ? null
-        : factionId,
-    );
-    setShowAddNpc(true);
-  }, []);
+  const openAddNpcForFaction = useCallback(
+    (factionId) => {
+      openAddNpcModal("pick", factionId);
+    },
+    [openAddNpcModal],
+  );
 
   /** Create campaign faction; if unassigned session NPCs exist, assign them too. */
   const handleCreateFactionAndAssignUngrouped = useCallback(async () => {
@@ -5315,29 +5335,35 @@ export default function SessionGMManagementPanels({
                   : "Create faction"}
             </button>
           </div>
-          <button
-            type="button"
-            className="f-card session-add-npc-tile"
-            onClick={handleAddNpcCardClick}
-            disabled={saving}
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 6,
-              padding: 10,
-              minHeight: 120,
-              borderStyle: "dashed",
-              cursor: saving ? "not-allowed" : "pointer",
-              justifyContent: "center",
-              alignItems: "center",
-              textAlign: "center",
-            }}
+          <div
+            ref={addNpcChooserRef}
+            className="session-add-npc-chooser"
+            style={{ position: "relative", minWidth: 0 }}
           >
-            <span style={{ fontSize: 22, color: "#6b7280", lineHeight: 1 }}>+</span>
-            <span style={{ color: "#9ca3af", fontSize: 11, lineHeight: 1.3 }}>
-              Add NPC to session
-            </span>
-            {(campaignNPCs || []).length === 0 ? (
+            <button
+              type="button"
+              className="f-card session-add-npc-tile"
+              onClick={handleAddNpcTileClick}
+              disabled={saving}
+              aria-expanded={addNpcChooserOpen}
+              aria-haspopup="menu"
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 6,
+                padding: 10,
+                minHeight: 120,
+                borderStyle: "dashed",
+                cursor: saving ? "not-allowed" : "pointer",
+                justifyContent: "center",
+                alignItems: "center",
+                textAlign: "center",
+              }}
+            >
+              <span style={{ fontSize: 22, color: "#6b7280", lineHeight: 1 }}>+</span>
+              <span style={{ color: "#9ca3af", fontSize: 11, lineHeight: 1.3 }}>
+                Add NPC to session
+              </span>
               <span
                 style={{
                   fontSize: 9,
@@ -5345,10 +5371,80 @@ export default function SessionGMManagementPanels({
                   lineHeight: 1.35,
                 }}
               >
-                No campaign NPCs yet — opens builder
+                Existing or create new
               </span>
+            </button>
+            {addNpcChooserOpen ? (
+              <div
+                role="menu"
+                className="session-add-npc-chooser-menu"
+                style={{
+                  position: "absolute",
+                  top: "calc(100% + 4px)",
+                  left: 0,
+                  right: 0,
+                  zIndex: 50,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 2,
+                  padding: 6,
+                  background: "#111827",
+                  border: "1px solid #4b5563",
+                  borderRadius: 6,
+                  boxShadow: "0 8px 24px rgba(0,0,0,0.45)",
+                }}
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={saving || addableNpcList.length === 0}
+                  title={
+                    addableNpcList.length === 0
+                      ? "No campaign NPCs left to add — create one instead"
+                      : undefined
+                  }
+                  onClick={() => openAddNpcModal("pick", null)}
+                  style={{
+                    ...S.btnGhost,
+                    width: "100%",
+                    textAlign: "left",
+                    fontSize: 11,
+                    padding: "8px 10px",
+                    border: "1px solid transparent",
+                    borderRadius: 4,
+                    color:
+                      addableNpcList.length === 0 ? "#6b7280" : "#e5e7eb",
+                    cursor:
+                      saving || addableNpcList.length === 0
+                        ? "not-allowed"
+                        : "pointer",
+                  }}
+                >
+                  Add existing to session
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={saving || !campaign?.id}
+                  onClick={() => openAddNpcModal("create", null)}
+                  style={{
+                    ...S.btnGhost,
+                    width: "100%",
+                    textAlign: "left",
+                    fontSize: 11,
+                    padding: "8px 10px",
+                    border: "1px solid transparent",
+                    borderRadius: 4,
+                    color: "#e5e7eb",
+                    cursor:
+                      saving || !campaign?.id ? "not-allowed" : "pointer",
+                  }}
+                >
+                  Create NPC
+                </button>
+              </div>
             ) : null}
-          </button>
+          </div>
           </div>
 
           {sessionFactionNpcGroups.ungrouped.length > 0 ? (
@@ -7182,13 +7278,17 @@ export default function SessionGMManagementPanels({
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ fontWeight: "bold", marginBottom: 8 }}>Add campaign NPC</div>
-            {addableNpcList.length === 0 ? (
+            <div style={{ fontWeight: "bold", marginBottom: 8 }}>
+              {addNpcModalMode === "create" || addableNpcList.length === 0
+                ? "Create NPC for session"
+                : "Add campaign NPC"}
+            </div>
+            {addNpcModalMode === "create" || addableNpcList.length === 0 ? (
               <>
                 <div style={{ color: "#9ca3af", marginBottom: 10, lineHeight: 1.45 }}>
-                  All campaign NPCs are already in this session. Create a new NPC for
-                  this campaign with stand coin grades, optional abilities and clocks,
-                  then add it to the session — or open the full sheet after save.
+                  {addableNpcList.length === 0 && addNpcModalMode !== "create"
+                    ? "All campaign NPCs are already in this session. Create a new NPC for this campaign with stand coin grades, optional abilities and clocks, then add it to the session — or open the full sheet after save."
+                    : "Create a new NPC for this campaign with stand coin grades, optional abilities and clocks, then add it to the session — or open the full sheet after save."}
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                   <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -7440,23 +7540,52 @@ export default function SessionGMManagementPanels({
                 </div>
               </>
             ) : (
-              <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-                {addableNpcList.map((n) => (
-                  <li key={n.id} style={{ marginBottom: 6 }}>
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        await addNpcToSession(n.id);
-                        setShowAddNpc(false);
-                      }}
-                      style={{ ...S.btnPrimary, width: "100%", textAlign: "left" }}
-                    >
-                      {n.name} {n.stand_name ? `· ${n.stand_name}` : ""}
-                    </button>
-                  </li>
-                ))}
-              </ul>
+              <>
+                <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+                  {addableNpcList.map((n) => (
+                    <li key={n.id} style={{ marginBottom: 6 }}>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await addNpcToSession(n.id);
+                          setShowAddNpc(false);
+                        }}
+                        style={{ ...S.btnPrimary, width: "100%", textAlign: "left" }}
+                      >
+                        {n.name} {n.stand_name ? `· ${n.stand_name}` : ""}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                <button
+                  type="button"
+                  onClick={() => setAddNpcModalMode("create")}
+                  style={{
+                    ...S.btnGhost,
+                    marginTop: 10,
+                    width: "100%",
+                    fontSize: 11,
+                    border: "1px dashed #4b5563",
+                  }}
+                >
+                  Create new NPC instead…
+                </button>
+              </>
             )}
+            {addNpcModalMode === "create" && addableNpcList.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => setAddNpcModalMode("pick")}
+                style={{
+                  ...S.btnGhost,
+                  marginTop: 10,
+                  width: "100%",
+                  fontSize: 11,
+                }}
+              >
+                ← Back to add existing
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={() => setShowAddNpc(false)}

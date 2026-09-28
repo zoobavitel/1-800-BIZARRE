@@ -4,6 +4,18 @@
  */
 export const PATCH_NOTES = [
   {
+    "date": "2026-09-28",
+    "version": null,
+    "sections": [
+      {
+        "title": "Added",
+        "items": [
+          "NPC expand popover, XP/Scorecard unify, help tips"
+        ]
+      }
+    ]
+  },
+  {
     "date": "2026-09-23",
     "version": null,
     "sections": [
@@ -638,8 +650,7 @@ export const PATCH_NOTES = [
           "stop duplicating GM clocks as shared-party on sheet",
           "sync GM clock player visibility and refresh list faster",
           "satisfy trauma hydrate exhaustive-deps for CI",
-          "protect sheet ground truth from poll/autosave races",
-          "stop poll/autosave wiping XP ticks"
+          "protect sheet ground truth from poll/autosave races"
         ]
       },
       {
