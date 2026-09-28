@@ -77,6 +77,7 @@ const BG2 = "var(--hftf-deep)";
  * @param {"npc" | "pc"} [props.variant="npc"] — PC adjusts default copy (grade cap A vs S).
  * @param {"A" | "S"} [props.pcMaxGrade="A"] — when variant is "pc", hints and aria use this as top grade.
  * @param {Record<string, string | { grade: string, blocked?: boolean }>} [props.plannedGrades] — plan-mode ghost grade per axis.
+ * @param {boolean} [props.hideIdleHint=false] — skip long idle instruction blurb (use external ? tip).
  */
 export default function NpcsStandCoin({
   grades,
@@ -87,6 +88,7 @@ export default function NpcsStandCoin({
   variant = "npc",
   pcMaxGrade = "A",
   plannedGrades = null,
+  hideIdleHint = false,
 }) {
   const reactId = useId().replace(/:/g, "");
   const clipId = `npc-stand-coin-clip-${reactId}`;
@@ -253,7 +255,11 @@ export default function NpcsStandCoin({
       >
         {!activeMeta ? (
           <span style={{ fontSize: "10px", lineHeight: 1.4, color: "var(--text-dim)" }}>
-            {emptyStateLines}
+            {hideIdleHint
+              ? readOnly
+                ? "Stand coin (view)."
+                : "Hover or focus a wedge for details."
+              : emptyStateLines}
           </span>
         ) : (
           <>

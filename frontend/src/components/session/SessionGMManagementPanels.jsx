@@ -45,6 +45,14 @@ import {
   standardAbilities,
 } from "../../features/character-sheet/utils/characterUtils";
 import {
+  bandLabel,
+  characterHasAbility,
+  computeInventoryLoadUsed,
+  loadBandForUsed,
+  loadCapForBand,
+  normalizeLoadoutEntry,
+} from "../../features/character-sheet/utils/loadoutUtils";
+import {
   SESSION_SHELL_TABS,
   NPC_DRAG_MIME,
   NPC_DRAG_SOURCE_MIME,
@@ -54,6 +62,7 @@ import {
   SessionShellTabBar,
   NestedTabBar,
   SessionPortraitThumb,
+  SessionHelpTip,
   entityPortraitSrc,
   AddNpcStripTile,
 } from "./sessionShellUi";
@@ -1038,8 +1047,11 @@ function rosterFormatInventoryLine(item) {
       item.quantity != null && item.quantity !== ""
         ? ` ×${item.quantity}`
         : "";
-    if (name && desc) return `${name}${qty} — ${desc}`;
-    if (name) return `${name}${qty}`;
+    const loadN = Number(item.load);
+    const loadBit =
+      Number.isFinite(loadN) && loadN > 0 ? ` (${loadN} load)` : "";
+    if (name && desc) return `${name}${qty}${loadBit} — ${desc}`;
+    if (name) return `${name}${qty}${loadBit}`;
     try {
       return JSON.stringify(item);
     } catch {
@@ -1051,6 +1063,34 @@ function rosterFormatInventoryLine(item) {
   } catch {
     return String(item);
   }
+}
+
+/** Sheet-matching load used + band for PC expand Items tab. */
+function rosterPcLoadSummary(character, sessionData) {
+  const cid = character?.id;
+  const map = sessionData?.loadout_by_character;
+  const entry =
+    map && cid != null
+      ? normalizeLoadoutEntry(map[String(cid)] ?? map[cid])
+      : normalizeLoadoutEntry(null);
+  const std = Array.isArray(character?.standard_ability_details)
+    ? character.standard_ability_details.map((a) => ({
+        type: "standard",
+        name: a?.name,
+      }))
+    : [];
+  const hasMule = characterHasAbility(std, "Mule");
+  const hasRigging = characterHasAbility(std, "Rigging");
+  const coinFilled = countSheetBoolSlots(character?.coin_boxes);
+  const used = computeInventoryLoadUsed({
+    inventory: character?.inventory,
+    coinFilled,
+    riggingCategories: entry.rigging_categories,
+    hasRigging,
+  });
+  const derivedBand = loadBandForUsed(used);
+  const bandMax = derivedBand ? loadCapForBand(derivedBand, hasMule) : null;
+  return { used, derivedBand, bandMax };
 }
 
 function rosterCharacterNoteSections(ch) {
@@ -1086,21 +1126,6 @@ function rosterStandArmorMaxFromDurabilityGrade(letter) {
     .slice(0, 1);
   return ROSTER_DUR_STAND_ARMOR_MAX[k] ?? 0;
 }
-
-const card = {
-  boxSizing: "border-box",
-  width: 280,
-  minHeight: 120,
-  padding: 10,
-  background: "#0d1117",
-  border: "1px solid #374151",
-  borderRadius: 8,
-  display: "flex",
-  flexDirection: "column",
-  gap: 6,
-  fontSize: 11,
-  color: "#e5e7eb",
-};
 
 const lbl = { fontSize: 10, color: "#9ca3af", textTransform: "uppercase" };
 
@@ -1393,6 +1418,11 @@ export default function SessionGMManagementPanels({
   }, []);
 
   const [showAddNpc, setShowAddNpc] = useState(false);
+  /** Modal pane: pick existing campaign NPC, or quick-create. */
+  const [addNpcModalMode, setAddNpcModalMode] = useState("pick");
+  /** Choice menu on the dashed Add-NPC grid tile. */
+  const [addNpcChooserOpen, setAddNpcChooserOpen] = useState(false);
+  const addNpcChooserRef = useRef(null);
   /** Quick-create NPC when every campaign NPC is already in this session */
   const [quickNpcName, setQuickNpcName] = useState("");
   const [quickNpcRole, setQuickNpcRole] = useState("");
@@ -1448,6 +1478,11 @@ export default function SessionGMManagementPanels({
   const [collapsedPcCards, setCollapsedPcCards] = useState({});
   /** Primary session shell tab (Rosters default). */
   const [sessionShellTab, setSessionShellTab] = useState("rosters");
+  /** Legacy Armor → Harm / Armor; Scorecard → XP (allocation lives on XP tab). */
+  useEffect(() => {
+    if (sessionShellTab === "armor") setSessionShellTab("harm");
+    else if (sessionShellTab === "scorecard") setSessionShellTab("xp");
+  }, [sessionShellTab]);
   /** Nested tab id per NPC / PC card when photo-expanded. */
   const [npcNestedTabById, setNpcNestedTabById] = useState({});
   const [pcNestedTabById, setPcNestedTabById] = useState({});
@@ -1469,6 +1504,8 @@ export default function SessionGMManagementPanels({
   const [sessionNpcDragging, setSessionNpcDragging] = useState(false);
   const [sessionQuickFactionName, setSessionQuickFactionName] = useState("");
   const [sessionQuickFactionBusy, setSessionQuickFactionBusy] = useState(false);
+  /** PC expand XP tab: show full sheet-change logs (keyed by character id). */
+  const [pcSheetLogExpandedByChar, setPcSheetLogExpandedByChar] = useState({});
   const [xpLifetimeCharId, setXpLifetimeCharId] = useState("");
   const [xpLifetimeModalOpen, setXpLifetimeModalOpen] = useState(false);
   const [xpLifetimeRows, setXpLifetimeRows] = useState([]);
@@ -1556,7 +1593,7 @@ export default function SessionGMManagementPanels({
     return m;
   }, [campaign?.factions]);
 
-  /** One entry per faction id that has ≥1 NPC in this session (no duplicates). */
+  /** Factions with session NPCs, plus empty campaign factions (so new ones stay visible). */
   const sessionFactionNpcGroups = useMemo(() => {
     const map = new Map();
     const ungrouped = [];
@@ -1571,6 +1608,11 @@ export default function SessionGMManagementPanels({
         ungrouped.push(npc);
       }
     }
+    for (const f of campaign?.factions || []) {
+      const id = Number(f?.id);
+      if (!Number.isFinite(id)) continue;
+      if (!map.has(id)) map.set(id, []);
+    }
     const sortedPairs = [...map.entries()].sort((a, b) => {
       const na = factionsById[a[0]]?.name || factionsById[String(a[0])]?.name;
       const nb = factionsById[b[0]]?.name || factionsById[String(b[0])]?.name;
@@ -1579,7 +1621,7 @@ export default function SessionGMManagementPanels({
       });
     });
     return { factionPairs: sortedPairs, ungrouped };
-  }, [involvedNpcs, factionsById]);
+  }, [involvedNpcs, factionsById, campaign?.factions]);
 
   const addableNpcList = useMemo(
     () =>
@@ -1638,11 +1680,34 @@ export default function SessionGMManagementPanels({
     setQuickNpcAbilitiesText("");
     setQuickNpcConflictClock(false);
     setQuickNpcAltClock(false);
-    setQuickNpcFactionId("");
+    setQuickNpcFactionId(
+      addNpcTargetFactionId != null &&
+        Number.isFinite(Number(addNpcTargetFactionId))
+        ? String(addNpcTargetFactionId)
+        : "",
+    );
     setQuickNpcNewFactionName("");
     setQuickNpcFactionCreateBusy(false);
     setQuickNpcCreateBusy(false);
-  }, [showAddNpc]);
+  }, [showAddNpc, addNpcTargetFactionId]);
+
+  useEffect(() => {
+    if (!addNpcChooserOpen) return undefined;
+    const handlePointer = (e) => {
+      if (!addNpcChooserRef.current?.contains(e.target)) {
+        setAddNpcChooserOpen(false);
+      }
+    };
+    const handleKey = (e) => {
+      if (e.key === "Escape") setAddNpcChooserOpen(false);
+    };
+    document.addEventListener("mousedown", handlePointer);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("mousedown", handlePointer);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [addNpcChooserOpen]);
 
   const handleCreateQuickNpcModalFaction = async () => {
     const trimmed = String(quickNpcNewFactionName || "").trim();
@@ -1732,26 +1797,20 @@ export default function SessionGMManagementPanels({
     }
   };
 
-  const handleAddNpcCardClick = () => {
-    const totalCampaignNpcs = (campaignNPCs || []).length;
-    if (totalCampaignNpcs === 0) {
-      if (!campaign?.id) {
-        setError("Campaign is missing; cannot open NPC creation.");
-        return;
-      }
-      if (typeof onNavigateToNPC !== "function") {
-        setError("NPC creation link is not available from this view.");
-        return;
-      }
-      const ok = window.confirm(
-        "This campaign has no NPCs yet. Open the NPC sheet to create one for this campaign? After you save the NPC, come back here and use Add NPC to session again.",
-      );
-      if (!ok) return;
-      onNavigateToNPC(null, { campaignId: campaign.id });
-      return;
-    }
-    setAddNpcTargetFactionId(null);
+  const openAddNpcModal = useCallback((mode, factionId = null) => {
+    setAddNpcTargetFactionId(
+      factionId === NO_FACTION_DROP_KEY || factionId == null
+        ? null
+        : factionId,
+    );
+    setAddNpcModalMode(mode === "create" ? "create" : "pick");
+    setAddNpcChooserOpen(false);
     setShowAddNpc(true);
+  }, []);
+
+  const handleAddNpcTileClick = () => {
+    if (saving) return;
+    setAddNpcChooserOpen((open) => !open);
   };
 
   const updateInv = (npcId, partial) => {
@@ -2804,22 +2863,53 @@ export default function SessionGMManagementPanels({
     const projectsForPc = (gmPlayerProjectClocks || []).filter(
       (clk) => Number(clk.character) === cid,
     );
+    /** All clocks on this PC (session + campaign-wide) for XP-tab references. */
+    const clocksRefForPc = (() => {
+      const byId = new Map();
+      for (const c of clocks || []) {
+        if (Number(c.character) === cid) byId.set(c.id, c);
+      }
+      for (const c of campaignWideClocks || []) {
+        if (Number(c.character) !== cid) continue;
+        if (!byId.has(c.id)) byId.set(c.id, c);
+      }
+      return [...byId.values()].sort((a, b) => {
+        const da = progressClockIsDone(a) ? 1 : 0;
+        const db = progressClockIsDone(b) ? 1 : 0;
+        if (da !== db) return da - db;
+        return String(a.name || "").localeCompare(String(b.name || ""));
+      });
+    })();
+    const clocksToList =
+      clocksRefForPc.length > 0 ? clocksRefForPc : projectsForPc;
     const histForPc = (sessionAdvancementHistory || []).filter(
       (e) => Number(e.character) === cid,
     );
+    const cidStr = String(characterId);
+    const buyInExpanded = !!pcSheetLogExpandedByChar[`${cidStr}:initial`];
+    const paidExpanded = !!pcSheetLogExpandedByChar[`${cidStr}:expenditure`];
+    const togglePcSheetBucket = (bucketKey) => {
+      const key = `${cidStr}:${bucketKey}`;
+      setPcSheetLogExpandedByChar((p) => ({ ...p, [key]: !p[key] }));
+    };
     const buyInForPc = renderSessionLedgerBucketUl(
       histForPc,
       "initial",
       charDisplayNameById,
-      { expanded: true },
+      {
+        expanded: buyInExpanded,
+        onToggleExpand: togglePcSheetBucket,
+      },
     );
     const paidForPc = renderSessionLedgerBucketUl(
       histForPc,
       "expenditure",
       charDisplayNameById,
-      { expanded: true },
+      {
+        expanded: paidExpanded,
+        onToggleExpand: togglePcSheetBucket,
+      },
     );
-    const cidStr = String(characterId);
 
     return (
       <div style={{ minWidth: 0, maxWidth: "100%" }}>
@@ -3115,22 +3205,27 @@ export default function SessionGMManagementPanels({
           )}
         </div>
 
-        <div style={{ ...lbl, marginBottom: 6 }}>Player projects</div>
+        <div style={{ ...lbl, marginBottom: 6 }}>Player projects / clocks</div>
         <div style={{ marginBottom: 12, fontSize: 10, color: "#6b7280" }}>
           {!campaignWideClocksLoaded ? (
             <span>Loading…</span>
-          ) : projectsForPc.length === 0 ? (
-            <span>No player projects for this PC.</span>
+          ) : clocksToList.length === 0 ? (
+            <span>No clocks for this PC. Add one on the Clocks tab.</span>
           ) : (
             <ul style={{ margin: 0, paddingLeft: 16 }}>
-              {projectsForPc.map((clk) => {
+              {clocksToList.map((clk) => {
                 const done = progressClockIsDone(clk);
+                const type = String(clk.clock_type || "CUSTOM").toUpperCase();
+                const scope = progressClockSessionScopeShort(clk, session?.id);
                 return (
                   <li key={`pc-proj-${clk.id}`}>
                     <span style={{ color: done ? "#6b7280" : "#d1d5db" }}>
-                      {clk.name || "Project"}
+                      {clk.name || "Clock"}
                     </span>
                     {` · ${Number(clk.filled_segments) || 0}/${Number(clk.max_segments) || 0}`}
+                    <span style={{ color: "#71717a" }}>
+                      {` · ${type} · ${scope}`}
+                    </span>
                     {done ? (
                       <span style={{ color: "#22c55e", marginLeft: 4 }}>
                         complete
@@ -3442,7 +3537,8 @@ export default function SessionGMManagementPanels({
       }
       if (!row?.name) return;
       const base = normalizeCharacterInventory(currentInventory);
-      const next = [...base, row];
+      // Normalize so armor drafts keep armor_kind / is_armor / load.
+      const next = normalizeCharacterInventory([...base, row]);
       setPcRosterSheetBusyId(characterId);
       setError(null);
       try {
@@ -3629,6 +3725,128 @@ export default function SessionGMManagementPanels({
     [harmDraftByChar, patchHarmFromDraft, S],
   );
 
+  /** Editable armor charge boxes (session Harm/Armor + PC expand Harm). */
+  const renderPcArmorUses = useCallback(
+    (full) => {
+      if (!full?.id) return null;
+      const grades = rawStandToGrades(full.stand_coin_stats);
+      const standArmorMax = rosterStandArmorMaxFromDurabilityGrade(
+        grades.durability,
+      );
+      const standArmorUsed = Math.max(
+        0,
+        Math.floor(Number(full.stand_armor_used) || 0),
+      );
+      const hasPhyArmor = !!full.has_physical_armor_item;
+      const phyArmorMax = Math.min(
+        6,
+        Math.max(
+          0,
+          Math.floor(Number(full.physical_armor_bonus_charges) || 0),
+        ),
+      );
+      const phyArmorUsed = Math.min(
+        6,
+        Math.max(0, Math.floor(Number(full.physical_armor_used) || 0)),
+      );
+      const isStandUser = hasPlaybook(
+        full.playbook,
+        full.secondary_playbook ?? full.secondaryPlaybook,
+        "Stand",
+      );
+      const busy = pcRosterSheetBusyId === full.id || saving;
+      return (
+        <div
+          style={{
+            display: "grid",
+            gap: 8,
+            fontSize: 10,
+            color: "#9ca3af",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              flexWrap: "wrap",
+            }}
+          >
+            <span style={{ minWidth: 52 }}>Physical</span>
+            {hasPhyArmor && phyArmorMax > 0 ? (
+              <span
+                style={{
+                  opacity: busy ? 0.5 : 1,
+                  pointerEvents: busy ? "none" : "auto",
+                }}
+              >
+                <ArmorChargeBoxes
+                  count={phyArmorMax}
+                  used={phyArmorUsed}
+                  onToggleAt={(i, spent) =>
+                    handlePcArmorUsedChange(
+                      full.id,
+                      "physical_armor_used",
+                      spent ? i : i + 1,
+                      phyArmorMax,
+                    )
+                  }
+                  spentColor="#0d1117"
+                  activeColor="#b45309"
+                  borderColor="#4b5563"
+                  spendTitle="Click to spend physical armor"
+                  restoreTitle="Used — click to restore"
+                />
+              </span>
+            ) : (
+              <span style={{ color: "#52525b" }}>—</span>
+            )}
+          </div>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              flexWrap: "wrap",
+            }}
+          >
+            <span style={{ minWidth: 52 }}>Stand</span>
+            {isStandUser && standArmorMax > 0 ? (
+              <span
+                style={{
+                  opacity: busy ? 0.5 : 1,
+                  pointerEvents: busy ? "none" : "auto",
+                }}
+              >
+                <ArmorChargeBoxes
+                  count={standArmorMax}
+                  used={standArmorUsed}
+                  onToggleAt={(i, spent) =>
+                    handlePcArmorUsedChange(
+                      full.id,
+                      "stand_armor_used",
+                      spent ? i : i + 1,
+                      standArmorMax,
+                    )
+                  }
+                  spentColor="#0d1117"
+                  activeColor="#0d1117"
+                  borderColor="#4b5563"
+                  showCheck
+                  spendTitle="Click to spend Stand armor"
+                  restoreTitle="Used — click to restore"
+                />
+              </span>
+            ) : (
+              <span style={{ color: "#52525b" }}>—</span>
+            )}
+          </div>
+        </div>
+      );
+    },
+    [handlePcArmorUsedChange, pcRosterSheetBusyId, saving],
+  );
+
   const openNpcPhotoExpand = useCallback(
     async (npc) => {
       if (!npc?.id) return;
@@ -3656,24 +3874,20 @@ export default function SessionGMManagementPanels({
     [npcDetailById],
   );
 
-  const openAddNpcForFaction = useCallback((factionId) => {
-    setAddNpcTargetFactionId(
-      factionId === NO_FACTION_DROP_KEY || factionId == null
-        ? null
-        : factionId,
-    );
-    setShowAddNpc(true);
-  }, []);
+  const openAddNpcForFaction = useCallback(
+    (factionId) => {
+      openAddNpcModal("pick", factionId);
+    },
+    [openAddNpcModal],
+  );
 
-  /** Create a campaign faction and assign every unfactioned NPC in the current "No faction" session group. */
+  /** Create campaign faction; if unassigned session NPCs exist, assign them too. */
   const handleCreateFactionAndAssignUngrouped = useCallback(async () => {
     const trimmed = sessionQuickFactionName.trim();
     if (!trimmed || !campaign?.id) {
       setError("Enter a faction name.");
       return;
     }
-    const list = sessionFactionNpcGroups.ungrouped;
-    if (!list.length) return;
     const dup = (campaign?.factions || []).some(
       (f) => String(f.name || "").trim().toLowerCase() === trimmed.toLowerCase(),
     );
@@ -3681,6 +3895,7 @@ export default function SessionGMManagementPanels({
       setError(`A faction named "${trimmed}" already exists in this campaign.`);
       return;
     }
+    const list = sessionFactionNpcGroups.ungrouped;
     setSessionQuickFactionBusy(true);
     setError(null);
     try {
@@ -3688,9 +3903,11 @@ export default function SessionGMManagementPanels({
         name: trimmed,
         campaign: campaign.id,
       });
-      await Promise.all(
-        list.map((npc) => npcAPI.patchNPC(npc.id, { faction: created.id })),
-      );
+      if (list.length) {
+        await Promise.all(
+          list.map((npc) => npcAPI.patchNPC(npc.id, { faction: created.id })),
+        );
+      }
       setSessionQuickFactionName("");
       onRefresh();
     } catch (e) {
@@ -3884,8 +4101,7 @@ export default function SessionGMManagementPanels({
     [user, campaign, refreshSessionClocks, setError],
   );
 
-  const factionGroupWrap = {
-    width: "100%",
+  const expandPanelChrome = {
     boxSizing: "border-box",
     border: "1px solid #374151",
     borderRadius: 8,
@@ -3913,33 +4129,31 @@ export default function SessionGMManagementPanels({
     const nestedTab = npcNestedTabById[npc.id] || "info";
     const setNested = (id) =>
       setNpcNestedTabById((p) => ({ ...p, [npc.id]: id }));
+    const closeNpcExpand = () =>
+      setExpandedNpcPhotoId((id) => (id === npc.id ? null : id));
     return (
-      <div
-        key={npc.id}
-        className="home-poc session-roster-tokens"
-        style={{ ...card, width: "100%", maxWidth: 420 }}
-      >
+      <div key={npc.id} className="session-npc-expand-inner">
+        <button
+          type="button"
+          className="session-expand-close"
+          aria-label="Close NPC panel"
+          title="Close"
+          onClick={closeNpcExpand}
+        >
+          ×
+        </button>
         <div
           style={{
             display: "flex",
             alignItems: "flex-start",
-            justifyContent: "space-between",
             gap: 8,
             marginBottom: 8,
+            paddingRight: 32,
           }}
         >
           <div style={{ width: 120, flexShrink: 0 }}>
             <SessionNpcToken npc={npc} selected />
           </div>
-          <button
-            type="button"
-            onClick={() =>
-              setExpandedNpcPhotoId((id) => (id === npc.id ? null : id))
-            }
-            style={{ ...S.btnGhost, fontSize: 10, padding: "2px 8px" }}
-          >
-            Close
-          </button>
         </div>
         <NestedTabBar
           tabs={NPC_NESTED_TABS}
@@ -3974,18 +4188,6 @@ export default function SessionGMManagementPanels({
                   : npc.trauma || "—"}
               </div>
             </div>
-            <div style={{ display: "flex", justifyContent: "center" }}>
-              <NpcsStandCoin
-                grades={grades}
-                readouts={readoutsFromGrades(grades)}
-                onStep={(k, d) => handleNpcStandStep(npc, k, d)}
-                readOnly={!canEditStand}
-                variant="npc"
-              />
-            </div>
-            {busy ? (
-              <div style={{ fontSize: 10, color: "#a78bfa" }}>Saving…</div>
-            ) : null}
           </div>
         ) : null}
         {nestedTab === "abilities" ? (
@@ -4033,12 +4235,12 @@ export default function SessionGMManagementPanels({
           <div>
             <div style={lbl}>Items / equipment</div>
             {(() => {
-              const inv = Array.isArray(npc.inventory)
+              const invRows = Array.isArray(npc.inventory)
                 ? npc.inventory
                 : Array.isArray(npc.equipment)
                   ? npc.equipment
                   : [];
-              const lines = inv
+              const lines = invRows
                 .map((row) =>
                   typeof rosterFormatInventoryLine === "function"
                     ? rosterFormatInventoryLine(row)
@@ -4071,6 +4273,40 @@ export default function SessionGMManagementPanels({
         ) : null}
         {nestedTab === "more" ? (
           <div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 8,
+                marginBottom: 6,
+              }}
+            >
+              <div style={{ ...lbl, marginBottom: 0 }}>Stand coin</div>
+              <SessionHelpTip
+                label="Stand coin controls"
+                panelId={`npc-stand-help-${npc.id}`}
+              >
+                Left-click a segment to raise its grade (F–S). Right-click or
+                Shift-click to lower. Shift+Enter / Shift+Space on a focused wedge
+                lowers one step.
+              </SessionHelpTip>
+            </div>
+            <div style={{ display: "flex", justifyContent: "center" }}>
+              <NpcsStandCoin
+                grades={grades}
+                readouts={readoutsFromGrades(grades)}
+                onStep={(k, d) => handleNpcStandStep(npc, k, d)}
+                readOnly={!canEditStand}
+                variant="npc"
+                hideIdleHint
+              />
+            </div>
+            {busy ? (
+              <div style={{ fontSize: 10, color: "#a78bfa", marginBottom: 8 }}>
+                Saving…
+              </div>
+            ) : null}
             <div style={lbl}>Player visibility (this session)</div>
         <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
           <input
@@ -4538,115 +4774,9 @@ export default function SessionGMManagementPanels({
 
   const campaignCharsForTabs = campaignChars || [];
 
-  const renderArmorTab = () => (
-    <div style={S.card}>
-      <span style={S.sectionLbl}>Armor charges</span>
-      <p style={{ fontSize: 11, color: "#6b7280", margin: "4px 0 10px" }}>
-        Physical / stand path uses vs max from each PC sheet (session roster fields).
-      </p>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(min(220px, 100%), 1fr))",
-          gap: 10,
-        }}
-      >
-        {campaignCharsForTabs.length === 0 ? (
-          <div style={{ color: "#6b7280", fontSize: 12 }}>No PCs in campaign.</div>
-        ) : (
-          campaignCharsForTabs.map((full) => {
-            const grades = rawStandToGrades(full.stand_coin_stats);
-            const standArmorMax = rosterStandArmorMaxFromDurabilityGrade(
-              grades.durability,
-            );
-            const standArmorUsed = Math.max(
-              0,
-              Math.floor(Number(full.stand_armor_used) || 0),
-            );
-            const hasPhyArmor = !!full.has_physical_armor_item;
-            const phyArmorMax = Math.min(
-              6,
-              Math.max(
-                0,
-                Math.floor(Number(full.physical_armor_bonus_charges) || 0),
-              ),
-            );
-            const phyArmorUsed = Math.min(
-              6,
-              Math.max(0, Math.floor(Number(full.physical_armor_used) || 0)),
-            );
-            const isStandUser = hasPlaybook(
-              full.playbook,
-              full.secondary_playbook ?? full.secondaryPlaybook,
-              "Stand",
-            );
-            const spinMax = Math.max(0, Math.floor(Number(full.spin_armor_max) || 0));
-            const spinUsed = Math.max(0, Math.floor(Number(full.spin_armor_used) || 0));
-            const hamonMax = Math.max(0, Math.floor(Number(full.hamon_armor_max) || 0));
-            const hamonUsed = Math.max(
-              0,
-              Math.floor(Number(full.hamon_armor_used) || 0),
-            );
-            const name = full.true_name || full.name || `PC ${full.id}`;
-            return (
-              <div
-                key={`armor-${full.id}`}
-                style={{
-                  border: "1px solid #374151",
-                  borderRadius: 8,
-                  padding: 10,
-                  background: "#0b1220",
-                  fontSize: 11,
-                }}
-              >
-                <div style={{ fontWeight: 700, marginBottom: 6 }}>{name}</div>
-                <div style={{ color: "#9ca3af", lineHeight: 1.45 }}>
-                  Physical{" "}
-                  {hasPhyArmor ? `${phyArmorUsed}/${phyArmorMax || "—"}` : "—"}
-                  <br />
-                  Stand{" "}
-                  {isStandUser && standArmorMax > 0
-                    ? `${standArmorUsed}/${standArmorMax}`
-                    : "—"}
-                  {spinMax > 0 ? (
-                    <>
-                      <br />
-                      Spin {spinUsed}/{spinMax}
-                    </>
-                  ) : null}
-                  {hamonMax > 0 ? (
-                    <>
-                      <br />
-                      Hamon {hamonUsed}/{hamonMax}
-                    </>
-                  ) : null}
-                </div>
-              </div>
-            );
-          })
-        )}
-      </div>
-    </div>
-  );
-
   const renderLedgerFilterTab = (kind) => {
     const rows = campaignCharsForTabs.map((full) => {
       const name = full.true_name || full.name || `PC ${full.id}`;
-      if (kind === "items") {
-        const lines = (Array.isArray(full.inventory) ? full.inventory : [])
-          .map(rosterFormatInventoryLine)
-          .filter(Boolean);
-        return { id: full.id, name, body: lines.length ? lines.join(" · ") : "—" };
-      }
-      if (kind === "coin") {
-        const hand = countSheetBoolSlots(full.coin_boxes);
-        const stash = countSheetBoolSlots(full.stash_slots);
-        return {
-          id: full.id,
-          name,
-          body: `Hand ${hand} · Stash ${stash}`,
-        };
-      }
       // rep — crew + personal notes if any
       const crewId = full.crew ?? full.crew_id;
       const crew = (crews || []).find((c) => Number(c.id) === Number(crewId));
@@ -4661,14 +4791,12 @@ export default function SessionGMManagementPanels({
         body: rels || (crew ? `Crew: ${crew.name || crew.id}` : "—"),
       };
     });
-    const title =
-      kind === "items" ? "Items" : kind === "coin" ? "Coin" : "Reputation";
+    const title = "Reputation";
     return (
       <div style={S.card}>
         <span style={S.sectionLbl}>{title}</span>
         <p style={{ fontSize: 11, color: "#6b7280", margin: "4px 0 10px" }}>
-          Session ledger snapshot from current PC sheets
-          {kind === "rep" ? " / crew faction standing" : ""}.
+          Session ledger snapshot from current PC sheets / crew faction standing.
         </p>
         <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: 8 }}>
           {rows.length === 0 ? (
@@ -4844,7 +4972,7 @@ export default function SessionGMManagementPanels({
             const factionExpanded = !!collapsedFactionCards[factionCollapseKey];
             const isDragOver = dragOverFactionKey === dropKey;
             return (
-              <React.Fragment key={`faction-${fid}`}>
+              <div className="session-roster-cell" key={`faction-${fid}`}>
                 <SessionFactionToken
                   faction={fac}
                   name={name}
@@ -4868,14 +4996,20 @@ export default function SessionGMManagementPanels({
                 />
                 {expandedNpcPhotoId &&
                 npcList.some((n) => n.id === expandedNpcPhotoId) ? (
-                  <div className="session-npc-expand-panel" style={factionGroupWrap}>
+                  <div
+                    className="session-npc-expand-panel"
+                    style={expandPanelChrome}
+                  >
                     {renderNpcSessionCard(
                       npcList.find((n) => n.id === expandedNpcPhotoId),
                     )}
                   </div>
                 ) : null}
                 {factionExpanded ? (
-                  <div className="session-faction-expand-panel" style={factionGroupWrap}>
+                  <div
+                    className="session-faction-expand-panel"
+                    style={expandPanelChrome}
+                  >
                     <div style={{ marginBottom: 10 }}>
                   <div
                     style={{
@@ -5142,9 +5276,175 @@ export default function SessionGMManagementPanels({
                     </div>
                   </div>
                 ) : null}
-              </React.Fragment>
+              </div>
             );
           })}
+          <div
+            className="f-card session-make-faction-tile"
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+              padding: 10,
+              minHeight: 120,
+              borderStyle: "dashed",
+              cursor: "default",
+            }}
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+            role="group"
+            aria-label="Make a faction"
+          >
+            <div className="f-card-name" style={{ fontSize: 13 }}>
+              Make a faction
+            </div>
+            <input
+              type="text"
+              value={sessionQuickFactionName}
+              onChange={(e) => setSessionQuickFactionName(e.target.value)}
+              placeholder="Faction name"
+              style={{
+                ...S.inp,
+                width: "100%",
+                boxSizing: "border-box",
+                fontSize: 11,
+              }}
+              disabled={sessionQuickFactionBusy || saving || !campaign?.id}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleCreateFactionAndAssignUngrouped();
+                }
+              }}
+            />
+            <button
+              type="button"
+              style={{ ...S.btnPrimary, fontSize: 11, alignSelf: "stretch" }}
+              onClick={handleCreateFactionAndAssignUngrouped}
+              disabled={
+                sessionQuickFactionBusy ||
+                saving ||
+                !campaign?.id ||
+                !sessionQuickFactionName.trim()
+              }
+            >
+              {sessionQuickFactionBusy
+                ? "Working…"
+                : sessionFactionNpcGroups.ungrouped.length > 0
+                  ? `Create & assign ${sessionFactionNpcGroups.ungrouped.length}`
+                  : "Create faction"}
+            </button>
+          </div>
+          <div
+            ref={addNpcChooserRef}
+            className="session-add-npc-chooser"
+            style={{ position: "relative", minWidth: 0 }}
+          >
+            <button
+              type="button"
+              className="f-card session-add-npc-tile"
+              onClick={handleAddNpcTileClick}
+              disabled={saving}
+              aria-expanded={addNpcChooserOpen}
+              aria-haspopup="menu"
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 6,
+                padding: 10,
+                minHeight: 120,
+                borderStyle: "dashed",
+                cursor: saving ? "not-allowed" : "pointer",
+                justifyContent: "center",
+                alignItems: "center",
+                textAlign: "center",
+              }}
+            >
+              <span style={{ fontSize: 22, color: "#6b7280", lineHeight: 1 }}>+</span>
+              <span style={{ color: "#9ca3af", fontSize: 11, lineHeight: 1.3 }}>
+                Add NPC to session
+              </span>
+              <span
+                style={{
+                  fontSize: 9,
+                  color: "#6b7280",
+                  lineHeight: 1.35,
+                }}
+              >
+                Existing or create new
+              </span>
+            </button>
+            {addNpcChooserOpen ? (
+              <div
+                role="menu"
+                className="session-add-npc-chooser-menu"
+                style={{
+                  position: "absolute",
+                  top: "calc(100% + 4px)",
+                  left: 0,
+                  right: 0,
+                  zIndex: 50,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 2,
+                  padding: 6,
+                  background: "#111827",
+                  border: "1px solid #4b5563",
+                  borderRadius: 6,
+                  boxShadow: "0 8px 24px rgba(0,0,0,0.45)",
+                }}
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={saving || addableNpcList.length === 0}
+                  title={
+                    addableNpcList.length === 0
+                      ? "No campaign NPCs left to add — create one instead"
+                      : undefined
+                  }
+                  onClick={() => openAddNpcModal("pick", null)}
+                  style={{
+                    ...S.btnGhost,
+                    width: "100%",
+                    textAlign: "left",
+                    fontSize: 11,
+                    padding: "8px 10px",
+                    border: "1px solid transparent",
+                    borderRadius: 4,
+                    color:
+                      addableNpcList.length === 0 ? "#6b7280" : "#e5e7eb",
+                    cursor:
+                      saving || addableNpcList.length === 0
+                        ? "not-allowed"
+                        : "pointer",
+                  }}
+                >
+                  Add existing to session
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={saving || !campaign?.id}
+                  onClick={() => openAddNpcModal("create", null)}
+                  style={{
+                    ...S.btnGhost,
+                    width: "100%",
+                    textAlign: "left",
+                    fontSize: 11,
+                    padding: "8px 10px",
+                    border: "1px solid transparent",
+                    borderRadius: 4,
+                    color: "#e5e7eb",
+                    cursor:
+                      saving || !campaign?.id ? "not-allowed" : "pointer",
+                  }}
+                >
+                  Create NPC
+                </button>
+              </div>
+            ) : null}
+          </div>
           </div>
 
           {sessionFactionNpcGroups.ungrouped.length > 0 ? (
@@ -5168,7 +5468,10 @@ export default function SessionGMManagementPanels({
               </div>
               <div className="home-card-grid">
                 {sessionFactionNpcGroups.ungrouped.map((npc) => (
-                  <React.Fragment key={`ungrouped-npc-${npc.id}`}>
+                  <div
+                    className="session-roster-cell"
+                    key={`ungrouped-npc-${npc.id}`}
+                  >
                     <SessionNpcToken
                       npc={npc}
                       selected={expandedNpcPhotoId === npc.id}
@@ -5179,62 +5482,15 @@ export default function SessionGMManagementPanels({
                       onDragEnd={clearSessionNpcDrag}
                     />
                     {expandedNpcPhotoId === npc.id ? (
-                      <div className="session-npc-expand-panel">
+                      <div
+                        className="session-npc-expand-panel"
+                        style={expandPanelChrome}
+                      >
                         {renderNpcSessionCard(npc)}
                       </div>
                     ) : null}
-                  </React.Fragment>
+                  </div>
                 ))}
-              </div>
-              <div
-                style={{
-                  padding: 10,
-                  background: "#111827",
-                  borderRadius: 6,
-                  border: "1px solid #374151",
-                }}
-              >
-                <div style={{ ...lbl, marginBottom: 6 }}>
-                  Create faction & assign
-                </div>
-                <div
-                  style={{
-                    display: "flex",
-                    flexWrap: "wrap",
-                    gap: 8,
-                    alignItems: "center",
-                  }}
-                >
-                  <input
-                    type="text"
-                    value={sessionQuickFactionName}
-                    onChange={(e) => setSessionQuickFactionName(e.target.value)}
-                    placeholder="New faction name"
-                    style={{
-                      ...S.inp,
-                      flex: "1 1 160px",
-                      minWidth: 140,
-                      fontSize: 11,
-                    }}
-                    disabled={sessionQuickFactionBusy || saving}
-                  />
-                  <button
-                    type="button"
-                    style={{ ...S.btnPrimary, fontSize: 11 }}
-                    onClick={handleCreateFactionAndAssignUngrouped}
-                    disabled={
-                      sessionQuickFactionBusy ||
-                      saving ||
-                      !campaign?.id ||
-                      !sessionQuickFactionName.trim() ||
-                      sessionFactionNpcGroups.ungrouped.length === 0
-                    }
-                  >
-                    {sessionQuickFactionBusy
-                      ? "Working…"
-                      : `Create & assign ${sessionFactionNpcGroups.ungrouped.length} NPC(s)`}
-                  </button>
-                </div>
               </div>
             </div>
           ) : null}
@@ -5263,39 +5519,6 @@ export default function SessionGMManagementPanels({
               Drop to unassign faction
             </div>
           ) : null}
-
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "start" }}>
-            <button
-              type="button"
-              onClick={handleAddNpcCardClick}
-              style={{
-                ...card,
-                borderStyle: "dashed",
-                cursor: "pointer",
-                justifyContent: "center",
-                alignItems: "center",
-                minHeight: 180,
-              }}
-              disabled={saving}
-            >
-              <span style={{ fontSize: 24, color: "#6b7280" }}>+</span>
-              <span style={{ color: "#9ca3af" }}>Add NPC to session</span>
-              {(campaignNPCs || []).length === 0 ? (
-                <span
-                  style={{
-                    fontSize: 9,
-                    color: "#6b7280",
-                    marginTop: 8,
-                    textAlign: "center",
-                    lineHeight: 1.35,
-                    maxWidth: 240,
-                  }}
-                >
-                  No NPCs in this campaign yet — click to open the NPC builder
-                </span>
-              ) : null}
-            </button>
-          </div>
         </div>
           </>
         ) : null}
@@ -5817,30 +6040,12 @@ export default function SessionGMManagementPanels({
               precision: stand.precision,
               development: stand.development,
             });
-            const standArmorMax = rosterStandArmorMaxFromDurabilityGrade(
-              grades.durability,
-            );
-            const standArmorUsed = Math.max(
-              0,
-              Math.floor(Number(full.stand_armor_used) || 0),
-            );
-            const hasPhyArmor = !!full.has_physical_armor_item;
-            const phyArmorMax = Math.min(
-              6,
-              Math.max(
-                0,
-                Math.floor(Number(full.physical_armor_bonus_charges) || 0),
-              ),
-            );
-            const phyArmorUsed = Math.min(
-              6,
-              Math.max(0, Math.floor(Number(full.physical_armor_used) || 0)),
-            );
             const xp = full.xp_clocks || {};
             const ad = full.action_dots || {};
             const invLines = (Array.isArray(full.inventory) ? full.inventory : [])
               .map(rosterFormatInventoryLine)
               .filter(Boolean);
+            const loadSummary = rosterPcLoadSummary(full, sessionData);
             const noteSections = rosterCharacterNoteSections(full);
             /** Active / in-progress clocks for this PC (session + character-assigned). */
             const pcClks = (() => {
@@ -5889,13 +6094,14 @@ export default function SessionGMManagementPanels({
             const pcStandBusy =
               saving || pcStandForceBusyId === full.id;
             return (
-              <React.Fragment key={full.id}>
-                <div
-                  ref={(el) => {
-                    if (el) pcCardElsRef.current[full.id] = el;
-                    else delete pcCardElsRef.current[full.id];
-                  }}
-                >
+              <div
+                className="session-roster-cell"
+                key={full.id}
+                ref={(el) => {
+                  if (el) pcCardElsRef.current[full.id] = el;
+                  else delete pcCardElsRef.current[full.id];
+                }}
+              >
                 <SessionPcToken
                   character={full}
                   name={name}
@@ -5904,9 +6110,22 @@ export default function SessionGMManagementPanels({
                     toggleCollapsedCard(setCollapsedPcCards, pcCollapseKey)
                   }
                 />
-                </div>
                 {pcExpanded ? (
-                  <div className="session-pc-expand-panel" style={{ ...card, width: "100%", maxWidth: "100%", marginTop: 8 }}>
+                  <div
+                    className="session-pc-expand-panel"
+                    style={expandPanelChrome}
+                  >
+                    <button
+                      type="button"
+                      className="session-expand-close"
+                      aria-label="Close PC panel"
+                      title="Close"
+                      onClick={() =>
+                        toggleCollapsedCard(setCollapsedPcCards, pcCollapseKey)
+                      }
+                    >
+                      ×
+                    </button>
                     <NestedTabBar
                       tabs={PC_NESTED_TABS}
                       active={pcNested}
@@ -6073,109 +6292,39 @@ export default function SessionGMManagementPanels({
                     </div>
                     {renderCompactHarmGrid(full.id)}
                     <div style={{ ...lbl, marginTop: 10 }}>Armor uses</div>
-                    <div
-                      style={{
-                        display: "grid",
-                        gap: 8,
-                        fontSize: 10,
-                        color: "#9ca3af",
-                      }}
-                    >
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 8,
-                          flexWrap: "wrap",
-                        }}
-                      >
-                        <span style={{ minWidth: 52 }}>Physical</span>
-                        {hasPhyArmor && phyArmorMax > 0 ? (
-                          <span
-                            style={{
-                              opacity:
-                                pcRosterSheetBusyId === full.id || saving
-                                  ? 0.5
-                                  : 1,
-                              pointerEvents:
-                                pcRosterSheetBusyId === full.id || saving
-                                  ? "none"
-                                  : "auto",
-                            }}
-                          >
-                            <ArmorChargeBoxes
-                              count={phyArmorMax}
-                              used={phyArmorUsed}
-                              onToggleAt={(i, spent) =>
-                                handlePcArmorUsedChange(
-                                  full.id,
-                                  "physical_armor_used",
-                                  spent ? i : i + 1,
-                                  phyArmorMax,
-                                )
-                              }
-                              spentColor="#0d1117"
-                              activeColor="#b45309"
-                              borderColor="#4b5563"
-                              spendTitle="Click to spend physical armor"
-                              restoreTitle="Used — click to restore"
-                            />
-                          </span>
-                        ) : (
-                          <span style={{ color: "#52525b" }}>—</span>
-                        )}
-                      </div>
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 8,
-                          flexWrap: "wrap",
-                        }}
-                      >
-                        <span style={{ minWidth: 52 }}>Stand</span>
-                        {isStandUser && standArmorMax > 0 ? (
-                          <span
-                            style={{
-                              opacity:
-                                pcRosterSheetBusyId === full.id || saving
-                                  ? 0.5
-                                  : 1,
-                              pointerEvents:
-                                pcRosterSheetBusyId === full.id || saving
-                                  ? "none"
-                                  : "auto",
-                            }}
-                          >
-                            <ArmorChargeBoxes
-                              count={standArmorMax}
-                              used={standArmorUsed}
-                              onToggleAt={(i, spent) =>
-                                handlePcArmorUsedChange(
-                                  full.id,
-                                  "stand_armor_used",
-                                  spent ? i : i + 1,
-                                  standArmorMax,
-                                )
-                              }
-                              spentColor="#0d1117"
-                              activeColor="#0d1117"
-                              borderColor="#4b5563"
-                              showCheck
-                              spendTitle="Click to spend Stand armor"
-                              restoreTitle="Used — click to restore"
-                            />
-                          </span>
-                        ) : (
-                          <span style={{ color: "#52525b" }}>—</span>
-                        )}
-                      </div>
-                    </div>
+                    {renderPcArmorUses(full)}
                     </div>
                     <div style={{ display: pcNested === "xp" ? "block" : "none" }}>
                     {renderPcExpandXpPanel(full.id, xp)}
                     </div>
                     <div style={{ display: pcNested === "items" ? "block" : "none" }}>
+                    <div style={lbl}>Load</div>
+                    <div
+                      style={{
+                        fontSize: 11,
+                        color: "#e5e7eb",
+                        marginBottom: 8,
+                        lineHeight: 1.35,
+                      }}
+                    >
+                      <strong
+                        style={{
+                          color:
+                            loadSummary.bandMax != null &&
+                            loadSummary.used > loadSummary.bandMax
+                              ? "#f85149"
+                              : "#e5e7eb",
+                        }}
+                      >
+                        {loadSummary.used}
+                      </strong>
+                      {loadSummary.derivedBand
+                        ? ` · ${bandLabel(loadSummary.derivedBand)}`
+                        : " · —"}
+                      {loadSummary.bandMax != null
+                        ? ` (cap ${loadSummary.bandMax})`
+                        : null}
+                    </div>
                     <div style={lbl}>Inventory</div>
                     <div
                       style={{
@@ -6210,6 +6359,7 @@ export default function SessionGMManagementPanels({
                     >
                       <InventoryItemPicker
                         catalogItems={equipmentCatalog}
+                        allowArmor={true}
                         disabled={
                           saving ||
                           pcSheetMoneySavingId === full.id ||
@@ -7078,7 +7228,7 @@ export default function SessionGMManagementPanels({
                     </div>
                   </div>
                 ) : null}
-              </React.Fragment>
+              </div>
             );
           })}
                 </div>
@@ -7099,19 +7249,7 @@ export default function SessionGMManagementPanels({
       </div>
       ) : null}
 
-      {sessionShellTab === "armor" ? renderArmorTab() : null}
-      {sessionShellTab === "coin" ? renderLedgerFilterTab("coin") : null}
       {sessionShellTab === "rep" ? renderLedgerFilterTab("rep") : null}
-      {sessionShellTab === "scorecard" ? (
-        <div style={S.card}>
-          <span style={S.sectionLbl}>Scorecard</span>
-          {scorecardPanel || (
-            <p style={{ fontSize: 12, color: "#6b7280" }}>
-              Scorecard unavailable for this view.
-            </p>
-          )}
-        </div>
-      ) : null}
 
       {showAddNpc && (
         <div
@@ -7140,13 +7278,17 @@ export default function SessionGMManagementPanels({
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ fontWeight: "bold", marginBottom: 8 }}>Add campaign NPC</div>
-            {addableNpcList.length === 0 ? (
+            <div style={{ fontWeight: "bold", marginBottom: 8 }}>
+              {addNpcModalMode === "create" || addableNpcList.length === 0
+                ? "Create NPC for session"
+                : "Add campaign NPC"}
+            </div>
+            {addNpcModalMode === "create" || addableNpcList.length === 0 ? (
               <>
                 <div style={{ color: "#9ca3af", marginBottom: 10, lineHeight: 1.45 }}>
-                  All campaign NPCs are already in this session. Create a new NPC for
-                  this campaign with stand coin grades, optional abilities and clocks,
-                  then add it to the session — or open the full sheet after save.
+                  {addableNpcList.length === 0 && addNpcModalMode !== "create"
+                    ? "All campaign NPCs are already in this session. Create a new NPC for this campaign with stand coin grades, optional abilities and clocks, then add it to the session — or open the full sheet after save."
+                    : "Create a new NPC for this campaign with stand coin grades, optional abilities and clocks, then add it to the session — or open the full sheet after save."}
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                   <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -7398,23 +7540,52 @@ export default function SessionGMManagementPanels({
                 </div>
               </>
             ) : (
-              <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-                {addableNpcList.map((n) => (
-                  <li key={n.id} style={{ marginBottom: 6 }}>
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        await addNpcToSession(n.id);
-                        setShowAddNpc(false);
-                      }}
-                      style={{ ...S.btnPrimary, width: "100%", textAlign: "left" }}
-                    >
-                      {n.name} {n.stand_name ? `· ${n.stand_name}` : ""}
-                    </button>
-                  </li>
-                ))}
-              </ul>
+              <>
+                <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+                  {addableNpcList.map((n) => (
+                    <li key={n.id} style={{ marginBottom: 6 }}>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await addNpcToSession(n.id);
+                          setShowAddNpc(false);
+                        }}
+                        style={{ ...S.btnPrimary, width: "100%", textAlign: "left" }}
+                      >
+                        {n.name} {n.stand_name ? `· ${n.stand_name}` : ""}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                <button
+                  type="button"
+                  onClick={() => setAddNpcModalMode("create")}
+                  style={{
+                    ...S.btnGhost,
+                    marginTop: 10,
+                    width: "100%",
+                    fontSize: 11,
+                    border: "1px dashed #4b5563",
+                  }}
+                >
+                  Create new NPC instead…
+                </button>
+              </>
             )}
+            {addNpcModalMode === "create" && addableNpcList.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => setAddNpcModalMode("pick")}
+                style={{
+                  ...S.btnGhost,
+                  marginTop: 10,
+                  width: "100%",
+                  fontSize: 11,
+                }}
+              >
+                ← Back to add existing
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={() => setShowAddNpc(false)}
@@ -7451,10 +7622,10 @@ export default function SessionGMManagementPanels({
             }}
           >
             {sessionShellTab === "harm"
-              ? "Compact harm (per character)"
+              ? "Harm / Armor"
               : sessionShellTab === "xp"
                 ? "Session XP"
-                : "Bulk position / effect (per character)"}
+                : "Position & effect"}
           </span>
           <button
             type="button"
@@ -7472,8 +7643,8 @@ export default function SessionGMManagementPanels({
             }}
             title={
               bulkPeSectionCollapsed
-                ? "Expand bulk position / effect panel"
-                : "Collapse bulk position / effect panel"
+                ? "Expand panel"
+                : "Collapse panel"
             }
           >
             {bulkPeSectionCollapsed ? "Expand" : "Collapse"}
@@ -7481,11 +7652,12 @@ export default function SessionGMManagementPanels({
         </div>
         {!bulkPeSectionCollapsed ? (
           <>
+        {sessionShellTab === "rolls" ? (
+          <>
         <p style={{ fontSize: 11, color: "#6b7280", marginTop: 0 }}>
           Overrides session defaults for these PCs on action rolls. Use{" "}
           <strong>PE default</strong> next to a name to clear that PC&apos;s
-          position/effect override. Use <strong>Reset harm</strong> to wipe that
-          PC&apos;s harm fields (asks for confirmation before saving).
+          position/effect override.
         </p>
         <div
           style={{
@@ -7922,7 +8094,25 @@ export default function SessionGMManagementPanels({
             </>
           ) : null}
         </div>
-        {manualXp != null && setManualXp != null && onManualXpGrant != null ? (
+          </>
+        ) : null}
+        {sessionShellTab === "xp" ? (
+          <>
+            {scorecardPanel ? (
+              <div
+                style={{
+                  marginBottom: 12,
+                  marginTop: 4,
+                  paddingBottom: 12,
+                  borderBottom: "1px solid #30363d",
+                }}
+              >
+                {scorecardPanel}
+              </div>
+            ) : null}
+            {manualXp != null &&
+            setManualXp != null &&
+            onManualXpGrant != null ? (
           <div
             style={{
               marginBottom: 12,
@@ -9058,7 +9248,10 @@ export default function SessionGMManagementPanels({
             </>
             ) : null}
           </div>
+            ) : null}
+          </>
         ) : null}
+        {sessionShellTab === "rolls" || sessionShellTab === "harm" ? (
         <div style={{ display: "grid", gap: 10 }}>
           {campaignChars.map((ch) => {
             const id = ch.id;
@@ -9114,29 +9307,33 @@ export default function SessionGMManagementPanels({
                     {ch.true_name || ch.name || id}
                   </a>
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        confirmResetHarmForPc(
-                          id,
-                          ch.true_name || ch.name || `PC ${id}`,
-                        )
-                      }
-                      style={{ ...S.btnGhost, fontSize: 10 }}
-                      disabled={saving}
-                      title="Clear every harm line for this PC (confirmation required)"
-                    >
-                      Reset harm
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => mergePosEffect({ [id]: null })}
-                      style={{ ...S.btnGhost, fontSize: 10, padding: "6px 8px" }}
-                      disabled={saving}
-                      title="Use session default position / effect for this PC"
-                    >
-                      PE default
-                    </button>
+                    {sessionShellTab === "harm" ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          confirmResetHarmForPc(
+                            id,
+                            ch.true_name || ch.name || `PC ${id}`,
+                          )
+                        }
+                        style={{ ...S.btnGhost, fontSize: 10 }}
+                        disabled={saving}
+                        title="Clear every harm line for this PC (confirmation required)"
+                      >
+                        Reset harm
+                      </button>
+                    ) : null}
+                    {sessionShellTab === "rolls" ? (
+                      <button
+                        type="button"
+                        onClick={() => mergePosEffect({ [id]: null })}
+                        style={{ ...S.btnGhost, fontSize: 10, padding: "6px 8px" }}
+                        disabled={saving}
+                        title="Use session default position / effect for this PC"
+                      >
+                        PE default
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       onClick={() => toggleCollapsedCard(setCollapsedPcCards, peCollapseKey)}
@@ -9148,6 +9345,18 @@ export default function SessionGMManagementPanels({
                   </div>
                 </div>
                 {!peCollapsed ? (
+                  sessionShellTab === "harm" ? (
+                    <div style={{ minWidth: 220, display: "grid", gap: 10 }}>
+                      <div>
+                        <div style={lbl}>Harm (compact)</div>
+                        {renderCompactHarmGrid(id)}
+                      </div>
+                      <div>
+                        <div style={lbl}>Armor uses</div>
+                        {renderPcArmorUses(fullCharacter)}
+                      </div>
+                    </div>
+                  ) : (
                   <div
                     style={{
                       display: "flex",
@@ -9504,16 +9713,14 @@ export default function SessionGMManagementPanels({
                       )}
                     </div>
                   </div>
-                  <div style={{ minWidth: 220, flex: "1 1 220px" }}>
-                    <div style={lbl}>Harm (compact)</div>
-                    {renderCompactHarmGrid(id)}
                   </div>
-                  </div>
+                  )
                 ) : null}
               </div>
             );
           })}
         </div>
+        ) : null}
           </>
         ) : null}
       </div>
