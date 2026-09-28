@@ -30,6 +30,7 @@ import {
 import NpcsStandCoin from "../components/NpcsStandCoin";
 import ProgressClock from "../components/ProgressClock";
 import AvatarCropModal from "../components/AvatarCropModal";
+import { SessionHelpTip } from "../components/session/sessionShellUi";
 import AdvancementPlanStrip from "../features/character-sheet/components/AdvancementPlanStrip";
 import AdvancementPlanPanel from "../features/character-sheet/components/AdvancementPlanPanel";
 import {
@@ -14039,41 +14040,45 @@ const CharacterSheetWrapper = ({
                       paddingBottom: "10px",
                     }}
                   >
-                    <span
-                      style={{
-                        color: "#f87171",
-                        fontSize: "11px",
-                        fontWeight: "bold",
-                        marginBottom: "6px",
-                        display: "block",
-                      }}
-                    >
-                      VICE ROLL
-                    </span>
                     <div
                       style={{
-                        fontSize: "11px",
-                        color: "#9ca3af",
-                        lineHeight: 1.45,
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "flex-start",
+                        gap: "8px",
                         marginBottom: "8px",
                       }}
                     >
-                      Roll dice equal to your{" "}
-                      <span style={{ color: "#e5e7eb", fontWeight: "bold" }}>
-                        lowest attribute
-                      </span>{" "}
-                      (Insight / Prowess / Resolve). Clear stress equal to the{" "}
-                      <span style={{ color: "#e5e7eb", fontWeight: "bold" }}>
-                        highest die
+                      <span
+                        style={{
+                          color: "#f87171",
+                          fontSize: "11px",
+                          fontWeight: "bold",
+                        }}
+                      >
+                        VICE ROLL
                       </span>
-                      . If that number is greater than stress you had marked,
-                      you{" "}
-                      <span style={{ color: "#fbbf24", fontWeight: "bold" }}>
-                        overindulge
-                      </span>
-                      . Skipping vice in downtime: take stress equal to your
-                      trauma ({traumaMarkedCount}); no trauma means vice cannot
-                      force stress yet.
+                      <SessionHelpTip
+                        label="Vice roll help"
+                        panelId="character-sheet-vice-roll-help"
+                      >
+                        Roll dice equal to your{" "}
+                        <span style={{ color: "#e5e7eb", fontWeight: "bold" }}>
+                          lowest attribute
+                        </span>{" "}
+                        (Insight / Prowess / Resolve). Clear stress equal to the{" "}
+                        <span style={{ color: "#e5e7eb", fontWeight: "bold" }}>
+                          highest die
+                        </span>
+                        . If that number is greater than stress you had marked,
+                        you{" "}
+                        <span style={{ color: "#fbbf24", fontWeight: "bold" }}>
+                          overindulge
+                        </span>
+                        . Skipping vice in downtime: take stress equal to your
+                        trauma ({traumaMarkedCount}); no trauma means vice cannot
+                        force stress yet.
+                      </SessionHelpTip>
                     </div>
                     {String(charData.vice || "").trim() ? (
                       <div
