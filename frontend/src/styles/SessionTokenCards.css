@@ -199,6 +199,16 @@
   box-sizing: border-box;
 }
 
+.session-roster-tokens .session-add-npc-chooser {
+  width: 100%;
+  min-width: 0;
+}
+
+.session-roster-tokens .session-add-npc-chooser-menu button:hover:not(:disabled) {
+  background: #1f2937;
+  border-color: #4b5563;
+}
+
 .session-roster-tokens .session-make-faction-tile:hover,
 .session-roster-tokens .session-add-npc-tile:hover {
   transform: none;
