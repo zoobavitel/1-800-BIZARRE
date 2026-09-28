@@ -8,6 +8,12 @@ export const PATCH_NOTES = [
     "version": null,
     "sections": [
       {
+        "title": "Fixed",
+        "items": [
+          "flip Assist UI to helper-initiated flow"
+        ]
+      },
+      {
         "title": "Added",
         "items": [
           "tuck XP help into ? bubble",
@@ -646,12 +652,6 @@ export const PATCH_NOTES = [
         "title": "Documentation",
         "items": [
           "refresh patch notes for sheet/XP fixes"
-        ]
-      },
-      {
-        "title": "Added",
-        "items": [
-          "untick XP tracks refunds free pool"
         ]
       }
     ]
