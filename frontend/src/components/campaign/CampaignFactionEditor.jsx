@@ -22,6 +22,7 @@ const CampaignFactionEditor = ({
   onCancel,
   onAddNpc,
   onRemoveNpc,
+  onToggleNpcVisibleToPlayers,
   embedded = false,
   S,
 }) => {
@@ -397,11 +398,37 @@ const CampaignFactionEditor = ({
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "center",
+                gap: 8,
                 padding: "4px 0",
                 fontSize: "12px",
               }}
             >
-              <span>{n.name || n.stand_name || `NPC ${n.id}`}</span>
+              <span style={{ minWidth: 0, flex: 1 }}>
+                {n.name || n.stand_name || `NPC ${n.id}`}
+              </span>
+              {factionForm.players_see_npcs !== false &&
+              factionForm.visible_to_players !== false &&
+              typeof onToggleNpcVisibleToPlayers === "function" ? (
+                <label
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 4,
+                    fontSize: 10,
+                    whiteSpace: "nowrap",
+                    opacity: n.visible_to_players === false ? 0.65 : 1,
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={n.visible_to_players !== false}
+                    onChange={(e) =>
+                      onToggleNpcVisibleToPlayers(n.id, e.target.checked)
+                    }
+                  />
+                  Players see
+                </label>
+              ) : null}
               <button
                 onClick={() => onRemoveNpc(n.id)}
                 style={{

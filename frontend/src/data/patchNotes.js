@@ -8,6 +8,12 @@ export const PATCH_NOTES = [
     "version": null,
     "sections": [
       {
+        "title": "Added",
+        "items": [
+          "player access, PC Info, campaign shell ledgers"
+        ]
+      },
+      {
         "title": "Other",
         "items": [
           "Align campaign/session roster expands with full-width expand-slot parity.",
@@ -593,12 +599,6 @@ export const PATCH_NOTES = [
           "Merge pull request #112 from zoobavitel/fix/custom-stand-ability-persist",
           "Merge pull request #111 from zoobavitel/fix/custom-stand-ability-persist",
           "Merge pull request #110 from zoobavitel/feature/reset-character-sheet"
-        ]
-      },
-      {
-        "title": "Added",
-        "items": [
-          "sync SRD_DEV rules + human PDF export"
         ]
       }
     ]

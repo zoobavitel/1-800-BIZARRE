@@ -24,6 +24,7 @@ import InventoryItemPicker from "../../features/character-sheet/components/Inven
 import { ArmorChargeBoxes } from "../../features/character-sheet/components/CharacterSheetArmorPanel";
 import { progressClockShowsPlayersBadge } from "../../features/character-sheet/utils/progressClockVisibility";
 import { buildRouteHref, handleSpaNavClick } from "../../utils/spaNavigation";
+import useRosterExpandAnchor from "../roster/useRosterExpandAnchor";
 import {
   ACTION_RATING_KEYS,
   STAND_ROLL_KEYS_ALL,
@@ -1527,6 +1528,24 @@ export default function SessionGMManagementPanels({
   const [pcNestedTabById, setPcNestedTabById] = useState({});
   /** Which NPC photo is expanded under its faction (id or null). */
   const [expandedNpcPhotoId, setExpandedNpcPhotoId] = useState(null);
+  const sessionNpcExpandKey = useMemo(() => {
+    const fac = Object.entries(collapsedFactionCards).find(([, v]) => v)?.[0];
+    if (fac != null) return `f-${fac}`;
+    if (expandedNpcPhotoId != null) return `n-${expandedNpcPhotoId}`;
+    return null;
+  }, [collapsedFactionCards, expandedNpcPhotoId]);
+  const sessionPcExpandKey = useMemo(() => {
+    const pe = Object.entries(collapsedPcCards).find(([, v]) => v)?.[0];
+    return pe != null ? pe : null;
+  }, [collapsedPcCards]);
+  const {
+    tokensRef: sessionNpcTokensRef,
+    tokensStyle: sessionNpcTokensStyle,
+  } = useRosterExpandAnchor(sessionNpcExpandKey);
+  const {
+    tokensRef: sessionPcTokensRef,
+    tokensStyle: sessionPcTokensStyle,
+  } = useRosterExpandAnchor(sessionPcExpandKey);
   const [dragOverFactionKey, setDragOverFactionKey] = useState(null);
   /** Prefetch fuller NPC when expanding if summary thin. */
   const [npcDetailById, setNpcDetailById] = useState({});
@@ -4349,6 +4368,33 @@ export default function SessionGMManagementPanels({
                 : undefined
             }
           />
+          {nestedTab === "info" && isGmUser ? (
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                marginTop: 10,
+                fontSize: 11,
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={npc.visible_to_players !== false}
+                disabled={
+                  saving ||
+                  busy ||
+                  npcUiBusyKey === `edit:${npc.id}`
+                }
+                onChange={(e) =>
+                  patchNpcExpandFields(npc.id, {
+                    visible_to_players: e.target.checked,
+                  })
+                }
+              />
+              Visible to players
+            </label>
+          ) : null}
           {nestedTab === "info" ? (
             <div style={{ marginTop: 10 }}>
               <div style={lbl}>Faction (campaign)</div>
@@ -4987,8 +5033,15 @@ export default function SessionGMManagementPanels({
         {!npcRosterSectionCollapsed ? (
           <>
             <div
+              ref={sessionNpcTokensRef}
               className="home-poc session-roster-tokens"
-              style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 10 }}
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 14,
+                marginTop: 10,
+                ...sessionNpcTokensStyle,
+              }}
             >
           <div className="home-faction-grid">
           {sessionFactionNpcGroups.factionPairs.map(([fid, npcList]) => {
@@ -5018,12 +5071,6 @@ export default function SessionGMManagementPanels({
                     toggleSessionFactionExpand(factionCollapseKey)
                   }
                   onNpcThumbClick={(npc) => openNpcPhotoExpand(npc)}
-                  onNpcRemove={
-                    isGmUser
-                      ? (npc) => removeNpcFromSession(npc?.id)
-                      : undefined
-                  }
-                  removeDisabled={saving || !isGmUser}
                   onAddNpc={
                     isGmUser ? () => openAddNpcForFaction(fid) : undefined
                   }
@@ -5235,7 +5282,7 @@ export default function SessionGMManagementPanels({
               ([fid]) => !!collapsedFactionCards[String(fid)],
             );
             if (!expandedPair) return null;
-            const [fid] = expandedPair;
+            const [fid, factionNpcList] = expandedPair;
             const fac =
               factionsById[fid] ||
               (campaign?.factions || []).find((f) => String(f.id) === String(fid)) ||
@@ -5453,6 +5500,64 @@ export default function SessionGMManagementPanels({
                         </label>
                       ))}
                     </div>
+                    {draft.players_see_npcs !== false &&
+                    draft.visible_to_players ? (
+                      <div
+                        style={{
+                          marginTop: 8,
+                          padding: 8,
+                          background: "#0d1117",
+                          borderRadius: 4,
+                          border: "1px solid #374151",
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: 10,
+                            color: "#9ca3af",
+                            marginBottom: 6,
+                            textTransform: "uppercase",
+                          }}
+                        >
+                          NPC visibility
+                        </div>
+                        {(factionNpcList || []).length === 0 ? (
+                          <div style={{ fontSize: 11, color: "#6b7280" }}>
+                            No NPCs in this faction yet.
+                          </div>
+                        ) : (
+                          (factionNpcList || []).map((n) => (
+                            <label
+                              key={`fac-npc-vis-${n.id}`}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 6,
+                                fontSize: 11,
+                                marginBottom: 4,
+                                opacity:
+                                  n.visible_to_players === false ? 0.65 : 1,
+                              }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={n.visible_to_players !== false}
+                                disabled={saving || !!localNpcPatch[n.id]}
+                                onChange={(e) =>
+                                  patchNpcExpandFields(n.id, {
+                                    visible_to_players: e.target.checked,
+                                  })
+                                }
+                              />
+                              <span style={{ minWidth: 0, flex: 1 }}>
+                                {n.name || n.stand_name || `NPC ${n.id}`}
+                              </span>
+                              Players see
+                            </label>
+                          ))
+                        )}
+                      </div>
+                    ) : null}
                     <div
                       style={{
                         gridColumn: "1 / -1",
@@ -5587,8 +5692,6 @@ export default function SessionGMManagementPanels({
                       draggable
                       sourceFactionKey={NO_FACTION_DROP_KEY}
                       onOpen={() => openNpcPhotoExpand(npc)}
-                      onRemove={() => removeNpcFromSession(npc.id)}
-                      removeDisabled={saving}
                       onDragBegin={() => setSessionNpcDragging(true)}
                       onDragEnd={clearSessionNpcDrag}
                     />
@@ -5683,7 +5786,11 @@ export default function SessionGMManagementPanels({
               emptyMessage="No crews linked to this campaign."
               showCreateWhenEmpty={false}
             />
-        <div className="home-poc session-roster-tokens" style={{ marginTop: 10 }}>
+        <div
+          ref={sessionPcTokensRef}
+          className="home-poc session-roster-tokens"
+          style={{ marginTop: 10, ...sessionPcTokensStyle }}
+        >
           {(() => {
             const filterQ = pcRosterFilter.trim().toLowerCase();
             const pcEntries = (campaignChars || [])
@@ -5717,6 +5824,24 @@ export default function SessionGMManagementPanels({
                 });
               });
             };
+            const resolvePcPlayer = (ch) => {
+              const uid = ch?.user_id ?? ch?.user?.id;
+              if (uid == null) return null;
+              if (
+                campaign?.gm?.id != null &&
+                Number(campaign.gm.id) === Number(uid)
+              ) {
+                return campaign.gm;
+              }
+              return (
+                (campaign?.players || []).find(
+                  (p) => Number(p.id) === Number(uid),
+                ) || {
+                  id: uid,
+                  username: ch.username,
+                }
+              );
+            };
             return (
               <>
                 <div className="session-pc-finder">
@@ -5749,7 +5874,7 @@ export default function SessionGMManagementPanels({
                   </div>
                 </div>
                 <div className="home-card-grid">
-                  {pcEntries.map(({ full, name }) => {
+                  {pcEntries.map(({ ch, full, name }) => {
                     const pcCollapseKey = `quick-${full.id}`;
                     const pcExpanded = !!collapsedPcCards[pcCollapseKey];
                     return (
@@ -5768,6 +5893,8 @@ export default function SessionGMManagementPanels({
                           onToggleExpand={() =>
                             toggleCollapsedCard(setCollapsedPcCards, pcCollapseKey)
                           }
+                          player={resolvePcPlayer(ch)}
+                          campaignCharacters={campaignChars}
                         />
                       </div>
                     );

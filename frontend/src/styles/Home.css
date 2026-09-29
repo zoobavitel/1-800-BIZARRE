@@ -887,6 +887,47 @@
   margin-bottom: 8px;
 }
 
+.home-poc .home-undo-delete {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border: 1px solid #b91c1c;
+  border-radius: 4px;
+  background: #fef2f2;
+  color: #7f1d1d;
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.home-poc .home-undo-delete-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-poc .home-undo-delete-btn {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 4px 10px;
+  border: 1px solid #b91c1c;
+  border-radius: 3px;
+  background: #fff;
+  color: #991b1b;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.home-poc .home-undo-delete-btn:hover {
+  background: #fee2e2;
+}
+
 .home-poc .p-card,
 .home-poc .npc-card {
   display: flex;

@@ -8,6 +8,7 @@ import {
 import { NO_FACTION_DROP_KEY } from "../session/sessionShellUi";
 import { rosterExpandPanelChrome } from "./rosterShared";
 import NpcCampaignExpandPanel from "./NpcCampaignExpandPanel";
+import useRosterExpandAnchor from "./useRosterExpandAnchor";
 
 /**
  * Campaign-scope NPC roster column: faction token grid, make-faction, add-NPC, unaffiliated.
@@ -31,6 +32,7 @@ export default function RosterNpcColumn({
   cancelFactionForm,
   handleAddNpcToFaction,
   handleRemoveNpcFromFaction,
+  handleToggleNpcVisibleToPlayers,
   factionForm,
   setFactionForm,
   factionError,
@@ -74,6 +76,14 @@ export default function RosterNpcColumn({
       ? unaffiliated.find((n) => n.id === expandedNpcId) || null
       : null;
 
+  const expandAnchorKey =
+    expandedFactionId != null
+      ? `f-${expandedFactionId}`
+      : expandedNpcId != null
+        ? `n-${expandedNpcId}`
+        : null;
+  const { tokensRef, tokensStyle } = useRosterExpandAnchor(expandAnchorKey);
+
   const renderNpcExpand = (npc, { showLeaveFaction }) => (
     <div className="session-roster-expand-slot">
       <NpcCampaignExpandPanel
@@ -101,12 +111,14 @@ export default function RosterNpcColumn({
   return (
     <>
       <div
+        ref={tokensRef}
         className="home-poc session-roster-tokens"
         style={{
           display: "flex",
           flexDirection: "column",
           gap: 14,
           marginTop: 10,
+          ...tokensStyle,
         }}
       >
         <div className="home-faction-grid">
@@ -389,6 +401,7 @@ export default function RosterNpcColumn({
                 onCancel={cancelFactionForm}
                 onAddNpc={handleAddNpcToFaction}
                 onRemoveNpc={handleRemoveNpcFromFaction}
+                onToggleNpcVisibleToPlayers={handleToggleNpcVisibleToPlayers}
                 embedded
                 S={S}
               />
@@ -478,6 +491,7 @@ export default function RosterNpcColumn({
             onCancel={cancelFactionForm}
             onAddNpc={handleAddNpcToFaction}
             onRemoveNpc={handleRemoveNpcFromFaction}
+            onToggleNpcVisibleToPlayers={handleToggleNpcVisibleToPlayers}
             S={S}
           />
         </div>

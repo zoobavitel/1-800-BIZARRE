@@ -262,6 +262,27 @@ export default function NpcCampaignExpandPanel({
           equipmentCatalog={equipmentCatalog}
           onPatch={readOnly ? undefined : patchNpc}
         />
+          {activeTab === "info" && !readOnly ? (
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                marginTop: 10,
+                fontSize: 11,
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={npc.visible_to_players !== false}
+                disabled={busy}
+                onChange={(e) =>
+                  patchNpc({ visible_to_players: e.target.checked })
+                }
+              />
+              Visible to players
+            </label>
+          ) : null}
           {activeTab === "info" &&
           typeof onMoveNpcToFaction === "function" &&
           !readOnly ? (
