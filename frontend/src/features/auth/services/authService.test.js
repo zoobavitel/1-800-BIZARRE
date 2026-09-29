@@ -76,6 +76,31 @@ describe("authAPI", () => {
     expect(p).toEqual({ username: "a", theme: "dark" });
   });
 
+  test("changePassword posts to change-password endpoint", async () => {
+    localStorage.setItem("authToken", "tok123");
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ message: "Password updated successfully" }),
+    });
+
+    await authAPI.changePassword({
+      old_password: "OldPass123!",
+      new_password: "NewPass456!",
+      confirm_password: "NewPass456!",
+    });
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    const [url, init] = global.fetch.mock.calls[0];
+    expect(url).toBe("http://localhost:8000/api/user-profiles/change-password/");
+    expect(init.method).toBe("POST");
+    expect(init.headers.Authorization).toBe("Token tok123");
+    expect(JSON.parse(init.body)).toEqual({
+      old_password: "OldPass123!",
+      new_password: "NewPass456!",
+      confirm_password: "NewPass456!",
+    });
+  });
+
   test("getProfile uses results[0] when paginated", async () => {
     global.fetch.mockResolvedValue({
       ok: true,
