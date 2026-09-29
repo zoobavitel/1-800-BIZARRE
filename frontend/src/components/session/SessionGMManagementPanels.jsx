@@ -65,6 +65,8 @@ import {
   SessionHelpTip,
   entityPortraitSrc,
   AddNpcStripTile,
+  groupSessionNpcsByFaction,
+  sessionInvolvedNpcIds,
 } from "./sessionShellUi";
 import {
   SessionFactionToken,
@@ -1573,15 +1575,21 @@ export default function SessionGMManagementPanels({
     () => sessionData?.npc_involvements || [],
     [sessionData?.npc_involvements],
   );
-  const invByNpc = useMemo(
-    () => Object.fromEntries((npcInvolvements || []).map((i) => [i.npc, i])),
+  const invByNpc = useMemo(() => {
+    const map = {};
+    for (const inv of npcInvolvements || []) {
+      const id = Number(inv.npc);
+      if (!Number.isFinite(id)) continue;
+      map[id] = inv;
+      map[String(id)] = inv;
+    }
+    return map;
+  }, [npcInvolvements]);
+
+  const involvedNpcIdSet = useMemo(
+    () => sessionInvolvedNpcIds(npcInvolvements),
     [npcInvolvements],
   );
-
-  const involvedNpcs = useMemo(() => {
-    const ids = new Set((npcInvolvements || []).map((i) => i.npc));
-    return (campaignNPCs || []).filter((n) => ids.has(n.id));
-  }, [campaignNPCs, npcInvolvements]);
 
   const factionsById = useMemo(() => {
     const m = {};
@@ -1594,39 +1602,17 @@ export default function SessionGMManagementPanels({
   }, [campaign?.factions]);
 
   /** Factions with session NPCs, plus empty campaign factions (so new ones stay visible). */
-  const sessionFactionNpcGroups = useMemo(() => {
-    const map = new Map();
-    const ungrouped = [];
-    for (const npc of involvedNpcs) {
-      const raw = npc.faction ?? npc.faction_id ?? null;
-      const fid =
-        raw != null && raw !== "" ? Number.parseInt(String(raw), 10) : null;
-      if (fid != null && Number.isFinite(fid)) {
-        if (!map.has(fid)) map.set(fid, []);
-        map.get(fid).push(npc);
-      } else {
-        ungrouped.push(npc);
-      }
-    }
-    for (const f of campaign?.factions || []) {
-      const id = Number(f?.id);
-      if (!Number.isFinite(id)) continue;
-      if (!map.has(id)) map.set(id, []);
-    }
-    const sortedPairs = [...map.entries()].sort((a, b) => {
-      const na = factionsById[a[0]]?.name || factionsById[String(a[0])]?.name;
-      const nb = factionsById[b[0]]?.name || factionsById[String(b[0])]?.name;
-      return String(na ?? a[0]).localeCompare(String(nb ?? b[0]), undefined, {
-        sensitivity: "base",
-      });
-    });
-    return { factionPairs: sortedPairs, ungrouped };
-  }, [involvedNpcs, factionsById, campaign?.factions]);
+  const sessionFactionNpcGroups = useMemo(
+    () => groupSessionNpcsByFaction(campaign, campaignNPCs, npcInvolvements),
+    [campaign, campaignNPCs, npcInvolvements],
+  );
 
   const addableNpcList = useMemo(
     () =>
-      (campaignNPCs || []).filter((n) => !invByNpc[n.id]) || [],
-    [campaignNPCs, invByNpc],
+      (campaignNPCs || []).filter(
+        (n) => !involvedNpcIdSet.has(Number(n.id)),
+      ) || [],
+    [campaignNPCs, involvedNpcIdSet],
   );
 
   const patchSessionInv = useCallback(
@@ -4116,7 +4102,8 @@ export default function SessionGMManagementPanels({
   const renderNpcSessionCard = (npcIn) => {
     if (!npcIn) return null;
     const npc = { ...npcIn, ...(npcDetailById[npcIn.id] || {}) };
-    const inv = invByNpc[npc.id] || {};
+    const inv =
+      invByNpc[Number(npc.id)] || invByNpc[String(npc.id)] || {};
     const grades = rawStandToGrades(
       localNpcStandById[npc.id] || npc.stand_coin_stats,
     );
@@ -4977,6 +4964,7 @@ export default function SessionGMManagementPanels({
                   faction={fac}
                   name={name}
                   npcList={npcList}
+                  factionNpcCount={Array.isArray(fac.npcs) ? fac.npcs.length : 0}
                   isExpanded={factionExpanded}
                   isDragOver={isDragOver}
                   dropKey={dropKey}

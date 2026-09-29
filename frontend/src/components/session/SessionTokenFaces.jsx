@@ -48,6 +48,8 @@ export function SessionFactionToken({
   faction,
   name,
   npcList = [],
+  /** Total NPCs assigned to this faction in the campaign (not only session-involved). */
+  factionNpcCount = null,
   isExpanded = false,
   isDragOver = false,
   dropKey,
@@ -66,6 +68,8 @@ export function SessionFactionToken({
   const typeLabel = String(faction?.faction_type || "").trim() || "—";
   const rep = faction?.reputation ?? 0;
   const displayName = name || faction?.name || "Faction";
+  const rosterNpcCount =
+    factionNpcCount != null ? factionNpcCount : npcList.length;
 
   const cardClasses = [
     "f-card",
@@ -132,9 +136,11 @@ export function SessionFactionToken({
             {factionStatusLabel(faction?.reputation)}
           </div>
         ) : null}
-        <div className="f-card-npcs">
-          {npcList.length} NPC{npcList.length === 1 ? "" : "s"}
-        </div>
+        {rosterNpcCount > 0 ? (
+          <div className="f-card-npcs">
+            {rosterNpcCount} NPC{rosterNpcCount === 1 ? "" : "s"}
+          </div>
+        ) : null}
         <div
           className="session-faction-npc-strip"
           onClick={(e) => e.stopPropagation()}
