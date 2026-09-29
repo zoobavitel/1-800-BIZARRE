@@ -49,7 +49,7 @@ def campaign_events_stream(request, campaign_id):
                     msg = q.get(timeout=25)
                     yield f"data: {json.dumps(msg)}\n\n"
                 except queue_module.Empty:
-                    yield ": heartbeat\n\n"
+                    yield f"data: {json.dumps({'type': 'heartbeat'})}\n\n"
         finally:
             unsubscribe_campaign(int(campaign_id), q)
 

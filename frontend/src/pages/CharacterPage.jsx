@@ -35,7 +35,10 @@ import {
   mergeAbilitiesPreferRicherCustoms,
   mergeServerOwnedCharacterFields,
 } from "../features/character-sheet";
-import { subscribeCampaignEvents } from "../features/character-sheet/services/campaignEvents";
+import {
+  isCampaignSseHealthy,
+  subscribeCampaignEvents,
+} from "../features/character-sheet/services/campaignEvents";
 import { useAuth } from "../features/auth";
 import { CharacterSheetWrapper } from "./CharacterSheet";
 import { characterHashFromIdAndName } from "../utils/spaNavigation";
@@ -43,7 +46,7 @@ import { NPCSheet } from "./NPCSheet";
 
 const MODES = { CHARACTER: "character", NPC: "npc" };
 /** Poll open character sheets + campaigns while the tab is visible (backup if SSE disconnects). */
-const SHEET_SYNC_INTERVAL_MS = 12000;
+const SHEET_SYNC_INTERVAL_MS = 30000;
 
 /** Skip poll/SSE character merge while editing, saving, or in dirtyIntent window. */
 function sheetTabIsProtected(meta) {
@@ -422,6 +425,7 @@ export default function CharacterPage({
   const charTabsInitialized = useRef(false);
   const charTabsRef = useRef(charTabs);
   const charTabUnsavedMetaRef = useRef(charTabUnsavedMeta);
+  const sheetSseUnsubRef = useRef(null);
   /** Bumps when remote sync completes so CharacterSheet refetches session rolls. */
   const [sheetPollTick, setSheetPollTick] = useState(0);
   const [sheetRealtimeReason, setSheetRealtimeReason] = useState("");
@@ -588,6 +592,7 @@ export default function CharacterPage({
     if (mode !== MODES.CHARACTER) return undefined;
     const id = window.setInterval(() => {
       if (document.visibilityState !== "visible") return;
+      if (isCampaignSseHealthy(sheetSseUnsubRef.current)) return;
       const tabs = charTabsRef.current;
       if (!tabs.some((t) => t.characterId)) return;
       void syncOpenSheetsFromServer();
@@ -1380,8 +1385,11 @@ export default function CharacterPage({
   );
 
   useEffect(() => {
-    if (mode !== MODES.CHARACTER || !campaignIdForRealtime) return undefined;
-    return subscribeCampaignEvents(campaignIdForRealtime, {
+    if (mode !== MODES.CHARACTER || !campaignIdForRealtime) {
+      sheetSseUnsubRef.current = null;
+      return undefined;
+    }
+    const unsub = subscribeCampaignEvents(campaignIdForRealtime, {
       onUpdate: (reason) => {
         const r = String(reason || "update");
         if (SHEET_ABORT_SSE_REASONS.has(r)) {
@@ -1390,6 +1398,11 @@ export default function CharacterPage({
         void syncOpenSheetsFromServer();
       },
     });
+    sheetSseUnsubRef.current = unsub;
+    return () => {
+      sheetSseUnsubRef.current = null;
+      unsub();
+    };
   }, [
     mode,
     campaignIdForRealtime,
