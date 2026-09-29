@@ -1427,9 +1427,10 @@ export const transformBackendToFrontend = (backendCharacter) => {
     // Coin (character); stash on crew when linked, else personal Character.stash_slots
     coin: normalizeCoinBoxes(backendCharacter.coin_boxes),
     stash: normalizeStashSlots(
-      Array.isArray(backendCharacter.crew?.stash_slots)
-        ? backendCharacter.crew.stash_slots
-        : backendCharacter.stash_slots,
+      backendCharacter.effective_stash_slots ??
+        (Array.isArray(backendCharacter.crew?.stash_slots)
+          ? backendCharacter.crew.stash_slots
+          : backendCharacter.stash_slots),
     ),
 
     // Healing clock
