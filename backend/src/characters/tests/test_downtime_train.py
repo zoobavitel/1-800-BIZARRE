@@ -146,6 +146,29 @@ class DowntimeTrainTests(APITestCase):
         )
         self.assertEqual(other.status_code, 200, other.content)
 
+    def test_all_trainable_tracks_same_phase(self):
+        """Each track trains once per phase; others stay available."""
+        self.client.force_authenticate(user=self.player)
+        trained = []
+        for track in ("insight", "prowess", "resolve", "heritage", "playbook"):
+            res = self.client.post(
+                f"/api/characters/{self.character.id}/train/",
+                {"track": track},
+                format="json",
+            )
+            self.assertEqual(res.status_code, 200, res.content)
+            trained.append(track)
+            self.assertCountEqual(
+                res.json()["downtime_trained_tracks"], trained
+            )
+        dup = self.client.post(
+            f"/api/characters/{self.character.id}/train/",
+            {"track": "insight"},
+            format="json",
+        )
+        self.assertEqual(dup.status_code, 400)
+        self.assertEqual(dup.json().get("code"), "already_trained")
+
     def test_phase_resets_after_completed_session(self):
         self.client.force_authenticate(user=self.player)
         first = self.client.post(

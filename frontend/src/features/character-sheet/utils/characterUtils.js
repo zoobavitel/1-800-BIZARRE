@@ -779,6 +779,14 @@ export function mergeServerOwnedCharacterFields(
   if (!touches.stash && Array.isArray(serverCharacter.stash)) {
     next.stash = serverCharacter.stash;
   }
+  if (Array.isArray(serverCharacter.downtimeTrainedTracks)) {
+    next.downtimeTrainedTracks = serverCharacter.downtimeTrainedTracks.map(
+      (t) =>
+        String(t || "")
+          .trim()
+          .toLowerCase(),
+    );
+  }
   return next;
 }
 
