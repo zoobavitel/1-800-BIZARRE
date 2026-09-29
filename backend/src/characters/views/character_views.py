@@ -136,8 +136,10 @@ class CharacterViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         if self.request.query_params.get("mine") == "true":
-            return Character.objects.filter(user=user)
-        return _character_queryset_for_user(user)
+            return Character.objects.select_related("crew", "campaign").filter(
+                user=user
+            )
+        return _character_queryset_for_user(user).select_related("crew", "campaign")
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -2951,8 +2953,10 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 ).first()
 
         with transaction.atomic():
+            # Postgres: FOR UPDATE + nullable FK joins (crew, campaign) raises
+            # NotSupportedError — lock characters_character only (see session_xp_settlement).
             locked = (
-                Character.objects.select_for_update()
+                Character.objects.select_for_update(of=("self",))
                 .select_related("crew", "campaign")
                 .get(pk=character.pk)
             )

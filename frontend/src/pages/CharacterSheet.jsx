@@ -2119,24 +2119,63 @@ const CharacterSheetWrapper = ({
 
   // FIX 6: Level-up modal state — see below near other modal state
 
-  // Hydrate coin/stash only when switching characters (id change). Parent refresh (campaign list refetch,
-  // getCharacters) reuses the same id with a new object; syncing on character.coin/stash then wiped
-  // local boxes before autosave ran.
+  // Hydrate coin/stash from server when poll/SSE delivers fresh character snapshots.
+  // Skip while the player touched those controls or the draft is dirty (same gate as stress/xp).
   useEffect(() => {
     if (character?.id == null) return;
+    if (
+      shouldSkipServerOwnedFieldHydration("coin", {
+        fieldTouches: fieldTouchRef.current,
+        sheetDraftIsDirty,
+      })
+    ) {
+      return;
+    }
     if (Array.isArray(character?.coin)) {
-      setCoinFilled(character.coin.filter(Boolean).length);
+      const filled = character.coin.filter(Boolean).length;
+      setCoinFilled((prev) => (prev !== filled ? filled : prev));
     } else if (
       typeof character?.coinFilled === "number" &&
       Number.isFinite(character.coinFilled)
     ) {
-      setCoinFilled(character.coinFilled);
+      setCoinFilled((prev) =>
+        prev !== character.coinFilled ? character.coinFilled : prev,
+      );
     }
-    if (Array.isArray(character?.stash)) {
-      setStashBoxes(character.stash);
+  }, [
+    character?.id,
+    character?.coin,
+    character?.coinFilled,
+    sessionDataPollTick,
+    sheetDraftIsDirty,
+  ]);
+
+  useEffect(() => {
+    if (character?.id == null) return;
+    if (
+      shouldSkipServerOwnedFieldHydration("stash", {
+        fieldTouches: fieldTouchRef.current,
+        sheetDraftIsDirty,
+      })
+    ) {
+      return;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- hydrate coin/stash only on id change (see comment above)
-  }, [character?.id]);
+    if (!Array.isArray(character?.stash)) return;
+    setStashBoxes((prev) => {
+      if (
+        prev.length === character.stash.length &&
+        prev.every((v, i) => Boolean(v) === Boolean(character.stash[i]))
+      ) {
+        return prev;
+      }
+      return character.stash;
+    });
+  }, [
+    character?.id,
+    character?.stash,
+    sessionDataPollTick,
+    sheetDraftIsDirty,
+  ]);
 
   // Heritage benefits and detriments (arrays of IDs)
   const [selectedBenefits, setSelectedBenefits] = useState(
