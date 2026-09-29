@@ -56,6 +56,8 @@ export function SessionFactionToken({
   onNpcRemove,
   removeDisabled = false,
   onAddNpc,
+  onEdit,
+  onDelete,
   onDragOver,
   onDragLeave,
   onDrop,
@@ -158,9 +160,38 @@ export function SessionFactionToken({
               onDragEnd={onNpcDragEnd}
             />
           ))}
-          <AddNpcStripTile disabled={addDisabled} onClick={() => onAddNpc?.()} />
+          {onAddNpc ? (
+            <AddNpcStripTile
+              disabled={addDisabled}
+              onClick={() => onAddNpc()}
+            />
+          ) : null}
         </div>
         <div className="f-card-actions">
+          {typeof onEdit === "function" ? (
+            <button
+              type="button"
+              className="f-card-btn f-card-btn-edit"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit(faction);
+              }}
+            >
+              Edit
+            </button>
+          ) : null}
+          {typeof onDelete === "function" ? (
+            <button
+              type="button"
+              className="f-card-btn f-card-btn-delete"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(faction);
+              }}
+            >
+              Delete
+            </button>
+          ) : null}
           <button
             type="button"
             className="f-card-btn f-card-btn-edit"

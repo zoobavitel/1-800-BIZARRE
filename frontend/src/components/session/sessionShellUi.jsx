@@ -5,7 +5,6 @@ import { getCharacterPortraitSrc } from "../../utils/homeAvatar";
 
 export const SESSION_SHELL_TABS = [
   { id: "rosters", label: "Rosters" },
-  { id: "crew", label: "Crew" },
   { id: "xp", label: "XP" },
   { id: "harm", label: "Harm / Armor" },
   { id: "rolls", label: "Rolls" },
@@ -173,6 +172,8 @@ export function SessionPortraitThumb({
         ...thumbSlot,
         width: size,
         height: size,
+        alignItems: "stretch",
+        justifyContent: "stretch",
         cursor: draggable ? "grab" : onClick ? "pointer" : "default",
       }}
     >
@@ -182,10 +183,9 @@ export function SessionPortraitThumb({
         style={{
           width: "100%",
           height: "100%",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: 14,
+          minWidth: 0,
+          minHeight: 0,
+          fontSize: Math.max(12, Math.round(size * 0.38)),
           fontWeight: "bold",
           color: "#6b7280",
         }}
@@ -207,8 +207,12 @@ export function entityPortraitSrc(entity) {
   );
 }
 
-/** Square + tile for add-NPC into a faction. */
-export function AddNpcStripTile({ onClick, disabled }) {
+/** Square + tile for add-NPC into a faction strip. */
+export function AddNpcStripTile({
+  onClick,
+  disabled,
+  title = "Add NPC to this faction",
+}) {
   return (
     <button
       type="button"
@@ -217,7 +221,7 @@ export function AddNpcStripTile({ onClick, disabled }) {
         onClick?.(e);
       }}
       disabled={disabled}
-      title="Add NPC to this faction"
+      title={title}
       style={{
         ...thumbSlot,
         borderStyle: "dashed",

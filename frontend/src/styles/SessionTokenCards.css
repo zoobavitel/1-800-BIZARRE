@@ -19,6 +19,12 @@
   /* Home page uses 100vh; session rosters must hug content */
   min-height: 0;
   height: auto;
+  /* Size expand panels to this column (100cqi), not the viewport alone */
+  container-type: inline-size;
+  container-name: roster-tokens;
+  /* Never let absolute leftovers / wide panels paint past this column */
+  overflow-x: clip;
+  max-width: 100%;
 }
 
 .session-roster-tokens .home-faction-grid,
@@ -30,7 +36,7 @@
   overflow: visible;
 }
 
-/* One grid cell: face + floating expand (expand out of flow so peers stay put) */
+/* One grid cell: token face only; expand panels live in .session-roster-expand-slot */
 .session-roster-tokens .session-roster-cell {
   position: relative;
   min-width: 0;
@@ -258,27 +264,40 @@
   opacity: 0.55;
 }
 
-/* Float under the selected cell — compact card width, no grid reflow */
+/* Expand panels stay in normal flow at full column width.
+   Never absolute-float from a narrow grid cell (that was running off-page).
+   Parents should be .session-roster-expand-slot (or another full-width block). */
 .session-roster-tokens .session-pc-expand-panel,
 .session-roster-tokens .session-npc-expand-panel,
 .session-roster-tokens .session-faction-expand-panel {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
+  position: relative;
+  top: auto;
+  left: auto;
   right: auto;
-  z-index: 40;
-  width: 458px;
-  max-width: min(458px, calc(100vw - 40px));
+  z-index: 20;
+  width: 100%;
+  max-width: 100%;
   max-height: min(72vh, 780px);
   overflow-x: hidden;
   overflow-y: auto;
-  margin: 0;
+  margin: 8px 0 0;
   min-width: 0;
   box-sizing: border-box;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
 }
 
-.session-roster-tokens .session-faction-expand-panel {
-  width: min(640px, calc(100vw - 40px));
-  max-width: min(640px, calc(100vw - 40px));
+/* Full-width host under the token grid (cards stay put). */
+.session-roster-tokens .session-roster-expand-slot {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  margin-top: 8px;
+  box-sizing: border-box;
+}
+
+.session-roster-tokens .session-roster-expand-slot > .session-npc-expand-panel,
+.session-roster-tokens .session-roster-expand-slot > .session-pc-expand-panel,
+.session-roster-tokens .session-roster-expand-slot > .session-faction-expand-panel {
+  margin-top: 0;
 }
