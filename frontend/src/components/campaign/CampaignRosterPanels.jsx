@@ -6,7 +6,10 @@ import RosterNpcColumn from "../roster/RosterNpcColumn";
 import RosterTwoColumnShell from "../roster/RosterTwoColumnShell";
 import RosterCollapsibleSection from "../roster/RosterCollapsibleSection";
 import { SessionPcToken } from "../session/SessionTokenFaces";
-import { groupCampaignNpcsByFaction } from "../session/sessionShellUi";
+import { groupCampaignNpcsByFaction, SessionHelpTip } from "../session/sessionShellUi";
+import {
+  filterFactionRosterForPlayerView,
+} from "../roster/rosterShared";
 import "../../styles/Home.css";
 import "../../styles/SessionTokenCards.css";
 
@@ -102,6 +105,8 @@ export default function CampaignRosterPanels({
   onCharactersRefresh,
   rosterActionError,
   setRosterActionError,
+  showNpcColumn = true,
+  showPcColumn = true,
 }) {
   const [npcRosterCollapsed, setNpcRosterCollapsed] = useState(false);
   const [playerRosterCollapsed, setPlayerRosterCollapsed] = useState(false);
@@ -115,10 +120,21 @@ export default function CampaignRosterPanels({
   const [npcDragging, setNpcDragging] = useState(false);
   const addNpcChooserRef = useRef(null);
 
-  const { factionGroups, unaffiliated } = useMemo(
-    () => groupCampaignNpcsByFaction(campaign),
-    [campaign],
-  );
+  const { factionGroups: allFactionGroups, unaffiliated: allUnaffiliated } =
+    useMemo(() => groupCampaignNpcsByFaction(campaign), [campaign]);
+
+  const { factionGroups, unaffiliated } = useMemo(() => {
+    if (isGM) {
+      return {
+        factionGroups: allFactionGroups,
+        unaffiliated: allUnaffiliated,
+      };
+    }
+    return filterFactionRosterForPlayerView(allFactionGroups, allUnaffiliated);
+  }, [isGM, allFactionGroups, allUnaffiliated]);
+
+  const isCampaignMember =
+    isGM || (campaign.players || []).some((p) => p.id === user?.id);
 
   const { charMetaById, campaignCharacters } = useMemo(
     () => buildCharacterMeta(campaign, isGM),
@@ -210,6 +226,7 @@ export default function CampaignRosterPanels({
 
   const canManageCrew =
     isGM || (campaign.players || []).some((p) => p.id === user?.id);
+  const showRoster = isGM || isCampaignMember;
 
   const filterQ = pcRosterFilter.trim().toLowerCase();
   const pcEntries = (campaignCharacters || [])
@@ -306,11 +323,14 @@ export default function CampaignRosterPanels({
     </div>
   ) : null;
 
+  if (!showRoster) return null;
+
   return (
     <RosterTwoColumnShell
-      showSecondColumn={isGM}
+      showLeftColumn={showRoster && showNpcColumn}
+      showSecondColumn={showRoster && showPcColumn}
       leftColumn={
-        isGM ? (
+        showRoster && showNpcColumn ? (
           <RosterCollapsibleSection
             title="Factions & NPCs"
             collapsed={npcRosterCollapsed}
@@ -318,12 +338,24 @@ export default function CampaignRosterPanels({
             collapseExpandLabel="Expand factions & NPCs"
             collapseCollapseLabel="Collapse factions & NPCs"
             S={S}
+            helpTip={
+              isGM ? (
+                <SessionHelpTip
+                  label="Factions & NPCs help"
+                  panelId="campaign-factions-npc-help"
+                >
+                  Drag strip thumbs onto another faction to reassign. Click a
+                  thumb for Leave faction / Remove from campaign.
+                </SessionHelpTip>
+              ) : null
+            }
           >
             <RosterNpcColumn
               S={S}
               campaign={campaign}
               factionGroups={factionGroups}
               unaffiliated={unaffiliated}
+              readOnly={!isGM}
               dragOverFactionKey={dragOverFactionKey}
               setDragOverFactionKey={setDragOverFactionKey}
               expandedFactionId={expandedFactionId}
@@ -569,6 +601,14 @@ export default function CampaignRosterPanels({
                             campaign={campaign}
                             user={user}
                             isGM={isGM}
+                            readOnly={
+                              !(
+                                isGM ||
+                                (user?.id != null &&
+                                  meta.user?.id != null &&
+                                  Number(meta.user.id) === Number(user.id))
+                              )
+                            }
                             onClose={() => setExpandedPcId(null)}
                             onNavigateToCharacter={onNavigateToCharacter}
                             onUnassignCharacter={onUnassignCharacter}

@@ -72,6 +72,20 @@ import {
 import RosterCrewInlineSection from "../roster/RosterCrewInlineSection";
 import RosterPcExpandPanel from "../roster/RosterPcExpandPanel";
 import RosterNpcExpandEditableTabs from "../roster/RosterNpcExpandEditableTabs";
+import {
+  RosterPcInfoFields,
+  RosterPcStressTraumaStrip,
+  rosterPcInfoDraftFromCharacter,
+  rosterPcInfoPayloadFromDraft,
+  rosterPcInfoPayloadEqual,
+  rosterPcStressCount,
+  rosterPcTraumaLabel,
+} from "../roster/rosterPcInfoUtils";
+import {
+  canEditRosterPc,
+  filterSessionFactionPairsForPlayer,
+  sanitizeFactionFieldsForPlayer,
+} from "../roster/rosterShared";
 import "../../styles/Home.css";
 import "../../styles/SessionTokenCards.css";
 
@@ -1265,6 +1279,32 @@ const COMPACT_HARM_FIELDS = [
   ["l1b", "L1B", null],
 ];
 
+const COMPACT_HARM_DETRIMENT = {
+  l4: "Fatal — need help (or Staying Power)",
+  l3: "Incapacitated — help or push (2 stress)",
+  l2a: "−1d while this harm applies",
+  l2b: "−1d while this harm applies",
+  l1a: "Reduced effect while this harm applies",
+  l1b: "Reduced effect while this harm applies",
+};
+
+const COMPACT_HARM_DETRIMENT_IDLE =
+  "Filled slots apply until healed/cleared: L1 reduced effect · L2 −1d · L3 incapacitated · L4 fatal.";
+
+function compactHarmActiveDetriments(draft) {
+  const d = draft || {};
+  const out = [];
+  const seen = new Set();
+  for (const [key] of COMPACT_HARM_FIELDS) {
+    if (!String(d[key] ?? "").trim()) continue;
+    const label = COMPACT_HARM_DETRIMENT[key];
+    if (!label || seen.has(label)) continue;
+    seen.add(label);
+    out.push(label);
+  }
+  return out;
+}
+
 const EMPTY_HARM_PAYLOAD = {
   harm_level1_name: "",
   harm_level1_used: false,
@@ -1364,6 +1404,7 @@ export default function SessionGMManagementPanels({
   equipmentCatalogItems = null,
   /** Scorecard allocation panel from SessionDetail (moved off always-visible chrome). */
   scorecardPanel = null,
+  isGM = false,
 }) {
   /** Prefer session panel refetch (includes clocks). Parent `onRefresh` is often
    * only `getCampaign` — waiting on that (or SSE/poll) is why create felt slow. */
@@ -1563,6 +1604,8 @@ export default function SessionGMManagementPanels({
   const [pcSheetMoneySavingId, setPcSheetMoneySavingId] = useState(null);
   /** GM-side draft of the PC sheet NOTES (`background_note2`) keyed by character id. */
   const [pcRosterNotesDraftByChar, setPcRosterNotesDraftByChar] = useState({});
+  /** Info tab drafts (close friend / rival / vice) keyed by character id. */
+  const [pcRosterInfoDraftByChar, setPcRosterInfoDraftByChar] = useState({});
   /** Inventory + notes PATCH from session roster PC cards */
   const [pcRosterSheetBusyId, setPcRosterSheetBusyId] = useState(null);
   const pcCardElsRef = useRef({});
@@ -1598,10 +1641,20 @@ export default function SessionGMManagementPanels({
   }, [campaign?.factions]);
 
   /** Factions with session-involved NPCs; empty factions stay visible in grid. */
-  const sessionFactionNpcGroups = useMemo(
+  const sessionFactionNpcGroupsRaw = useMemo(
     () => groupSessionNpcsByFaction(campaign, campaignNPCs, npcInvolvements),
     [campaign, campaignNPCs, npcInvolvements],
   );
+
+  const sessionFactionNpcGroups = useMemo(() => {
+    if (isGM) return sessionFactionNpcGroupsRaw;
+    return filterSessionFactionPairsForPlayer(
+      sessionFactionNpcGroupsRaw.factionPairs,
+      factionsById,
+    );
+  }, [isGM, sessionFactionNpcGroupsRaw, factionsById]);
+
+  const isGmUser = isGM;
 
   const addableNpcList = useMemo(
     () =>
@@ -3472,6 +3525,58 @@ export default function SessionGMManagementPanels({
     [onRefresh, onSessionCharactersRefresh, setError],
   );
 
+  const handlePcRosterSaveInfo = useCallback(
+    async (characterId, serverChar, draft) => {
+      const fromServer = rosterPcInfoPayloadFromDraft(
+        rosterPcInfoDraftFromCharacter(serverChar),
+      );
+      const payload = rosterPcInfoPayloadFromDraft(draft);
+      if (rosterPcInfoPayloadEqual(payload, fromServer)) {
+        setPcRosterInfoDraftByChar((p) => {
+          const n = { ...p };
+          delete n[characterId];
+          return n;
+        });
+        return;
+      }
+      setPcRosterSheetBusyId(characterId);
+      setError(null);
+      try {
+        await characterAPI.patchCharacter(characterId, payload);
+        setPcRosterInfoDraftByChar((p) => {
+          const n = { ...p };
+          delete n[characterId];
+          return n;
+        });
+        await onSessionCharactersRefresh?.();
+        await onRefresh();
+      } catch (e) {
+        setError(e.message || "Could not update character info.");
+      } finally {
+        setPcRosterSheetBusyId(null);
+      }
+    },
+    [onRefresh, onSessionCharactersRefresh, setError],
+  );
+
+  const handlePcRosterStressChange = useCallback(
+    async (characterId, nextStress) => {
+      const n = Math.max(0, Math.min(9, Math.floor(Number(nextStress) || 0)));
+      setPcRosterSheetBusyId(characterId);
+      setError(null);
+      try {
+        await characterAPI.patchCharacter(characterId, { stress: n });
+        await onSessionCharactersRefresh?.();
+        await onRefresh();
+      } catch (e) {
+        setError(e.message || "Could not update stress.");
+      } finally {
+        setPcRosterSheetBusyId(null);
+      }
+    },
+    [onRefresh, onSessionCharactersRefresh, setError],
+  );
+
   const handlePcRosterAppendInventory = useCallback(
     async (characterId, currentInventory, itemOrName) => {
       let row = null;
@@ -3648,45 +3753,74 @@ export default function SessionGMManagementPanels({
   );
 
   const renderCompactHarmGrid = useCallback(
-    (id) => (
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: 6,
-          fontSize: 10,
-        }}
-      >
-        {COMPACT_HARM_FIELDS.map(([key, label, gridColumn]) => (
-          <input
-            key={`${id}-${key}`}
-            value={harmDraftByChar[id]?.[key] || ""}
-            onChange={(e) =>
-              setHarmDraftByChar((prev) => ({
-                ...prev,
-                [id]: { ...(prev[id] || {}), [key]: e.target.value },
-              }))
-            }
-            onBlur={() => patchHarmFromDraft(id)}
-            placeholder={label}
+    (id, opts = {}) => {
+      const draft = harmDraftByChar[id] || {};
+      const active = compactHarmActiveDetriments(draft);
+      return (
+        <div>
+          <div
             style={{
-              ...S.inp,
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: 6,
               fontSize: 10,
-              padding: "4px 6px",
-              minWidth: 0,
-              ...compactHarmFieldStyle(key, harmDraftByChar[id]?.[key]),
-              ...(gridColumn ? { gridColumn } : {}),
             }}
-          />
-        ))}
-      </div>
-    ),
+          >
+            {COMPACT_HARM_FIELDS.map(([key, label, gridColumn]) => (
+              <input
+                key={`${id}-${key}`}
+                value={draft[key] || ""}
+                onChange={(e) =>
+                  setHarmDraftByChar((prev) => ({
+                    ...prev,
+                    [id]: { ...(prev[id] || {}), [key]: e.target.value },
+                  }))
+                }
+                onBlur={() => {
+                  if (opts.readOnly) return;
+                  patchHarmFromDraft(id);
+                }}
+                placeholder={label}
+                disabled={!!opts.readOnly}
+                readOnly={!!opts.readOnly}
+                title={COMPACT_HARM_DETRIMENT[key] || label}
+                style={{
+                  ...S.inp,
+                  fontSize: 10,
+                  padding: "4px 6px",
+                  minWidth: 0,
+                  ...compactHarmFieldStyle(key, draft[key]),
+                  ...(gridColumn ? { gridColumn } : {}),
+                }}
+              />
+            ))}
+          </div>
+          <div
+            style={{
+              fontSize: 9,
+              color: "#9ca3af",
+              lineHeight: 1.35,
+              marginTop: 4,
+            }}
+          >
+            {active.length > 0 ? (
+              <>
+                <span style={{ color: "#fbbf24", fontWeight: 600 }}>Active: </span>
+                {active.join(" · ")}
+              </>
+            ) : (
+              COMPACT_HARM_DETRIMENT_IDLE
+            )}
+          </div>
+        </div>
+      );
+    },
     [harmDraftByChar, patchHarmFromDraft, S],
   );
 
   /** Editable armor charge boxes (session Harm/Armor + PC expand Harm). */
   const renderPcArmorUses = useCallback(
-    (full) => {
+    (full, opts = {}) => {
       if (!full?.id) return null;
       const grades = rawStandToGrades(full.stand_coin_stats);
       const standArmorMax = rosterStandArmorMaxFromDurabilityGrade(
@@ -3713,7 +3847,8 @@ export default function SessionGMManagementPanels({
         full.secondary_playbook ?? full.secondaryPlaybook,
         "Stand",
       );
-      const busy = pcRosterSheetBusyId === full.id || saving;
+      const busy =
+        opts.readOnly || pcRosterSheetBusyId === full.id || saving;
       return (
         <div
           style={{
@@ -3837,6 +3972,7 @@ export default function SessionGMManagementPanels({
 
   const patchNpcExpandFields = useCallback(
     async (npcId, partial) => {
+      if (!isGM) return;
       if (!npcId || !partial) return;
       setNpcUiBusyKey(`edit:${npcId}`);
       setError(null);
@@ -3853,7 +3989,7 @@ export default function SessionGMManagementPanels({
         setNpcUiBusyKey(null);
       }
     },
-    [onRefresh, setError],
+    [isGM, onRefresh, setError],
   );
 
   const openAddNpcForFaction = useCallback(
@@ -4194,19 +4330,57 @@ export default function SessionGMManagementPanels({
         {nestedTab === "info" ||
         nestedTab === "abilities" ||
         nestedTab === "items" ? (
+          <>
           <RosterNpcExpandEditableTabs
             activeTab={nestedTab}
             npc={npc}
             S={S}
             busy={
+              !isGmUser ||
               saving ||
               busy ||
               npcUiBusyKey === `edit:${npc.id}` ||
               npcUiBusyKey === `vuln:${npc.id}`
             }
             equipmentCatalog={equipmentCatalog}
-            onPatch={(partial) => patchNpcExpandFields(npc.id, partial)}
+            onPatch={
+              isGmUser
+                ? (partial) => patchNpcExpandFields(npc.id, partial)
+                : undefined
+            }
           />
+          {nestedTab === "info" ? (
+            <div style={{ marginTop: 10 }}>
+              <div style={lbl}>Faction (campaign)</div>
+              <select
+                value={npcFactionSelectValue(npc)}
+                onChange={(e) => {
+                  if (!isGmUser) return;
+                  const v = e.target.value;
+                  const nextId = v === "" ? null : parseInt(v, 10);
+                  if (!Number.isFinite(nextId) && nextId !== null) return;
+                  const cur = npcFactionSelectValue(npc);
+                  if (v === cur) return;
+                  handleAssignNpcFaction(npc, nextId);
+                }}
+                style={{ ...S.select, width: "100%", fontSize: 11, marginTop: 4 }}
+                disabled={
+                  !isGmUser ||
+                  saving ||
+                  npcFactionSavingId === npc.id ||
+                  !campaign?.id
+                }
+              >
+                <option value="">— None —</option>
+                {(campaign?.factions || []).map((f) => (
+                  <option key={f.id} value={String(f.id)}>
+                    {f.name || `Faction ${f.id}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+          </>
         ) : null}
         {nestedTab === "more" ? (
           <div>
@@ -4288,31 +4462,6 @@ export default function SessionGMManagementPanels({
           />
           <span>All abilities</span>
         </label>
-            <div style={{ marginTop: 8 }}>
-              <div style={lbl}>Faction (campaign)</div>
-              <select
-                value={npcFactionSelectValue(npc)}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  const nextId = v === "" ? null : parseInt(v, 10);
-                  if (!Number.isFinite(nextId) && nextId !== null) return;
-                  const cur = npcFactionSelectValue(npc);
-                  if (v === cur) return;
-                  handleAssignNpcFaction(npc, nextId);
-                }}
-                style={{ ...S.select, width: "100%", fontSize: 11, marginTop: 4 }}
-                disabled={
-                  saving || npcFactionSavingId === npc.id || !campaign?.id
-                }
-              >
-                <option value="">— None —</option>
-                {(campaign?.factions || []).map((f) => (
-                  <option key={f.id} value={String(f.id)}>
-                    {f.name || `Faction ${f.id}`}
-                  </option>
-                ))}
-              </select>
-            </div>
           </div>
         ) : null}
         {nestedTab === "clocks" ? (
@@ -4843,15 +4992,18 @@ export default function SessionGMManagementPanels({
             >
           <div className="home-faction-grid">
           {sessionFactionNpcGroups.factionPairs.map(([fid, npcList]) => {
-            const fac =
+            const facRaw =
               factionsById[fid] ||
               factionsById[String(fid)] ||
               {};
+            const fac = isGmUser
+              ? facRaw
+              : sanitizeFactionFieldsForPlayer(facRaw);
             const name = fac.name || `Faction ${fid}`;
             const factionCollapseKey = String(fid);
             const dropKey = String(fid);
             const factionExpanded = !!collapsedFactionCards[factionCollapseKey];
-            const isDragOver = dragOverFactionKey === dropKey;
+            const isDragOver = isGmUser && dragOverFactionKey === dropKey;
             return (
               <div className="session-roster-cell" key={`faction-${fid}`}>
                 <SessionFactionToken
@@ -4861,25 +5013,52 @@ export default function SessionGMManagementPanels({
                   isExpanded={factionExpanded}
                   isDragOver={isDragOver}
                   dropKey={dropKey}
-                  addDisabled={saving}
+                  addDisabled={saving || !isGmUser}
                   onToggleExpand={() =>
                     toggleSessionFactionExpand(factionCollapseKey)
                   }
                   onNpcThumbClick={(npc) => openNpcPhotoExpand(npc)}
-                  onNpcRemove={(npc) => removeNpcFromSession(npc?.id)}
-                  removeDisabled={saving}
-                  onAddNpc={() => openAddNpcForFaction(fid)}
-                  onDragOver={() => setDragOverFactionKey(dropKey)}
-                  onDragLeave={() =>
-                    setDragOverFactionKey((k) => (k === dropKey ? null : k))
+                  onNpcRemove={
+                    isGmUser
+                      ? (npc) => removeNpcFromSession(npc?.id)
+                      : undefined
                   }
-                  onDrop={(e) => handleSessionNpcFactionDrop(e, dropKey)}
-                  onNpcDragBegin={() => setSessionNpcDragging(true)}
-                  onNpcDragEnd={clearSessionNpcDrag}
+                  removeDisabled={saving || !isGmUser}
+                  onAddNpc={
+                    isGmUser ? () => openAddNpcForFaction(fid) : undefined
+                  }
+                  onDragOver={
+                    isGmUser
+                      ? () => setDragOverFactionKey(dropKey)
+                      : undefined
+                  }
+                  onDragLeave={
+                    isGmUser
+                      ? () =>
+                          setDragOverFactionKey((k) =>
+                            k === dropKey ? null : k,
+                          )
+                      : undefined
+                  }
+                  onDrop={
+                    isGmUser
+                      ? (e) => handleSessionNpcFactionDrop(e, dropKey)
+                      : undefined
+                  }
+                  onNpcDragBegin={
+                    isGmUser
+                      ? () => setSessionNpcDragging(true)
+                      : undefined
+                  }
+                  onNpcDragEnd={
+                    isGmUser ? clearSessionNpcDrag : undefined
+                  }
                 />
               </div>
             );
           })}
+          {isGmUser ? (
+            <>
           <div
             className="f-card session-make-faction-tile"
             style={{
@@ -5046,9 +5225,12 @@ export default function SessionGMManagementPanels({
               </div>
             ) : null}
           </div>
+          </>
+          ) : null}
           </div>
 
           {(() => {
+            if (!isGmUser) return null;
             const expandedPair = sessionFactionNpcGroups.factionPairs.find(
               ([fid]) => !!collapsedFactionCards[String(fid)],
             );
@@ -5631,9 +5813,37 @@ export default function SessionGMManagementPanels({
                   String(a.name || "").localeCompare(String(b.name || "")),
                 );
             })();
+            const pcClkIdSet = new Set(pcClks.map((c) => c.id));
+            /** GM/session clocks marked visible to players (not PC- or NPC-bound). */
+            const playerVisibleSessionClocks = (() => {
+              const byId = new Map();
+              const consider = (c) => {
+                if (!c?.id || pcClkIdSet.has(c.id)) return;
+                if (progressClockIsDone(c)) return;
+                if (!progressClockShowsPlayersBadge(c, campaign?.gm)) return;
+                if (c.character != null && c.character !== "") return;
+                if (c.npc != null && c.npc !== "") return;
+                byId.set(c.id, c);
+              };
+              for (const c of clocks || []) consider(c);
+              for (const c of campaignWideClocks || []) consider(c);
+              return [...byId.values()].sort((a, b) =>
+                String(a.name || "").localeCompare(String(b.name || "")),
+              );
+            })();
             const doneClocksForPc = (
               gmCompletedClocksThisSession || []
             ).filter((clk) => Number(clk.character) === Number(full.id));
+            const infoServerDraft = rosterPcInfoDraftFromCharacter(full);
+            const infoHasDraft = Object.prototype.hasOwnProperty.call(
+              pcRosterInfoDraftByChar,
+              full.id,
+            );
+            const infoDraft = infoHasDraft
+              ? pcRosterInfoDraftByChar[full.id]
+              : infoServerDraft;
+            const traumaLabel = rosterPcTraumaLabel(full);
+            const stressCount = rosterPcStressCount(full);
             const canSRank = full.gm_can_have_s_rank_stand_stats === true;
             const isStandUser = hasPlaybook(
               full.playbook,
@@ -5659,6 +5869,7 @@ export default function SessionGMManagementPanels({
             };
             const pcStandBusy =
               saving || pcStandForceBusyId === full.id;
+            const pcCanEdit = canEditRosterPc(full, user, isGmUser);
 
                   return (
                     <div className="session-roster-expand-slot">
@@ -5670,12 +5881,7 @@ export default function SessionGMManagementPanels({
                       toggleCollapsedCard(setCollapsedPcCards, pcCollapseKey)
                     }
                   >
-                    <NestedTabBar
-                      tabs={PC_NESTED_TABS}
-                      active={pcNested}
-                      onChange={setPcNested}
-                    />
-                    <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                    <div style={{ display: "flex", gap: 10, alignItems: "flex-start", marginBottom: 8 }}>
                       <div style={{ minWidth: 0, flex: 1 }}>
                         <a
                           href={buildRouteHref("character", { characterId: full.id })}
@@ -5693,6 +5899,55 @@ export default function SessionGMManagementPanels({
                           Open sheet
                         </a>
                       </div>
+                    </div>
+                    {!pcCanEdit ? (
+                      <p style={{ fontSize: 11, color: "#9ca3af", margin: "0 0 8px" }}>
+                        View only — open the sheet to play. Only the owning
+                        player or GM can edit from the session roster.
+                      </p>
+                    ) : null}
+                    <NestedTabBar
+                      tabs={PC_NESTED_TABS}
+                      active={pcNested}
+                      onChange={setPcNested}
+                    />
+                    <div style={{ display: pcNested === "info" ? "block" : "none" }}>
+                      <RosterPcInfoFields
+                        draft={infoDraft}
+                        setDraft={(updater) => {
+                          setPcRosterInfoDraftByChar((p) => {
+                            const cur = Object.prototype.hasOwnProperty.call(
+                              p,
+                              full.id,
+                            )
+                              ? p[full.id]
+                              : infoServerDraft;
+                            const next =
+                              typeof updater === "function"
+                                ? updater(cur)
+                                : updater;
+                            return { ...p, [full.id]: next };
+                          });
+                        }}
+                        onCommit={(overrideDraft) => {
+                          if (!pcCanEdit) return;
+                          void handlePcRosterSaveInfo(
+                            full.id,
+                            full,
+                            overrideDraft || infoDraft,
+                          );
+                        }}
+                        readOnly={!pcCanEdit}
+                        busy={
+                          saving ||
+                          pcSheetMoneySavingId === full.id ||
+                          pcRosterSheetBusyId === full.id
+                        }
+                        S={S}
+                        traumaLabel={traumaLabel}
+                        character={full}
+                        campaign={campaign}
+                      />
                     </div>
                     <div style={{ display: pcNested === "actions" ? "block" : "none" }}>
                     {(() => {
@@ -5750,12 +6005,12 @@ export default function SessionGMManagementPanels({
                           grades={grades}
                           readouts={readoutsFromGrades(grades)}
                           onStep={(k, d) => {
-                            if (pcStandBusy) return;
+                            if (!pcCanEdit || pcStandBusy) return;
                             void handlePcStandStep(full, k, d);
                           }}
                           variant="pc"
                           pcMaxGrade={canSRank ? "S" : "A"}
-                          readOnly={pcStandBusy}
+                          readOnly={!pcCanEdit || pcStandBusy}
                         />
                       </div>
                     ) : (
@@ -5809,6 +6064,20 @@ export default function SessionGMManagementPanels({
                     })()}
                     </div>
                     <div style={{ display: pcNested === "harm" ? "block" : "none" }}>
+                    <RosterPcStressTraumaStrip
+                      stress={stressCount}
+                      traumaLabel={traumaLabel}
+                      readOnly={!pcCanEdit}
+                      busy={
+                        saving ||
+                        pcSheetMoneySavingId === full.id ||
+                        pcRosterSheetBusyId === full.id
+                      }
+                      onStressChange={(n) =>
+                        handlePcRosterStressChange(full.id, n)
+                      }
+                      S={S}
+                    />
                     <div
                       style={{
                         display: "flex",
@@ -5828,15 +6097,15 @@ export default function SessionGMManagementPanels({
                           )
                         }
                         style={{ ...S.btnGhost, fontSize: 10 }}
-                        disabled={saving}
+                        disabled={saving || !pcCanEdit}
                         title="Clear every harm line for this PC (confirmation required)"
                       >
                         Reset harm
                       </button>
                     </div>
-                    {renderCompactHarmGrid(full.id)}
+                    {renderCompactHarmGrid(full.id, { readOnly: !pcCanEdit })}
                     <div style={{ ...lbl, marginTop: 10 }}>Armor uses</div>
-                    {renderPcArmorUses(full)}
+                    {renderPcArmorUses(full, { readOnly: !pcCanEdit })}
                     </div>
                     <div style={{ display: pcNested === "xp" ? "block" : "none" }}>
                     {renderPcExpandXpPanel(full.id, xp)}
@@ -6538,6 +6807,31 @@ export default function SessionGMManagementPanels({
                               pcSessionClockDraftFor !== full.id ? (
                                 <li style={{ color: "#52525b" }}>
                                   No active clocks for this PC.
+                                </li>
+                              ) : null}
+                            </ul>
+                            <div
+                              style={{
+                                ...lbl,
+                                marginTop: 12,
+                                marginBottom: 6,
+                              }}
+                            >
+                              Session clocks (visible to players)
+                            </div>
+                            <ul
+                              style={{
+                                margin: 0,
+                                paddingLeft: 14,
+                                color: "#6b7280",
+                                maxHeight: 160,
+                                overflowY: "auto",
+                              }}
+                            >
+                              {playerVisibleSessionClocks.map(renderPcClockRow)}
+                              {playerVisibleSessionClocks.length === 0 ? (
+                                <li style={{ color: "#52525b" }}>
+                                  No player-visible session clocks.
                                 </li>
                               ) : null}
                             </ul>
@@ -8794,7 +9088,17 @@ export default function SessionGMManagementPanels({
           </>
         ) : null}
         {sessionShellTab === "rolls" || sessionShellTab === "harm" ? (
-        <div style={{ display: "grid", gap: 10 }}>
+        <div
+          style={{
+            display: "grid",
+            gap: 10,
+            gridTemplateColumns:
+              sessionShellTab === "harm"
+                ? "repeat(auto-fill, minmax(280px, 1fr))"
+                : "1fr",
+            alignItems: "start",
+          }}
+        >
           {campaignChars.map((ch) => {
             const id = ch.id;
             const row = peMap[String(id)] || peMap[id] || null;
@@ -8889,13 +9193,41 @@ export default function SessionGMManagementPanels({
                 {!peCollapsed ? (
                   sessionShellTab === "harm" ? (
                     <div style={{ minWidth: 220, display: "grid", gap: 10 }}>
+                      <RosterPcStressTraumaStrip
+                        stress={rosterPcStressCount(fullCharacter)}
+                        traumaLabel={rosterPcTraumaLabel(fullCharacter)}
+                        readOnly={
+                          !canEditRosterPc(fullCharacter, user, isGmUser)
+                        }
+                        busy={
+                          saving ||
+                          pcSheetMoneySavingId === id ||
+                          pcRosterSheetBusyId === id
+                        }
+                        onStressChange={(n) =>
+                          handlePcRosterStressChange(id, n)
+                        }
+                        S={S}
+                      />
                       <div>
                         <div style={lbl}>Harm (compact)</div>
-                        {renderCompactHarmGrid(id)}
+                        {renderCompactHarmGrid(id, {
+                          readOnly: !canEditRosterPc(
+                            fullCharacter,
+                            user,
+                            isGmUser,
+                          ),
+                        })}
                       </div>
                       <div>
                         <div style={lbl}>Armor uses</div>
-                        {renderPcArmorUses(fullCharacter)}
+                        {renderPcArmorUses(fullCharacter, {
+                          readOnly: !canEditRosterPc(
+                            fullCharacter,
+                            user,
+                            isGmUser,
+                          ),
+                        })}
                       </div>
                     </div>
                   ) : (

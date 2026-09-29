@@ -10,6 +10,14 @@ export const PATCH_NOTES = [
       {
         "title": "Other",
         "items": [
+          "Align campaign/session roster expands with full-width expand-slot parity.",
+          "Merge pull request #175 from zoobavitel/fix/session-faction-npc-count",
+          "Remove unused CampaignManagement imports after roster extract.",
+          "Clarify campaign roster NPC strip drag and expand actions.",
+          "Replace campaign roster UI with session-style token panels.",
+          "Fix session faction cards showing wrong NPC counts.",
+          "Remove downtime phase logic from Train.",
+          "Allow repeat downtime Train on same track per phase.",
           "Keep Train button label when track already trained.",
           "Fix crew-linked stash disappearing on autosave.",
           "Fix Train phase lock when no completed session exists.",
@@ -591,68 +599,6 @@ export const PATCH_NOTES = [
         "title": "Added",
         "items": [
           "sync SRD_DEV rules + human PDF export"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-08-21",
-    "version": null,
-    "sections": [
-      {
-        "title": "Fixed",
-        "items": [
-          "include missing CharacterSheet hook dependency"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-08-20",
-    "version": null,
-    "sections": [
-      {
-        "title": "Maintenance",
-        "items": [
-          "refresh generated patch notes"
-        ]
-      },
-      {
-        "title": "Tests",
-        "items": [
-          "cover resist, unlock, NPC armor"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-08-19",
-    "version": null,
-    "sections": [
-      {
-        "title": "Added",
-        "items": [
-          "Coin Rolls exclude Durability",
-          "innate stand dice + desperate tracks",
-          "reset, clocks, roster, history UI"
-        ]
-      },
-      {
-        "title": "Maintenance",
-        "items": [
-          "refresh generated patch notes"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-08-13",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #109 from zoobavitel/fix/remove-legacy-views-py"
         ]
       }
     ]
