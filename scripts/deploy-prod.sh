@@ -58,6 +58,6 @@ python manage.py test
 # Start production server
 echo "🌐 Starting production server..."
 # Use gunicorn for production
-gunicorn app.wsgi:application --bind 0.0.0.0:8000 --worker-class gthread --workers 1 --threads 16 --timeout 120
+gunicorn app.wsgi:application --bind 0.0.0.0:8000 --worker-class gthread --workers 2 --threads 32 --timeout 120 --graceful-timeout 30 --max-requests 2000 --max-requests-jitter 200
 
 echo "✅ Deployment complete!"

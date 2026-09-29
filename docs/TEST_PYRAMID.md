@@ -51,12 +51,12 @@ Realistic table play: long-lived SSE + idle silences + short roll bursts. **Not*
 
 ```bash
 python manage.py seed_perf_tables --tier target --reset --output /tmp/bizarre-perf-seed-target.json
-# Prefer prod-like gunicorn: gthread, 1 worker, 16 threads — not runserver
+# Prefer prod-like gunicorn: gthread, 2 workers, 32 threads — not runserver
 PERF_SEED_JSON=/tmp/bizarre-perf-seed-target.json npm run test:load:saturday
 PERF_LOAD_TIER=stretch PERF_SEED_JSON=/tmp/bizarre-perf-seed-stretch.json npm run test:load:saturday:stretch
 ```
 
-**Hard ceiling:** each SSE pins one gunicorn gthread. With `--workers 1 --threads 16`, ten open streams leave ~6 threads for all HTTP. Redis pub/sub enables multi-worker fanout later; it does **not** free SSE threads while `workers=1`. If **target** fails under prod-like gunicorn, multi-worker + Redis is required before a third table.
+**Hard ceiling:** each SSE pins one gunicorn gthread. With `--workers 2 --threads 32`, ten open streams leave ~54 threads for HTTP across both workers (Redis pub/sub fans SSE across workers). If **target** fails under prod-like gunicorn, add workers/threads or split SSE to a dedicated process before a third table.
 
 Harnesses refuse known prod / Pages hosts unless `PERF_ALLOW_REMOTE=1` (staging only).
 
