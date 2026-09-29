@@ -79,6 +79,9 @@ function getUserDisplayName(person) {
     : "Unknown";
 }
 
+/** How long the undo banner stays before the DELETE hits the API. */
+const HOME_DELETE_UNDO_MS = 10000;
+
 const HomePage = ({
   onToggleMenu,
   onSearch,
@@ -98,6 +101,10 @@ const HomePage = ({
   const [campaigns, setCampaigns] = useState([]);
   const [campaignsLoading, setCampaignsLoading] = useState(true);
   const [invitations, setInvitations] = useState([]);
+  /** Latest deferred home delete (character or NPC) while Undo is available. */
+  const [pendingDelete, setPendingDelete] = useState(null);
+  const pendingDeleteRef = useRef(null);
+  const pendingDeleteTimerRef = useRef(null);
   const [invitationsLoading, setInvitationsLoading] = useState(true);
   const [invitationBusyId, setInvitationBusyId] = useState(null);
   const [invitationError, setInvitationError] = useState(null);
@@ -302,6 +309,106 @@ const HomePage = ({
     return gm?.id ?? null;
   }, [campaigns, user]);
 
+  const clearPendingDeleteTimer = useCallback(() => {
+    if (pendingDeleteTimerRef.current != null) {
+      clearTimeout(pendingDeleteTimerRef.current);
+      pendingDeleteTimerRef.current = null;
+    }
+  }, []);
+
+  const commitPendingDelete = useCallback(async () => {
+    const pending = pendingDeleteRef.current;
+    clearPendingDeleteTimer();
+    pendingDeleteRef.current = null;
+    setPendingDelete(null);
+    if (!pending?.item?.id) return;
+    try {
+      if (pending.kind === "character") {
+        await characterAPI.deleteCharacter(pending.item.id);
+      } else if (pending.kind === "npc") {
+        await npcAPI.deleteNPC(pending.item.id);
+      }
+    } catch (err) {
+      console.error("Failed to delete:", err);
+      if (pending.kind === "character") {
+        setCharacters((prev) => {
+          if (prev.some((c) => c.id === pending.item.id)) return prev;
+          return [...prev, pending.item];
+        });
+        setError(err.message || "Failed to delete character");
+      } else if (pending.kind === "npc") {
+        setNpcs((prev) => {
+          if (prev.some((n) => n.id === pending.item.id)) return prev;
+          return [...prev, pending.item];
+        });
+      }
+    }
+  }, [clearPendingDeleteTimer]);
+
+  const undoPendingDelete = useCallback(() => {
+    const pending = pendingDeleteRef.current;
+    clearPendingDeleteTimer();
+    pendingDeleteRef.current = null;
+    setPendingDelete(null);
+    if (!pending?.item) return;
+    if (pending.kind === "character") {
+      setCharacters((prev) => {
+        if (prev.some((c) => c.id === pending.item.id)) return prev;
+        return [...prev, pending.item];
+      });
+    } else if (pending.kind === "npc") {
+      setNpcs((prev) => {
+        if (prev.some((n) => n.id === pending.item.id)) return prev;
+        return [...prev, pending.item];
+      });
+    }
+  }, [clearPendingDeleteTimer]);
+
+  const queueHomeDelete = useCallback(
+    async (kind, item) => {
+      if (!item?.id) return;
+      if (pendingDeleteRef.current) {
+        await commitPendingDelete();
+      }
+      const label =
+        kind === "character"
+          ? item.name || item.true_name || `Character ${item.id}`
+          : item.name || item.stand_name || `NPC ${item.id}`;
+      if (kind === "character") {
+        setCharacters((prev) => prev.filter((c) => c.id !== item.id));
+      } else {
+        setNpcs((prev) => prev.filter((n) => n.id !== item.id));
+      }
+      const next = { kind, item, label };
+      pendingDeleteRef.current = next;
+      setPendingDelete(next);
+      clearPendingDeleteTimer();
+      pendingDeleteTimerRef.current = setTimeout(() => {
+        commitPendingDelete();
+      }, HOME_DELETE_UNDO_MS);
+    },
+    [clearPendingDeleteTimer, commitPendingDelete],
+  );
+
+  useEffect(() => {
+    return () => {
+      // Leaving Home: finalize any deferred delete so it is not orphaned.
+      const pending = pendingDeleteRef.current;
+      if (pendingDeleteTimerRef.current != null) {
+        clearTimeout(pendingDeleteTimerRef.current);
+        pendingDeleteTimerRef.current = null;
+      }
+      if (pending?.item?.id) {
+        if (pending.kind === "character") {
+          characterAPI.deleteCharacter(pending.item.id).catch(() => null);
+        } else if (pending.kind === "npc") {
+          npcAPI.deleteNPC(pending.item.id).catch(() => null);
+        }
+      }
+      pendingDeleteRef.current = null;
+    };
+  }, []);
+
   const handleCreateCharacter = () => {
     if (typeof onNavigateToCharacter === "function")
       onNavigateToCharacter(null);
@@ -312,14 +419,10 @@ const HomePage = ({
       onNavigateToCharacter(character.id);
   };
 
-  const handleDeleteCharacter = async (characterId) => {
-    try {
-      await characterAPI.deleteCharacter(characterId);
-      setCharacters((prev) => prev.filter((char) => char.id !== characterId));
-    } catch (err) {
-      console.error("Failed to delete character:", err);
-      setError(err.message || "Failed to delete character");
-    }
+  const handleDeleteCharacter = (characterId) => {
+    const item = characters.find((c) => c.id === characterId);
+    if (!item) return;
+    queueHomeDelete("character", item);
   };
 
   const handleManageCampaign = (campaignId) => {
@@ -359,13 +462,10 @@ const HomePage = ({
     if (typeof onNavigateToNPC === "function" && npcId) onNavigateToNPC(npcId);
   };
 
-  const handleDeleteNpc = async (npcId) => {
-    try {
-      await npcAPI.deleteNPC(npcId);
-      setNpcs((prev) => prev.filter((npc) => npc.id !== npcId));
-    } catch (err) {
-      console.error("Failed to delete NPC:", err);
-    }
+  const handleDeleteNpc = (npcId) => {
+    const item = npcs.find((n) => n.id === npcId);
+    if (!item) return;
+    queueHomeDelete("npc", item);
   };
 
   const refreshCampaigns = useCallback(() => {
@@ -534,6 +634,21 @@ const HomePage = ({
               + New
             </button>
           </div>
+
+          {pendingDelete ? (
+            <div className="home-undo-delete" role="status">
+              <span className="home-undo-delete-text">
+                Deleted “{pendingDelete.label}”
+              </span>
+              <button
+                type="button"
+                className="home-undo-delete-btn"
+                onClick={undoPendingDelete}
+              >
+                Undo
+              </button>
+            </div>
+          ) : null}
 
           {loading ? (
             <p className="home-muted">Loading characters…</p>

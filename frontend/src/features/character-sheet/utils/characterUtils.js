@@ -721,6 +721,7 @@ export const SERVER_OWNED_FIELD_TOUCH_KEYS = [
   "inventory",
   "coin",
   "stash",
+  "heritage",
 ];
 
 /**

@@ -31,14 +31,17 @@ import NpcsStandCoin from "../components/NpcsStandCoin";
 import ProgressClock from "../components/ProgressClock";
 import AvatarCropModal from "../components/AvatarCropModal";
 import { SessionHelpTip } from "../components/session/sessionShellUi";
+import { SessionNpcToken } from "../components/session/SessionTokenFaces";
 import AdvancementPlanStrip from "../features/character-sheet/components/AdvancementPlanStrip";
 import AdvancementPlanPanel from "../features/character-sheet/components/AdvancementPlanPanel";
+import "../styles/SessionTokenCards.css";
 import {
   characterAPI,
   campaignAPI,
   crewAPI,
   crewHistoryAPI,
   factionAPI,
+  npcAPI,
   rollAPI,
   progressClockAPI,
   referenceAPI,
@@ -977,6 +980,7 @@ const CharacterSheetWrapper = ({
     inventory: false,
     coin: false,
     stash: false,
+    heritage: false,
   });
   const markDirtyIntent = useCallback(() => {
     dirtyIntentRef.current = true;
@@ -1588,8 +1592,15 @@ const CharacterSheetWrapper = ({
   // Only update when content differs to avoid save loop: updateActiveCharTab passes new array refs
   // after each save; without value comparison we'd trigger setState → auto-save → save → loop.
   useEffect(() => {
-    // Dirty draft must win over poll/SSE/failed-save echoes (HP budget reject → server still old).
-    if (sheetDraftIsDirty) return;
+    // Dirty draft / heritage touch must win over poll/SSE/failed-save echoes.
+    if (
+      shouldSkipServerOwnedFieldHydration("heritage", {
+        fieldTouches: fieldTouchRef.current,
+        sheetDraftIsDirty,
+      })
+    ) {
+      return;
+    }
     const newBenefits = Array.isArray(character?.selected_benefits)
       ? character.selected_benefits
       : [];
@@ -3377,6 +3388,7 @@ const CharacterSheetWrapper = ({
               ? Number(link.reputation_value)
               : 0,
           visible_to_players: f.visible_to_players !== false,
+          players_see_npcs: f.players_see_npcs !== false,
           players_see_reputation:
             link?.players_see_reputation ?? f.players_see_reputation,
           players_see_tier: link?.players_see_tier ?? f.players_see_tier,
@@ -3387,6 +3399,7 @@ const CharacterSheetWrapper = ({
           faction_notes: link?.faction_notes ?? f.notes,
           faction_image: link?.faction_image ?? f.image,
           faction_image_url: link?.faction_image_url ?? f.image_url,
+          npcs: Array.isArray(f.npcs) ? f.npcs : [],
         };
       });
     for (const link of crewFactionLinks || []) {
@@ -3512,7 +3525,13 @@ const CharacterSheetWrapper = ({
   const showStandArmor =
     standArmorMax > 0 &&
     hasPlaybook(playbook, character?.secondaryPlaybook, "Stand");
-  const sessionDevXP = DEV_SESSION_XP[devVal] ?? 0;
+  const sessionDevXP = hasPlaybook(
+    playbook,
+    character?.secondaryPlaybook ?? character?.secondary_playbook,
+    "Stand",
+  )
+    ? (DEV_SESSION_XP[devVal] ?? 0)
+    : 0;
 
   useEffect(() => {
     setStandArmorUsed((u) => {
@@ -4709,17 +4728,29 @@ const CharacterSheetWrapper = ({
     setTrainBusyTrack(track);
     setTrainError(null);
     setPoolTickError(null);
+    markFieldTouch("xp");
     try {
       const res = await characterAPI.train(characterId, {
         track,
         ...(activeSessionId ? { session_id: activeSessionId } : {}),
       });
-      if (res?.xp_clocks && typeof res.xp_clocks === "object") {
-        setXp((prev) => ({ ...prev, ...res.xp_clocks }));
+      if (res?.character) {
+        applyAllocationBackendCharacter(res.character);
+      } else if (res?.xp_clocks && typeof res.xp_clocks === "object") {
+        const nextXp = { ...xp, ...res.xp_clocks };
+        setXp(nextXp);
         setCharData((prev) => ({
           ...prev,
           xp: { ...(prev.xp || {}), ...res.xp_clocks },
         }));
+        // Same truth rails as allocate — block poll/SSE from flashing old clocks.
+        const truth = {
+          xp: { ...nextXp },
+          unallocatedXp: Math.max(0, Math.floor(Number(unallocatedXp) || 0)),
+        };
+        xpClocksTruthRef.current = truth;
+        onCharacterXpSync?.(truth);
+        fieldTouchRef.current = { ...fieldTouchRef.current, xp: false };
       }
       if (
         typeof res?.pendings_minted === "number" &&
@@ -9596,6 +9627,7 @@ const CharacterSheetWrapper = ({
           if (touches.healingClock) fieldTouchRef.current.healingClock = false;
           if (touches.coin) fieldTouchRef.current.coin = false;
           if (touches.stash) fieldTouchRef.current.stash = false;
+          if (touches.heritage) fieldTouchRef.current.heritage = false;
           // Re-assert only fields this save included. A clock autosave that
           // omitted stress must not push a stale truth-lock count over the
           // server echo (GM unmark / concurrent roll marks).
@@ -13310,7 +13342,9 @@ const CharacterSheetWrapper = ({
                               {sessionClocks.map((clk) => {
                                 const canEdit =
                                   isGM ||
-                                  Number(clk.created_by) === Number(user?.id);
+                                  Number(clk.created_by) === Number(user?.id) ||
+                                  (!!clk.visible_to_players &&
+                                    !!user?.id);
                                 const segs =
                                   clk.max_segments ?? clk.segments ?? 4;
                                 const fill =
@@ -16076,7 +16110,7 @@ const CharacterSheetWrapper = ({
                             return;
                           }
                         }
-                        markDirtyIntent();
+                        markFieldTouch("heritage");
                         setSelectedBenefits((prev) =>
                           prev.includes(id)
                             ? prev.filter((x) => x !== id)
@@ -16086,7 +16120,7 @@ const CharacterSheetWrapper = ({
                       const toggleDetriment = (id) => {
                         const d = detriments.find((x) => x.id === id);
                         if (d?.required) return;
-                        markDirtyIntent();
+                        markFieldTouch("heritage");
                         setSelectedDetriments((prev) =>
                           prev.includes(id)
                             ? prev.filter((x) => x !== id)
@@ -23336,6 +23370,83 @@ const CharacterSheetWrapper = ({
                               {row.faction_notes}
                             </span>
                           ) : null}
+                          {(() => {
+                            const rawNpcs = Array.isArray(row.npcs)
+                              ? row.npcs
+                              : [];
+                            const showStrip =
+                              isGM ||
+                              (row.visible_to_players !== false &&
+                                row.players_see_npcs !== false);
+                            if (!showStrip) return null;
+                            const stripNpcs = isGM
+                              ? rawNpcs
+                              : rawNpcs.filter(
+                                  (n) => n?.visible_to_players !== false,
+                                );
+                            if (stripNpcs.length === 0) return null;
+                            return (
+                              <div
+                                className="session-faction-npc-strip"
+                                style={{ marginTop: 4 }}
+                              >
+                                {stripNpcs.map((npc) => {
+                                  const hidden =
+                                    isGM && npc.visible_to_players === false;
+                                  return (
+                                    <div
+                                      key={`stand-npc-${npc.id}`}
+                                      style={{
+                                        display: "flex",
+                                        flexDirection: "column",
+                                        alignItems: "center",
+                                        gap: 2,
+                                        opacity: hidden ? 0.45 : 1,
+                                      }}
+                                    >
+                                      <SessionNpcToken
+                                        npc={npc}
+                                        compact
+                                      />
+                                      {isGM ? (
+                                        <label
+                                          style={{
+                                            display: "flex",
+                                            alignItems: "center",
+                                            gap: 3,
+                                            fontSize: 9,
+                                            color: "#9ca3af",
+                                            cursor: "pointer",
+                                          }}
+                                          title="Players see this NPC"
+                                          onClick={(e) => e.stopPropagation()}
+                                        >
+                                          <input
+                                            type="checkbox"
+                                            checked={
+                                              npc.visible_to_players !== false
+                                            }
+                                            onChange={(e) => {
+                                              const next = e.target.checked;
+                                              npcAPI
+                                                .patchNPC(npc.id, {
+                                                  visible_to_players: next,
+                                                })
+                                                .then(() =>
+                                                  onCampaignRefresh?.(),
+                                                )
+                                                .catch(() => {});
+                                            }}
+                                          />
+                                          See
+                                        </label>
+                                      ) : null}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })()}
                           {isGM && charData.crewId ? (
                             <div
                               style={{

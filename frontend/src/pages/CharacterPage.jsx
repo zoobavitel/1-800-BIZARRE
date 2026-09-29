@@ -27,7 +27,6 @@ import {
   resolveHeritagePkForSave,
   normalizeStashSlots,
   resolveStashAfterCharacterSave,
-  shouldSkipEmptyCrewStashPatch,
   isImageUploadPayload,
   normalizeHarmObject,
   EMPTY_HARM_SHAPE,
@@ -987,25 +986,23 @@ export default function CharacterPage({
               : NaN;
           if (Number.isFinite(crewPk) && crewPk > 0) {
             const localStash = normalizeStashSlots(frontend.stash);
-            if (
-              shouldSkipEmptyCrewStashPatch(localStash, savedFrontend.stash)
-            ) {
-              console.warn(
-                "Crew stash save skipped: local grid empty but server had filled slots (possible UI corruption)",
+            // User emptied stash while touch set → allow wipe (do not skip).
+            try {
+              const crewUpdated = await crewAPI.patchCrew(crewPk, {
+                stash_slots: localStash,
+              });
+              stashMerged = Array.isArray(crewUpdated?.stash_slots)
+                ? normalizeStashSlots(crewUpdated.stash_slots)
+                : localStash;
+            } catch (e) {
+              console.error("Crew stash save failed:", e);
+              // Keep parent draft dirty: fail the save so CharacterSheet retains
+              // stash field-touch and does not hydrate over local grid.
+              const err = new Error(
+                e?.message || "Crew stash save failed — try again",
               );
-              stashMerged = normalizeStashSlots(savedFrontend.stash);
-            } else {
-              try {
-                const crewUpdated = await crewAPI.patchCrew(crewPk, {
-                  stash_slots: localStash,
-                });
-                stashMerged = Array.isArray(crewUpdated?.stash_slots)
-                  ? normalizeStashSlots(crewUpdated.stash_slots)
-                  : localStash;
-              } catch (e) {
-                console.error("Crew stash save failed:", e);
-                stashMerged = localStash;
-              }
+              err.cause = e;
+              throw err;
             }
           }
         }

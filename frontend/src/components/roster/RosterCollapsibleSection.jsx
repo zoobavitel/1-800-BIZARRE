@@ -11,6 +11,7 @@ export default function RosterCollapsibleSection({
   S,
   children,
   headerExtra = null,
+  helpTip = null,
 }) {
   return (
     <div style={{ ...S.card, marginBottom: 0, ...cardStyle }}>
@@ -27,20 +28,30 @@ export default function RosterCollapsibleSection({
           {title}
         </span>
         {headerExtra}
-        <button
-          type="button"
-          onClick={onToggleCollapsed}
+        <div
           style={{
-            ...S.btnGhost,
-            fontSize: 10,
-            padding: "2px 8px",
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
             flexShrink: 0,
             marginLeft: headerExtra ? 0 : "auto",
           }}
-          title={collapsed ? collapseExpandLabel : collapseCollapseLabel}
         >
-          {collapsed ? "Expand" : "Collapse"}
-        </button>
+          {helpTip}
+          <button
+            type="button"
+            onClick={onToggleCollapsed}
+            style={{
+              ...S.btnGhost,
+              fontSize: 10,
+              padding: "2px 8px",
+              flexShrink: 0,
+            }}
+            title={collapsed ? collapseExpandLabel : collapseCollapseLabel}
+          >
+            {collapsed ? "Expand" : "Collapse"}
+          </button>
+        </div>
       </div>
       {!collapsed ? children : null}
     </div>

@@ -24,6 +24,7 @@ export const NPC_NESTED_TABS = [
 ];
 
 export const PC_NESTED_TABS = [
+  { id: "info", label: "Info" },
   { id: "harm", label: "Harm" },
   { id: "actions", label: "Actions" },
   { id: "playbook", label: "Playbook" },
