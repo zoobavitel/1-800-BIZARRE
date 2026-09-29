@@ -406,3 +406,25 @@ export function groupSessionNpcsByFaction(campaign, campaignNPCs, npcInvolvement
 
   return { factionPairs: sortedPairs, ungrouped };
 }
+
+/** Group all campaign NPCs under factions (true campaign counts, not session roster). */
+export function groupCampaignNpcsByFaction(campaign) {
+  const factions = [...(campaign?.factions || [])].sort((a, b) =>
+    String(a.name ?? "").localeCompare(String(b.name ?? ""), undefined, {
+      sensitivity: "base",
+    }),
+  );
+  const allCampaignNpcIds = new Set(
+    (campaign?.campaign_npcs || []).map((n) => Number(n.id)),
+  );
+  const assignedIds = new Set();
+  const factionGroups = factions.map((f) => {
+    const npcs = (f.npcs || []).filter((n) => allCampaignNpcIds.has(Number(n.id)));
+    npcs.forEach((n) => assignedIds.add(Number(n.id)));
+    return { faction: f, npcs };
+  });
+  const unaffiliated = (campaign?.campaign_npcs || []).filter(
+    (n) => !assignedIds.has(Number(n.id)),
+  );
+  return { factionGroups, unaffiliated };
+}
