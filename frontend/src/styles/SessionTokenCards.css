@@ -19,11 +19,13 @@
   /* Home page uses 100vh; session rosters must hug content */
   min-height: 0;
   height: auto;
+  position: relative;
   /* Size expand panels to this column (100cqi), not the viewport alone */
   container-type: inline-size;
   container-name: roster-tokens;
   /* Never let absolute leftovers / wide panels paint past this column */
   overflow-x: clip;
+  overflow-y: visible;
   max-width: 100%;
 }
 
@@ -174,6 +176,14 @@
   overflow: visible;
 }
 
+/* Standing cards / non-roster hosts also use the strip. */
+.session-faction-npc-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: flex-start;
+}
+
 .session-roster-tokens .session-npc-strip-cell {
   position: relative;
   flex-shrink: 0;
@@ -181,34 +191,11 @@
   height: 36px;
 }
 
-.session-roster-tokens .session-npc-strip-remove {
-  position: absolute;
-  bottom: 1px;
-  right: 1px;
-  z-index: 2;
-  width: 14px;
-  height: 14px;
-  border-radius: 999px;
-  border: 1px solid #7f1d1d;
-  background: rgba(153, 27, 27, 0.92);
-  color: #fecaca;
-  font-size: 11px;
-  line-height: 1;
-  padding: 0;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
-}
-
-.session-roster-tokens .session-npc-strip-remove:hover:not(:disabled) {
-  background: #b91c1c;
-}
-
-.session-roster-tokens .session-npc-strip-remove:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
+.session-npc-strip-cell {
+  position: relative;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
 }
 
 .session-roster-tokens .session-npc-strip-thumb {
@@ -220,6 +207,18 @@
   background: #111827;
   padding: 0;
   cursor: grab;
+  flex-shrink: 0;
+}
+
+.session-npc-strip-thumb {
+  width: 36px;
+  height: 36px;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--dark-border, #374151);
+  background: #111827;
+  padding: 0;
+  cursor: pointer;
   flex-shrink: 0;
 }
 
@@ -286,9 +285,14 @@
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
 }
 
-/* Full-width host under the token grid (cards stay put). */
+/* Full-width host under the opener card (absolute — does not push grid). */
 .session-roster-tokens .session-roster-expand-slot {
   display: block;
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: var(--roster-expand-top, 0px);
+  z-index: 30;
   width: 100%;
   min-width: 0;
   max-width: 100%;
@@ -300,4 +304,47 @@
 .session-roster-tokens .session-roster-expand-slot > .session-pc-expand-panel,
 .session-roster-tokens .session-roster-expand-slot > .session-faction-expand-panel {
   margin-top: 0;
+}
+
+.session-roster-tokens .p-card-player {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 4px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.session-roster-tokens .p-card-player-avatar {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: #1f2937;
+  border: 1px solid #4b5563;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.session-roster-tokens .p-card-player-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.session-roster-tokens .p-card-player-initial {
+  font-size: 8px;
+  font-weight: 700;
+  color: #9ca3af;
+}
+
+.session-roster-tokens .p-card-player-name {
+  font-size: 10px;
+  color: #9ca3af;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }

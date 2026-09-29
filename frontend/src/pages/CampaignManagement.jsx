@@ -1244,6 +1244,31 @@ function CampaignDetail({
     }
   };
 
+  const toggleNpcVisibleToPlayers = useCallback(
+    async (npcId, visible) => {
+      setFactionError(null);
+      try {
+        await npcAPI.patchNPC(npcId, { visible_to_players: !!visible });
+        setFactionForm((p) =>
+          p
+            ? {
+                ...p,
+                npcs: (p.npcs || []).map((n) =>
+                  Number(n.id) === Number(npcId)
+                    ? { ...n, visible_to_players: !!visible }
+                    : n,
+                ),
+              }
+            : p,
+        );
+        onRefresh();
+      } catch (err) {
+        setFactionError(err.message);
+      }
+    },
+    [onRefresh],
+  );
+
   const applyFactionFormNpcMove = (npcId, targetFactionId) => {
     setFactionForm((p) => {
       if (!p?.id) return p;
@@ -1877,6 +1902,7 @@ function CampaignDetail({
             handleFactionDelete={handleFactionDelete}
             handleAddNpcToFaction={handleAddNpcToFaction}
             handleRemoveNpcFromFaction={handleRemoveNpcFromFaction}
+            handleToggleNpcVisibleToPlayers={toggleNpcVisibleToPlayers}
             factionAddNpcId={factionAddNpcId}
             setFactionAddNpcId={setFactionAddNpcId}
             campaignNPCs={campaignNPCs}

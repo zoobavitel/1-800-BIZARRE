@@ -519,6 +519,13 @@ class NPC(models.Model):
     )
     image = models.FileField(upload_to="npc_images/", null=True, blank=True)
     image_url = models.URLField(max_length=500, blank=True, default="")
+    visible_to_players = models.BooleanField(
+        default=True,
+        help_text=(
+            "When True and the faction allows players_see_npcs, players may see "
+            "this NPC on standing/roster views."
+        ),
+    )
 
     # Stand Description Fields
     stand_description = models.TextField(blank=True)

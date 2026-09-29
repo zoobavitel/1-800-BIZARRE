@@ -5,6 +5,7 @@ import RosterPcExpandPanel from "../roster/RosterPcExpandPanel";
 import RosterNpcColumn from "../roster/RosterNpcColumn";
 import RosterTwoColumnShell from "../roster/RosterTwoColumnShell";
 import RosterCollapsibleSection from "../roster/RosterCollapsibleSection";
+import useRosterExpandAnchor from "../roster/useRosterExpandAnchor";
 import { SessionPcToken } from "../session/SessionTokenFaces";
 import { groupCampaignNpcsByFaction, SessionHelpTip } from "../session/sessionShellUi";
 import {
@@ -88,6 +89,7 @@ export default function CampaignRosterPanels({
   handleFactionDelete,
   handleAddNpcToFaction,
   handleRemoveNpcFromFaction,
+  handleToggleNpcVisibleToPlayers,
   factionAddNpcId,
   setFactionAddNpcId,
   campaignNPCs,
@@ -119,6 +121,9 @@ export default function CampaignRosterPanels({
   const [quickFactionBusy, setQuickFactionBusy] = useState(false);
   const [npcDragging, setNpcDragging] = useState(false);
   const addNpcChooserRef = useRef(null);
+
+  const { tokensRef: pcTokensRef, tokensStyle: pcTokensStyle } =
+    useRosterExpandAnchor(expandedPcId);
 
   const { factionGroups: allFactionGroups, unaffiliated: allUnaffiliated } =
     useMemo(() => groupCampaignNpcsByFaction(campaign), [campaign]);
@@ -370,6 +375,9 @@ export default function CampaignRosterPanels({
               cancelFactionForm={cancelFactionForm}
               handleAddNpcToFaction={handleAddNpcToFaction}
               handleRemoveNpcFromFaction={handleRemoveNpcFromFaction}
+              handleToggleNpcVisibleToPlayers={
+                handleToggleNpcVisibleToPlayers
+              }
               factionForm={factionForm}
               setFactionForm={setFactionForm}
               factionError={factionError}
@@ -528,8 +536,9 @@ export default function CampaignRosterPanels({
               ) : null}
 
               <div
+                ref={pcTokensRef}
                 className="home-poc session-roster-tokens"
-                style={{ marginTop: 10 }}
+                style={{ marginTop: 10, ...pcTokensStyle }}
               >
                 {pcEntries.length === 0 ? (
                   <div style={{ color: "var(--text-dim)", fontSize: 12 }}>
@@ -576,6 +585,8 @@ export default function CampaignRosterPanels({
                               name={name}
                               isExpanded={pcExpanded}
                               onToggleExpand={() => togglePcExpand(ch.id)}
+                              player={charMetaById.get(ch.id)?.user || null}
+                              campaignCharacters={campaignCharacters}
                             />
                           </div>
                         );

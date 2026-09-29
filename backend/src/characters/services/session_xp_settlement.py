@@ -46,7 +46,14 @@ _DEV_SESSION_XP_BY_GRADE = {"F": 0, "D": 1, "C": 2, "B": 3, "A": 4, "S": 5}
 
 
 def development_session_xp_to_pool_amount(character: Character) -> int:
-    """End-of-session Stand Development XP → unallocated pool (not a track)."""
+    """End-of-session Stand Development XP → unallocated pool (not a track).
+
+    Only Stand playbook (primary or secondary) banks Dev XP — matching sheet UI.
+    """
+    pb = str(getattr(character, "playbook", None) or "").upper()
+    sec = str(getattr(character, "secondary_playbook", None) or "").upper()
+    if pb != "STAND" and sec != "STAND":
+        return 0
     stand = getattr(character, "stand", None)
     if stand is None:
         return 0

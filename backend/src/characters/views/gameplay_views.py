@@ -228,8 +228,9 @@ class ProgressClockViewSet(viewsets.ModelViewSet):
                 campaign.players.filter(id=user.id).exists()
                 or campaign.characters.filter(user_id=user.id).exists()
             )
+            # Party-visible OR GM-visible-to-players clocks: members may tick segments only.
             if (
-                obj.visible_to_party
+                (obj.visible_to_party or obj.visible_to_players)
                 and in_campaign
                 and set(data.keys()) <= party_tick_keys
             ):

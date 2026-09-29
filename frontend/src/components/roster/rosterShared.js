@@ -18,9 +18,21 @@ export const rosterTwoColumnGridStyle = (showSecondColumn) => ({
 });
 
 /**
+ * Measure bottom of expanded token relative to `.session-roster-tokens` root
+ * so expand slot can sit absolute under the opener without pushing the grid.
+ */
+export function measureRosterExpandTop(tokensEl, expandedEl) {
+  if (!tokensEl || !expandedEl) return 0;
+  const rootTop = tokensEl.getBoundingClientRect().top;
+  const cardBottom = expandedEl.getBoundingClientRect().bottom;
+  return Math.max(0, cardBottom - rootTop + (tokensEl.scrollTop || 0));
+}
+
+/**
  * Filter faction/NPC roster groups for non-GM players.
  * - Faction shown when visible_to_players !== false
  * - NPCs in that faction when players_see_npcs !== false
+ * - Per-NPC visible_to_players !== false (GM still sees all)
  * - Unaffiliated NPCs hidden (no visibility toggle)
  * - Strip tier/hold/rep/notes fields players_see_* hides
  */
@@ -31,9 +43,9 @@ export function filterFactionRosterForPlayerView(factionGroups, unaffiliated) {
     .map(({ faction, npcs }) => {
       const seeNpcs = faction.players_see_npcs !== false;
       const list = seeNpcs
-        ? Array.isArray(npcs)
-          ? npcs
-          : []
+        ? (Array.isArray(npcs) ? npcs : []).filter(
+            (n) => n?.visible_to_players !== false,
+          )
         : [];
       return {
         faction: sanitizeFactionFieldsForPlayer(faction),
@@ -92,7 +104,10 @@ export function filterSessionFactionPairsForPlayer(factionPairs, factionsById) {
       {};
     if (fac.visible_to_players === false) continue;
     const seeNpcs = fac.players_see_npcs !== false;
-    filtered.push([fid, seeNpcs ? npcList || [] : []]);
+    const list = seeNpcs
+      ? (npcList || []).filter((n) => n?.visible_to_players !== false)
+      : [];
+    filtered.push([fid, list]);
   }
   return { factionPairs: filtered, ungrouped: [] };
 }

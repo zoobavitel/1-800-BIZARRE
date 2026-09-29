@@ -2830,6 +2830,7 @@ class NPCSummarySerializer(serializers.ModelSerializer):
             "heritage_name",
             "image",
             "image_url",
+            "visible_to_players",
         ]
 
 class CrewCampaignSerializer(serializers.ModelSerializer):
@@ -2969,6 +2970,13 @@ class FactionSerializer(serializers.ModelSerializer):
             data["crew_notes"] = ""
         if not show or not getattr(instance, "players_see_npcs", True):
             data["npcs"] = []
+        else:
+            npcs = data.get("npcs") or []
+            data["npcs"] = [
+                n
+                for n in npcs
+                if isinstance(n, dict) and n.get("visible_to_players", True) is not False
+            ]
         return data
 
     class Meta:
@@ -3710,6 +3718,7 @@ class NPCSerializer(serializers.ModelSerializer):
             "crew",
             "image",
             "image_url",
+            "visible_to_players",
             "stand_description",
             "stand_appearance",
             "stand_manifestation",
