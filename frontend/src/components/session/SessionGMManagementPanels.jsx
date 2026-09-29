@@ -65,6 +65,9 @@ import {
   SessionHelpTip,
   entityPortraitSrc,
   AddNpcStripTile,
+  groupSessionNpcsByFaction,
+  npcIdsEqual,
+  sessionInvolvedNpcIds,
 } from "./sessionShellUi";
 import {
   SessionFactionToken,
@@ -1573,15 +1576,21 @@ export default function SessionGMManagementPanels({
     () => sessionData?.npc_involvements || [],
     [sessionData?.npc_involvements],
   );
-  const invByNpc = useMemo(
-    () => Object.fromEntries((npcInvolvements || []).map((i) => [i.npc, i])),
+  const invByNpc = useMemo(() => {
+    const map = {};
+    for (const inv of npcInvolvements || []) {
+      const id = Number(inv.npc);
+      if (!Number.isFinite(id)) continue;
+      map[id] = inv;
+      map[String(id)] = inv;
+    }
+    return map;
+  }, [npcInvolvements]);
+
+  const involvedNpcIdSet = useMemo(
+    () => sessionInvolvedNpcIds(npcInvolvements),
     [npcInvolvements],
   );
-
-  const involvedNpcs = useMemo(() => {
-    const ids = new Set((npcInvolvements || []).map((i) => i.npc));
-    return (campaignNPCs || []).filter((n) => ids.has(n.id));
-  }, [campaignNPCs, npcInvolvements]);
 
   const factionsById = useMemo(() => {
     const m = {};
@@ -1593,40 +1602,18 @@ export default function SessionGMManagementPanels({
     return m;
   }, [campaign?.factions]);
 
-  /** Factions with session NPCs, plus empty campaign factions (so new ones stay visible). */
-  const sessionFactionNpcGroups = useMemo(() => {
-    const map = new Map();
-    const ungrouped = [];
-    for (const npc of involvedNpcs) {
-      const raw = npc.faction ?? npc.faction_id ?? null;
-      const fid =
-        raw != null && raw !== "" ? Number.parseInt(String(raw), 10) : null;
-      if (fid != null && Number.isFinite(fid)) {
-        if (!map.has(fid)) map.set(fid, []);
-        map.get(fid).push(npc);
-      } else {
-        ungrouped.push(npc);
-      }
-    }
-    for (const f of campaign?.factions || []) {
-      const id = Number(f?.id);
-      if (!Number.isFinite(id)) continue;
-      if (!map.has(id)) map.set(id, []);
-    }
-    const sortedPairs = [...map.entries()].sort((a, b) => {
-      const na = factionsById[a[0]]?.name || factionsById[String(a[0])]?.name;
-      const nb = factionsById[b[0]]?.name || factionsById[String(b[0])]?.name;
-      return String(na ?? a[0]).localeCompare(String(nb ?? b[0]), undefined, {
-        sensitivity: "base",
-      });
-    });
-    return { factionPairs: sortedPairs, ungrouped };
-  }, [involvedNpcs, factionsById, campaign?.factions]);
+  /** Factions with session-involved NPCs; empty factions stay visible in grid. */
+  const sessionFactionNpcGroups = useMemo(
+    () => groupSessionNpcsByFaction(campaign, campaignNPCs, npcInvolvements),
+    [campaign, campaignNPCs, npcInvolvements],
+  );
 
   const addableNpcList = useMemo(
     () =>
-      (campaignNPCs || []).filter((n) => !invByNpc[n.id]) || [],
-    [campaignNPCs, invByNpc],
+      (campaignNPCs || []).filter(
+        (n) => !involvedNpcIdSet.has(Number(n.id)),
+      ) || [],
+    [campaignNPCs, involvedNpcIdSet],
   );
 
   const patchSessionInv = useCallback(
@@ -1815,11 +1802,23 @@ export default function SessionGMManagementPanels({
 
   const updateInv = (npcId, partial) => {
     const next = (npcInvolvements || []).map((row) => {
-      if (row.npc !== npcId) return row;
+      if (!npcIdsEqual(row.npc, npcId)) return row;
       return { ...row, ...partial };
     });
     return patchSessionInv(next);
   };
+
+  const removeNpcFromSession = useCallback(
+    async (npcId) => {
+      if (npcId == null) return;
+      const next = (npcInvolvements || []).filter(
+        (row) => !npcIdsEqual(row.npc, npcId),
+      );
+      setExpandedNpcPhotoId((id) => (npcIdsEqual(id, npcId) ? null : id));
+      await patchSessionInv(next);
+    },
+    [npcInvolvements, patchSessionInv],
+  );
 
   const mergePosEffect = useCallback(
     async (map) => {
@@ -4113,10 +4112,24 @@ export default function SessionGMManagementPanels({
     setter((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
+  /** Session faction roster: one expanded editor at a time. */
+  const toggleSessionFactionExpand = useCallback((factionCollapseKey) => {
+    let opening = false;
+    setCollapsedFactionCards((prev) => {
+      if (prev[factionCollapseKey]) {
+        return { ...prev, [factionCollapseKey]: false };
+      }
+      opening = true;
+      return { [factionCollapseKey]: true };
+    });
+    if (opening) setExpandedNpcPhotoId(null);
+  }, []);
+
   const renderNpcSessionCard = (npcIn) => {
     if (!npcIn) return null;
     const npc = { ...npcIn, ...(npcDetailById[npcIn.id] || {}) };
-    const inv = invByNpc[npc.id] || {};
+    const inv =
+      invByNpc[Number(npc.id)] || invByNpc[String(npc.id)] || {};
     const grades = rawStandToGrades(
       localNpcStandById[npc.id] || npc.stand_coin_stats,
     );
@@ -4146,6 +4159,7 @@ export default function SessionGMManagementPanels({
           style={{
             display: "flex",
             alignItems: "flex-start",
+            justifyContent: "space-between",
             gap: 8,
             marginBottom: 8,
             paddingRight: 32,
@@ -4154,6 +4168,15 @@ export default function SessionGMManagementPanels({
           <div style={{ width: 120, flexShrink: 0 }}>
             <SessionNpcToken npc={npc} selected />
           </div>
+          <button
+            type="button"
+            onClick={() => removeNpcFromSession(npc.id)}
+            style={{ ...S.btnDanger, fontSize: 10, flexShrink: 0 }}
+            disabled={saving}
+            title="Remove this NPC from the session roster"
+          >
+            Remove from session
+          </button>
         </div>
         <NestedTabBar
           tabs={NPC_NESTED_TABS}
@@ -4391,18 +4414,6 @@ export default function SessionGMManagementPanels({
             >
               Full sheet
             </a>
-            <button
-              type="button"
-              onClick={() => {
-                const next = npcInvolvements.filter((i) => i.npc !== npc.id);
-                patchSessionInv(next);
-                setExpandedNpcPhotoId(null);
-              }}
-              style={{ ...S.btnDanger, fontSize: 10, marginTop: 8, alignSelf: "flex-start" }}
-              disabled={saving}
-            >
-              Remove from session
-            </button>
           </div>
         ) : null}
         {nestedTab === "clocks" ? (
@@ -4982,9 +4993,11 @@ export default function SessionGMManagementPanels({
                   dropKey={dropKey}
                   addDisabled={saving}
                   onToggleExpand={() =>
-                    toggleCollapsedCard(setCollapsedFactionCards, factionCollapseKey)
+                    toggleSessionFactionExpand(factionCollapseKey)
                   }
                   onNpcThumbClick={(npc) => openNpcPhotoExpand(npc)}
+                  onNpcRemove={(npc) => removeNpcFromSession(npc?.id)}
+                  removeDisabled={saving}
                   onAddNpc={() => openAddNpcForFaction(fid)}
                   onDragOver={() => setDragOverFactionKey(dropKey)}
                   onDragLeave={() =>
@@ -5478,6 +5491,8 @@ export default function SessionGMManagementPanels({
                       draggable
                       sourceFactionKey={NO_FACTION_DROP_KEY}
                       onOpen={() => openNpcPhotoExpand(npc)}
+                      onRemove={() => removeNpcFromSession(npc.id)}
+                      removeDisabled={saving}
                       onDragBegin={() => setSessionNpcDragging(true)}
                       onDragEnd={clearSessionNpcDrag}
                     />

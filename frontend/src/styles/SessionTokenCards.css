@@ -165,6 +165,44 @@
   gap: 6px;
   margin-top: 8px;
   align-items: center;
+  overflow: visible;
+}
+
+.session-roster-tokens .session-npc-strip-cell {
+  position: relative;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+}
+
+.session-roster-tokens .session-npc-strip-remove {
+  position: absolute;
+  bottom: 1px;
+  right: 1px;
+  z-index: 2;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  border: 1px solid #7f1d1d;
+  background: rgba(153, 27, 27, 0.92);
+  color: #fecaca;
+  font-size: 11px;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+}
+
+.session-roster-tokens .session-npc-strip-remove:hover:not(:disabled) {
+  background: #b91c1c;
+}
+
+.session-roster-tokens .session-npc-strip-remove:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .session-roster-tokens .session-npc-strip-thumb {
