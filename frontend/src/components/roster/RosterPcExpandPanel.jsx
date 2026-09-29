@@ -2,9 +2,11 @@ import React, { useCallback, useEffect, useState } from "react";
 import {
   characterAPI,
   hasPlaybook,
+  playbookToDisplay,
 } from "../../features/character-sheet/services/api";
 import { ArmorChargeBoxes } from "../../features/character-sheet/components/CharacterSheetArmorPanel";
 import { buildRouteHref, handleSpaNavClick } from "../../utils/spaNavigation";
+import NpcsStandCoin from "../NpcsStandCoin";
 import { NestedTabBar } from "../session/sessionShellUi";
 import {
   COMPACT_HARM_FIELDS,
@@ -27,25 +29,18 @@ import {
   rosterPcTraumaLabel,
 } from "./rosterPcInfoUtils";
 import { rosterExpandPanelChrome } from "./rosterShared";
-
-const GRADES = ["F", "D", "C", "B", "A", "S"];
-
-function rawStandToGrades(raw) {
-  const g = (k) => {
-    if (!raw || typeof raw !== "object") return "D";
-    const v = raw[k] ?? raw[k.toUpperCase()] ?? "D";
-    const t = String(v).toUpperCase();
-    return GRADES.includes(t) ? t : "D";
-  };
-  return {
-    power: g("power"),
-    speed: g("speed"),
-    range: g("range"),
-    durability: g("durability"),
-    precision: g("precision"),
-    development: g("development"),
-  };
-}
+import SessionPcActionDotsReadout from "./SessionPcActionDotsReadout";
+import {
+  gradesFromCharacterStand,
+  readoutsFromGrades,
+  rosterCharacterNoteSections,
+  rosterFormatInventoryLine,
+  rosterHeritageAbilityLines,
+  rosterPcLoadSummary,
+  rosterPcSheetNotes,
+  rosterPlaybookAbilityGroups,
+  stepGrade,
+} from "./rosterPcExpandReadouts";
 
 const CAMPAIGN_PC_TABS = [
   { id: "info", label: "Info" },
@@ -88,11 +83,15 @@ export default function RosterPcExpandPanel({
     rosterPcInfoDraftFromCharacter(full),
   );
   const [busy, setBusy] = useState(false);
+  const [notesDraft, setNotesDraft] = useState(() => rosterPcSheetNotes(full));
+  const [notesDirty, setNotesDirty] = useState(false);
 
   useEffect(() => {
     const ch = character || summaryCharacter;
     setHarmDraft(harmDraftFromApiCharacter(ch));
     setInfoDraft(rosterPcInfoDraftFromCharacter(ch));
+    setNotesDraft(rosterPcSheetNotes(ch));
+    setNotesDirty(false);
   }, [character, summaryCharacter]);
 
   const patchHarmFromDraft = useCallback(async () => {
@@ -210,9 +209,80 @@ export default function RosterPcExpandPanel({
     [charId, onCharactersRefresh, onRefresh, onError, readOnly],
   );
 
+  const saveNotes = useCallback(async () => {
+    if (readOnly || !charId) return;
+    const server = rosterPcSheetNotes(full);
+    const next = String(notesDraft ?? "");
+    if (server === next) {
+      setNotesDirty(false);
+      return;
+    }
+    setBusy(true);
+    onError?.(null);
+    try {
+      await characterAPI.patchCharacter(charId, { background_note2: next });
+      setNotesDirty(false);
+      await onCharactersRefresh?.();
+      onRefresh?.();
+    } catch (e) {
+      onError?.(e.message || "Could not update notes.");
+    } finally {
+      setBusy(false);
+    }
+  }, [
+    charId,
+    full,
+    notesDraft,
+    onCharactersRefresh,
+    onRefresh,
+    onError,
+    readOnly,
+  ]);
+
+  const handleStandStep = useCallback(
+    async (key, delta) => {
+      if (readOnly || !charId || !full) return;
+      const grades = gradesFromCharacterStand(full);
+      const canSRank = full.gm_can_have_s_rank_stand_stats === true;
+      const nextLetter = stepGrade(grades[key], delta);
+      if (nextLetter === grades[key]) return;
+      if (delta > 0 && !canSRank && grades[key] === "A") return;
+      setBusy(true);
+      onError?.(null);
+      try {
+        if (delta < 0) {
+          await characterAPI.gmForceStandStat(charId, {
+            stand_stat: key,
+            direction: "down",
+          });
+        } else {
+          const res = await characterAPI.gmForceStandStat(charId, {
+            stand_stat: key,
+            xp_track: "playbook",
+          });
+          if (res?.pending_stand_a_reward) {
+            const stat = String(
+              res.pending_stand_a_reward.stand_stat || key,
+            ).toUpperCase();
+            onError?.(
+              `Stand Coin ${stat} is now A. Player must pick B→A abilities on their character sheet.`,
+            );
+          }
+        }
+        await onCharactersRefresh?.();
+        onRefresh?.();
+      } catch (e) {
+        onError?.(e.message || "Could not update Stand Coin.");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [charId, full, onCharactersRefresh, onRefresh, onError, readOnly],
+  );
+
   if (!full?.id) return null;
 
-  const grades = rawStandToGrades(full.stand_coin_stats);
+  const grades = gradesFromCharacterStand(full);
   const standArmorMax = rosterStandArmorMaxFromDurabilityGrade(grades.durability);
   const standArmorUsed = Math.max(0, Math.floor(Number(full.stand_armor_used) || 0));
   const hasPhyArmor = !!full.has_physical_armor_item;
@@ -478,33 +548,274 @@ export default function RosterPcExpandPanel({
       ) : null}
 
       {activeTab === "actions" ? (
-        <div style={{ fontSize: 11, color: "#9ca3af", lineHeight: 1.45 }}>
-          Action dots and heritage details are on the full character sheet.
+        <div>
+          {(() => {
+            const heritageName =
+              full.heritage_details?.name ||
+              full.heritage_name ||
+              full.heritage ||
+              "—";
+            const heritageLines = rosterHeritageAbilityLines(full);
+            return (
+              <>
+                <div style={lbl}>Heritage</div>
+                <div style={{ fontSize: 11, color: "#e5e7eb", marginBottom: 6 }}>
+                  {heritageName}
+                </div>
+                {heritageLines.length > 0 ? (
+                  <ul
+                    style={{
+                      margin: "0 0 10px",
+                      paddingLeft: 16,
+                      fontSize: 10,
+                      color: "#9ca3af",
+                      lineHeight: 1.35,
+                    }}
+                  >
+                    {heritageLines.map((h, i) => (
+                      <li key={`herit-${full.id}-${i}`}>
+                        {h.kind === "detriment" ? "− " : "+ "}
+                        {h.name}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div
+                    style={{
+                      fontSize: 10,
+                      color: "#52525b",
+                      marginBottom: 10,
+                    }}
+                  >
+                    No heritage abilities on payload
+                  </div>
+                )}
+              </>
+            );
+          })()}
+          <div style={{ marginTop: 4, marginBottom: 8 }}>
+            <SessionPcActionDotsReadout
+              actionDots={full.action_dots || full.actionDots}
+            />
+          </div>
         </div>
       ) : null}
 
       {activeTab === "playbook" ? (
-        <div style={{ fontSize: 11, color: "#9ca3af", lineHeight: 1.45 }}>
-          Stand coin and playbook abilities are on the full character sheet.
+        <div>
+          {isStandUser ? (
+            <div style={{ display: "flex", justifyContent: "center" }}>
+              <NpcsStandCoin
+                grades={grades}
+                readouts={readoutsFromGrades(grades)}
+                onStep={(k, d) => {
+                  if (readOnly || busy) return;
+                  void handleStandStep(k, d);
+                }}
+                variant="pc"
+                pcMaxGrade={
+                  full.gm_can_have_s_rank_stand_stats === true ? "S" : "A"
+                }
+                readOnly={readOnly || busy}
+              />
+            </div>
+          ) : (
+            <div
+              style={{
+                fontSize: 10,
+                color: "#6b7280",
+                marginTop: 6,
+                lineHeight: 1.35,
+              }}
+            >
+              Stand Coin hidden — {playbookToDisplay(full.playbook)} playbook
+              (not a Stand user).
+            </div>
+          )}
+          {(() => {
+            const groups = rosterPlaybookAbilityGroups(full);
+            if (!groups.length) {
+              return (
+                <div
+                  style={{
+                    fontSize: 10,
+                    color: "#52525b",
+                    marginTop: 8,
+                  }}
+                >
+                  No playbook abilities on payload
+                </div>
+              );
+            }
+            return groups.map((g) => (
+              <div key={`pb-${full.id}-${g.label}`} style={{ marginTop: 8 }}>
+                <div style={lbl}>{g.label}</div>
+                <ul
+                  style={{
+                    margin: 0,
+                    paddingLeft: 16,
+                    fontSize: 10,
+                    color: "#9ca3af",
+                    lineHeight: 1.35,
+                  }}
+                >
+                  {g.items.map((name, i) => (
+                    <li key={`pb-item-${full.id}-${g.label}-${i}`}>{name}</li>
+                  ))}
+                </ul>
+              </div>
+            ));
+          })()}
         </div>
       ) : null}
 
       {activeTab === "notes" ? (
-        <div
-          style={{
-            fontSize: 11,
-            color: "#e5e7eb",
-            whiteSpace: "pre-wrap",
-            lineHeight: 1.45,
-          }}
-        >
-          {full.notes?.trim() || "—"}
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <div style={lbl}>Notes (PC sheet)</div>
+          {readOnly ? (
+            <div
+              style={{
+                fontSize: 11,
+                color: "#e5e7eb",
+                whiteSpace: "pre-wrap",
+                lineHeight: 1.45,
+              }}
+            >
+              {rosterPcSheetNotes(full).trim() || "—"}
+            </div>
+          ) : (
+            <>
+              <textarea
+                value={notesDraft}
+                onChange={(e) => {
+                  setNotesDraft(e.target.value);
+                  setNotesDirty(true);
+                }}
+                placeholder="Notes…"
+                rows={4}
+                disabled={busy}
+                style={{
+                  width: "100%",
+                  boxSizing: "border-box",
+                  fontSize: 11,
+                  lineHeight: 1.35,
+                  padding: "6px 8px",
+                  background: "#010409",
+                  color: "#e5e7eb",
+                  border: "1px solid #30363d",
+                  borderRadius: 6,
+                }}
+              />
+              <button
+                type="button"
+                style={{ ...S.btnPrimary, fontSize: 10, alignSelf: "flex-start" }}
+                disabled={busy || !notesDirty}
+                onClick={() => void saveNotes()}
+              >
+                Save notes
+              </button>
+            </>
+          )}
+          {(() => {
+            const sections = rosterCharacterNoteSections(full);
+            if (!sections.length) return null;
+            return (
+              <details style={{ marginTop: 4 }}>
+                <summary
+                  style={{
+                    fontSize: 10,
+                    color: "#9ca3af",
+                    cursor: "pointer",
+                  }}
+                >
+                  Background / appearance / vice
+                </summary>
+                {sections.map((s) => (
+                  <div key={s.label} style={{ marginTop: 6 }}>
+                    <div style={lbl}>{s.label}</div>
+                    <div
+                      style={{
+                        fontSize: 11,
+                        color: "#d1d5db",
+                        whiteSpace: "pre-wrap",
+                        lineHeight: 1.35,
+                      }}
+                    >
+                      {s.text}
+                    </div>
+                  </div>
+                ))}
+              </details>
+            );
+          })()}
         </div>
       ) : null}
 
       {activeTab === "items" ? (
-        <div style={{ fontSize: 11, color: "#9ca3af", lineHeight: 1.45 }}>
-          Inventory and loadout are on the full character sheet.
+        <div>
+          {(() => {
+            const loadSummary = rosterPcLoadSummary(full, null);
+            const invLines = (
+              Array.isArray(full.inventory) ? full.inventory : []
+            )
+              .map(rosterFormatInventoryLine)
+              .filter(Boolean);
+            return (
+              <>
+                <div style={lbl}>Load</div>
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: "#e5e7eb",
+                    marginBottom: 8,
+                    lineHeight: 1.35,
+                  }}
+                >
+                  <strong
+                    style={{
+                      color:
+                        loadSummary.bandMax != null &&
+                        loadSummary.used > loadSummary.bandMax
+                          ? "#f85149"
+                          : "#e5e7eb",
+                    }}
+                  >
+                    {loadSummary.used}
+                  </strong>
+                  {loadSummary.derivedBand
+                    ? ` · ${loadSummary.bandLabel || loadSummary.derivedBand}`
+                    : " · —"}
+                  {loadSummary.bandMax != null
+                    ? ` (cap ${loadSummary.bandMax})`
+                    : null}
+                </div>
+                <div style={lbl}>Inventory</div>
+                <div
+                  style={{
+                    fontSize: 10,
+                    color: "#9ca3af",
+                    maxHeight: 96,
+                    overflowY: "auto",
+                    lineHeight: 1.35,
+                    padding: "6px 8px",
+                    background: "#0d1117",
+                    borderRadius: 6,
+                    border: "1px solid #30363d",
+                  }}
+                >
+                  {invLines.length > 0 ? (
+                    <ul style={{ margin: 0, paddingLeft: 16 }}>
+                      {invLines.map((line, li) => (
+                        <li key={`inv-${full.id}-${li}`}>{line}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <span style={{ color: "#52525b" }}>—</span>
+                  )}
+                </div>
+              </>
+            );
+          })()}
         </div>
       ) : null}
 
