@@ -314,3 +314,117 @@ export function SessionHelpTip({ label, panelId, children }) {
     </div>
   );
 }
+
+/** Session involvement rows use `npc` FK from JSON — may be number or string. */
+export function npcIdsEqual(a, b) {
+  if (a == null || b == null) return false;
+  return Number(a) === Number(b);
+}
+
+/** NPC.faction from API may be a PK, string, or nested { id }. */
+export function resolveNpcFactionId(npc) {
+  const raw = npc?.faction ?? npc?.faction_id ?? null;
+  if (raw == null || raw === "") return null;
+  if (typeof raw === "object" && raw !== null && raw.id != null) {
+    const fid = Number(raw.id);
+    return Number.isFinite(fid) ? fid : null;
+  }
+  const fid = Number.parseInt(String(raw), 10);
+  return Number.isFinite(fid) ? fid : null;
+}
+
+export function sessionInvolvedNpcIds(npcInvolvements) {
+  return new Set(
+    (npcInvolvements || [])
+      .map((i) => i?.npc)
+      .filter((raw) => raw != null && raw !== "")
+      .map((raw) => Number(raw))
+      .filter((id) => Number.isFinite(id)),
+  );
+}
+
+/**
+ * Group session-involved NPCs under campaign factions (faction.npcs first,
+ * npc.faction fallback) and keep empty factions visible in the roster grid.
+ */
+export function groupSessionNpcsByFaction(campaign, campaignNPCs, npcInvolvements) {
+  const involvedSet = sessionInvolvedNpcIds(npcInvolvements);
+  const npcById = new Map(
+    (campaignNPCs || [])
+      .map((n) => [Number(n.id), n])
+      .filter(([id]) => Number.isFinite(id)),
+  );
+
+  const map = new Map();
+  const assignedIds = new Set();
+
+  for (const f of campaign?.factions || []) {
+    const id = Number(f?.id);
+    if (!Number.isFinite(id)) continue;
+    const list = [];
+    for (const fn of f.npcs || []) {
+      const nid = Number(fn?.id);
+      if (!involvedSet.has(nid)) continue;
+      list.push(npcById.get(nid) || fn);
+      assignedIds.add(nid);
+    }
+    map.set(id, list);
+  }
+
+  const ungrouped = [];
+  for (const nid of involvedSet) {
+    if (assignedIds.has(nid)) continue;
+    const npc = npcById.get(nid);
+    if (!npc) continue;
+    const fid = resolveNpcFactionId(npc);
+    if (fid != null && map.has(fid)) {
+      map.get(fid).push(npc);
+      assignedIds.add(nid);
+    } else {
+      ungrouped.push(npc);
+    }
+  }
+
+  for (const f of campaign?.factions || []) {
+    const id = Number(f?.id);
+    if (!Number.isFinite(id)) continue;
+    if (!map.has(id)) map.set(id, []);
+  }
+
+  const nameForId = (fid) => {
+    const f =
+      (campaign?.factions || []).find((row) => Number(row?.id) === fid) ||
+      null;
+    return String(f?.name ?? fid);
+  };
+
+  const sortedPairs = [...map.entries()].sort((a, b) =>
+    nameForId(a[0]).localeCompare(nameForId(b[0]), undefined, {
+      sensitivity: "base",
+    }),
+  );
+
+  return { factionPairs: sortedPairs, ungrouped };
+}
+
+/** Group all campaign NPCs under factions (true campaign counts, not session roster). */
+export function groupCampaignNpcsByFaction(campaign) {
+  const factions = [...(campaign?.factions || [])].sort((a, b) =>
+    String(a.name ?? "").localeCompare(String(b.name ?? ""), undefined, {
+      sensitivity: "base",
+    }),
+  );
+  const allCampaignNpcIds = new Set(
+    (campaign?.campaign_npcs || []).map((n) => Number(n.id)),
+  );
+  const assignedIds = new Set();
+  const factionGroups = factions.map((f) => {
+    const npcs = (f.npcs || []).filter((n) => allCampaignNpcIds.has(Number(n.id)));
+    npcs.forEach((n) => assignedIds.add(Number(n.id)));
+    return { faction: f, npcs };
+  });
+  const unaffiliated = (campaign?.campaign_npcs || []).filter(
+    (n) => !assignedIds.has(Number(n.id)),
+  );
+  return { factionGroups, unaffiliated };
+}

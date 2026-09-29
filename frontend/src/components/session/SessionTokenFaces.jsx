@@ -53,6 +53,8 @@ export function SessionFactionToken({
   dropKey,
   onToggleExpand,
   onNpcThumbClick,
+  onNpcRemove,
+  removeDisabled = false,
   onAddNpc,
   onDragOver,
   onDragLeave,
@@ -148,6 +150,10 @@ export function SessionFactionToken({
               draggable
               sourceFactionKey={dropKey}
               onOpen={() => onNpcThumbClick?.(npc)}
+              onRemove={
+                onNpcRemove ? () => onNpcRemove(npc) : undefined
+              }
+              removeDisabled={removeDisabled}
               onDragBegin={onNpcDragBegin}
               onDragEnd={onNpcDragEnd}
             />
@@ -181,6 +187,8 @@ export function SessionNpcToken({
   draggable = false,
   sourceFactionKey = NO_FACTION_DROP_KEY,
   onOpen,
+  onRemove,
+  removeDisabled = false,
   onDragBegin,
   onDragEnd,
 }) {
@@ -200,33 +208,50 @@ export function SessionNpcToken({
 
   if (compact) {
     return (
-      <button
-        type="button"
-        className={`session-npc-strip-thumb${selected ? " is-selected" : ""}`}
-        draggable={draggable}
-        onDragStart={onDragStart}
-        onDragEnd={() => onDragEnd?.()}
-        onClick={(e) => {
-          e.stopPropagation();
-          onOpen?.(npc);
-        }}
-        title={name}
-      >
-        <HomeCardThumb
-          src={portraitSrc}
-          label={name}
-          style={{
-            width: "100%",
-            height: "100%",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 12,
-            fontWeight: "bold",
-            color: "#6b7280",
+      <div className="session-npc-strip-cell">
+        <button
+          type="button"
+          className={`session-npc-strip-thumb${selected ? " is-selected" : ""}`}
+          draggable={draggable}
+          onDragStart={onDragStart}
+          onDragEnd={() => onDragEnd?.()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpen?.(npc);
           }}
-        />
-      </button>
+          title={name}
+        >
+          <HomeCardThumb
+            src={portraitSrc}
+            label={name}
+            style={{
+              width: "100%",
+              height: "100%",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 12,
+              fontWeight: "bold",
+              color: "#6b7280",
+            }}
+          />
+        </button>
+        {onRemove ? (
+          <button
+            type="button"
+            className="session-npc-strip-remove"
+            aria-label={`Remove ${name} from session`}
+            title="Remove from session"
+            disabled={removeDisabled}
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove(npc);
+            }}
+          >
+            ×
+          </button>
+        ) : null}
+      </div>
     );
   }
 
