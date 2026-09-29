@@ -137,6 +137,31 @@ export function normalizeStashSlots(v) {
   return d.map((_, i) => Boolean(v[i]));
 }
 
+export function countFilledStashSlots(stash) {
+  return Array.isArray(stash) ? stash.filter(Boolean).length : 0;
+}
+
+export function isStashAllEmpty(stash) {
+  return (
+    !Array.isArray(stash) || stash.length === 0 || stash.every((s) => !s)
+  );
+}
+
+/** Skip crew PATCH when corrupted local grid would wipe server-filled stash. */
+export function shouldSkipEmptyCrewStashPatch(localStash, serverStash) {
+  return isStashAllEmpty(localStash) && countFilledStashSlots(serverStash) > 0;
+}
+
+/** Post-save stash merge — mirrors coin: prefer effective crew stash over empty echo. */
+export function resolveStashAfterCharacterSave({
+  stashMerged,
+  savedFrontend,
+  frontend,
+}) {
+  if (stashMerged !== null) return normalizeStashSlots(stashMerged);
+  return normalizeStashSlots(savedFrontend?.stash ?? frontend?.stash);
+}
+
 /** File input returns File; drag/paste or tests may use Blob — both must multipart-upload. */
 export function isImageUploadPayload(v) {
   return (
