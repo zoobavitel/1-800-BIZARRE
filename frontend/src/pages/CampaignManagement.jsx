@@ -1859,9 +1859,11 @@ function CampaignDetail({
         campaign={campaign}
         S={S}
         characters={rosterCharacters}
+        npcs={campaignNPCs}
         onOpenSession={onOpenSession}
         onCharactersRefresh={refreshRosterCharacters}
         isGM={isGM}
+        userId={user?.id}
       >
         {({ showNpc, showPc }) => (
           <CampaignRosterPanels
