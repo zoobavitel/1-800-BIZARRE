@@ -8,6 +8,7 @@ import {
 import { NO_FACTION_DROP_KEY } from "../session/sessionShellUi";
 import { rosterExpandPanelChrome } from "./rosterShared";
 import NpcCampaignExpandPanel from "./NpcCampaignExpandPanel";
+import useRosterExpandAnchor from "./useRosterExpandAnchor";
 
 /**
  * Campaign-scope NPC roster column: faction token grid, make-faction, add-NPC, unaffiliated.
@@ -31,6 +32,7 @@ export default function RosterNpcColumn({
   cancelFactionForm,
   handleAddNpcToFaction,
   handleRemoveNpcFromFaction,
+  handleToggleNpcVisibleToPlayers,
   factionForm,
   setFactionForm,
   factionError,
@@ -61,7 +63,7 @@ export default function RosterNpcColumn({
   clearNpcDrag,
   onRefresh,
   onError,
-  hint = "Drag strip thumbs onto another faction to reassign. Click a thumb for Leave faction / Remove from campaign.",
+  readOnly = false,
 }) {
   const expandedFactionNpc =
     expandedNpcId != null
@@ -74,6 +76,14 @@ export default function RosterNpcColumn({
       ? unaffiliated.find((n) => n.id === expandedNpcId) || null
       : null;
 
+  const expandAnchorKey =
+    expandedFactionId != null
+      ? `f-${expandedFactionId}`
+      : expandedNpcId != null
+        ? `n-${expandedNpcId}`
+        : null;
+  const { tokensRef, tokensStyle } = useRosterExpandAnchor(expandAnchorKey);
+
   const renderNpcExpand = (npc, { showLeaveFaction }) => (
     <div className="session-roster-expand-slot">
       <NpcCampaignExpandPanel
@@ -82,15 +92,18 @@ export default function RosterNpcColumn({
         campaign={campaign}
         onNavigateToNPC={onNavigateToNPC}
         onLeaveFaction={
-          showLeaveFaction
+          !readOnly && showLeaveFaction
             ? () => onMoveNpcToFaction(npc.id, null)
             : null
         }
-        onRemoveFromCampaign={() => onUnassignNPC(npc.id)}
-        onMoveNpcToFaction={onMoveNpcToFaction}
+        onRemoveFromCampaign={
+          !readOnly ? () => onUnassignNPC(npc.id) : null
+        }
+        onMoveNpcToFaction={!readOnly ? onMoveNpcToFaction : null}
         onRefresh={onRefresh}
         onError={onError}
         onClose={() => setExpandedNpcId(null)}
+        readOnly={readOnly}
       />
     </div>
   );
@@ -98,22 +111,14 @@ export default function RosterNpcColumn({
   return (
     <>
       <div
-        style={{
-          fontSize: 11,
-          color: "var(--text-muted)",
-          marginTop: 10,
-          marginBottom: 4,
-        }}
-      >
-        {hint}
-      </div>
-      <div
+        ref={tokensRef}
         className="home-poc session-roster-tokens"
         style={{
           display: "flex",
           flexDirection: "column",
           gap: 14,
           marginTop: 10,
+          ...tokensStyle,
         }}
       >
         <div className="home-faction-grid">
@@ -126,7 +131,7 @@ export default function RosterNpcColumn({
                   faction={faction}
                   npcList={npcs}
                   isExpanded={isExpanded}
-                  isDragOver={dragOverFactionKey === dropKey}
+                  isDragOver={!readOnly && dragOverFactionKey === dropKey}
                   dropKey={dropKey}
                   onToggleExpand={() => toggleFactionExpand(faction)}
                   onNpcThumbClick={(npc) => {
@@ -135,27 +140,55 @@ export default function RosterNpcColumn({
                     );
                     setExpandedPcId(null);
                   }}
-                  onAddNpc={async () => {
-                    if (typeof onCreateNpcForFaction !== "function") return;
-                    const newId = await onCreateNpcForFaction(faction.id);
-                    if (newId != null) {
-                      setExpandedNpcId(newId);
-                      setExpandedPcId(null);
-                    }
-                  }}
-                  onDelete={() => handleFactionDelete(faction)}
-                  onDragOver={() => setDragOverFactionKey(dropKey)}
-                  onDragLeave={() =>
-                    setDragOverFactionKey((k) => (k === dropKey ? null : k))
+                  onAddNpc={
+                    readOnly
+                      ? undefined
+                      : async () => {
+                          if (typeof onCreateNpcForFaction !== "function")
+                            return;
+                          const newId = await onCreateNpcForFaction(
+                            faction.id,
+                          );
+                          if (newId != null) {
+                            setExpandedNpcId(newId);
+                            setExpandedPcId(null);
+                          }
+                        }
                   }
-                  onDrop={(e) => onNpcFactionDrop(e, dropKey)}
-                  onNpcDragBegin={() => setNpcDragging(true)}
-                  onNpcDragEnd={clearNpcDrag}
+                  onDelete={
+                    readOnly
+                      ? undefined
+                      : () => handleFactionDelete(faction)
+                  }
+                  onDragOver={
+                    readOnly
+                      ? undefined
+                      : () => setDragOverFactionKey(dropKey)
+                  }
+                  onDragLeave={
+                    readOnly
+                      ? undefined
+                      : () =>
+                          setDragOverFactionKey((k) =>
+                            k === dropKey ? null : k,
+                          )
+                  }
+                  onDrop={
+                    readOnly
+                      ? undefined
+                      : (e) => onNpcFactionDrop(e, dropKey)
+                  }
+                  onNpcDragBegin={
+                    readOnly ? undefined : () => setNpcDragging(true)
+                  }
+                  onNpcDragEnd={readOnly ? undefined : clearNpcDrag}
                 />
               </div>
             );
           })}
 
+          {!readOnly ? (
+            <>
           <div
             className="f-card session-make-faction-tile"
             style={{
@@ -339,9 +372,12 @@ export default function RosterNpcColumn({
               </div>
             ) : null}
           </div>
+            </>
+          ) : null}
         </div>
 
-        {expandedFactionId &&
+        {!readOnly &&
+        expandedFactionId &&
         factionForm?.id === expandedFactionId ? (
           <div className="session-roster-expand-slot">
             <div
@@ -365,6 +401,7 @@ export default function RosterNpcColumn({
                 onCancel={cancelFactionForm}
                 onAddNpc={handleAddNpcToFaction}
                 onRemoveNpc={handleRemoveNpcFromFaction}
+                onToggleNpcVisibleToPlayers={handleToggleNpcVisibleToPlayers}
                 embedded
                 S={S}
               />
@@ -388,7 +425,7 @@ export default function RosterNpcColumn({
                   <SessionNpcToken
                     npc={npc}
                     selected={expandedNpcId === npc.id}
-                    draggable
+                    draggable={!readOnly}
                     sourceFactionKey={NO_FACTION_DROP_KEY}
                     onOpen={() => {
                       setExpandedNpcId((cur) =>
@@ -396,8 +433,10 @@ export default function RosterNpcColumn({
                       );
                       setExpandedPcId(null);
                     }}
-                    onDragBegin={() => setNpcDragging(true)}
-                    onDragEnd={clearNpcDrag}
+                    onDragBegin={
+                      readOnly ? undefined : () => setNpcDragging(true)
+                    }
+                    onDragEnd={readOnly ? undefined : clearNpcDrag}
                   />
                 </div>
               ))}
@@ -410,7 +449,7 @@ export default function RosterNpcColumn({
           </div>
         ) : null}
 
-        {npcDragging ? (
+        {npcDragging && !readOnly ? (
           <div
             className={`session-unassign-drop${
               dragOverFactionKey === NO_FACTION_DROP_KEY
@@ -452,6 +491,7 @@ export default function RosterNpcColumn({
             onCancel={cancelFactionForm}
             onAddNpc={handleAddNpcToFaction}
             onRemoveNpc={handleRemoveNpcFromFaction}
+            onToggleNpcVisibleToPlayers={handleToggleNpcVisibleToPlayers}
             S={S}
           />
         </div>

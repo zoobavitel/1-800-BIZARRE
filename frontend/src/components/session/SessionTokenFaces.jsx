@@ -2,7 +2,7 @@ import React from "react";
 import HomeCardThumb from "../home/HomeCardThumb";
 import HomeFullBleedBg, { useHomeCardImage } from "../home/HomeFullBleedBg";
 import { resolveMediaUrl } from "../../features/character-sheet/services/api";
-import { getCharacterPortraitSrc } from "../../utils/homeAvatar";
+import { getCharacterPortraitSrc, getUserAvatarSrc } from "../../utils/homeAvatar";
 import {
   NPC_DRAG_MIME,
   NPC_DRAG_SOURCE_MIME,
@@ -53,8 +53,6 @@ export function SessionFactionToken({
   dropKey,
   onToggleExpand,
   onNpcThumbClick,
-  onNpcRemove,
-  removeDisabled = false,
   onAddNpc,
   onEdit,
   onDelete,
@@ -152,10 +150,6 @@ export function SessionFactionToken({
               draggable
               sourceFactionKey={dropKey}
               onOpen={() => onNpcThumbClick?.(npc)}
-              onRemove={
-                onNpcRemove ? () => onNpcRemove(npc) : undefined
-              }
-              removeDisabled={removeDisabled}
               onDragBegin={onNpcDragBegin}
               onDragEnd={onNpcDragEnd}
             />
@@ -218,8 +212,6 @@ export function SessionNpcToken({
   draggable = false,
   sourceFactionKey = NO_FACTION_DROP_KEY,
   onOpen,
-  onRemove,
-  removeDisabled = false,
   onDragBegin,
   onDragEnd,
 }) {
@@ -267,21 +259,6 @@ export function SessionNpcToken({
             }}
           />
         </button>
-        {onRemove ? (
-          <button
-            type="button"
-            className="session-npc-strip-remove"
-            aria-label={`Remove ${name} from session`}
-            title="Remove from session"
-            disabled={removeDisabled}
-            onClick={(e) => {
-              e.stopPropagation();
-              onRemove(npc);
-            }}
-          >
-            ×
-          </button>
-        ) : null}
       </div>
     );
   }
@@ -344,6 +321,8 @@ export function SessionPcToken({
   name,
   isExpanded = false,
   onToggleExpand,
+  player = null,
+  campaignCharacters = null,
 }) {
   const portraitSrc = getCharacterPortraitSrc(character);
   const { hasImage, safeSrc, onError } = useHomeCardImage(portraitSrc);
@@ -359,6 +338,17 @@ export function SessionPcToken({
     character?.heritageName ||
     character?.heritage ||
     "—";
+  const playerName = player
+    ? String(
+        player.username ||
+          player.display_name ||
+          player.name ||
+          "",
+      ).trim()
+    : "";
+  const playerAvatarSrc = player
+    ? getUserAvatarSrc(player, { campaignCharacters })
+    : null;
 
   const cardClasses = [
     "p-card",
@@ -401,6 +391,20 @@ export function SessionPcToken({
             <span className="p-tag">{heritage}</span>
             <span className="p-tag">Lv {character?.level ?? "—"}</span>
           </div>
+          {playerName ? (
+            <div className="p-card-player" title={playerName}>
+              {playerAvatarSrc ? (
+                <span className="p-card-player-avatar" aria-hidden="true">
+                  <img src={playerAvatarSrc} alt="" />
+                </span>
+              ) : (
+                <span className="p-card-player-avatar p-card-player-initial" aria-hidden="true">
+                  {playerName.charAt(0).toUpperCase()}
+                </span>
+              )}
+              <span className="p-card-player-name">{playerName}</span>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

@@ -7,6 +7,33 @@ export const COMPACT_HARM_FIELDS = [
   ["l1b", "L1B", null],
 ];
 
+/** SRD row penalties while a filled harm slot applies to the action. */
+export const COMPACT_HARM_DETRIMENT = {
+  l4: "Fatal — need help (or Staying Power)",
+  l3: "Incapacitated — help or push (2 stress)",
+  l2a: "−1d while this harm applies",
+  l2b: "−1d while this harm applies",
+  l1a: "Reduced effect while this harm applies",
+  l1b: "Reduced effect while this harm applies",
+};
+
+export function compactHarmActiveDetriments(draft) {
+  const d = draft || {};
+  const out = [];
+  const seen = new Set();
+  for (const [key] of COMPACT_HARM_FIELDS) {
+    if (!String(d[key] ?? "").trim()) continue;
+    const label = COMPACT_HARM_DETRIMENT[key];
+    if (!label || seen.has(label)) continue;
+    seen.add(label);
+    out.push(label);
+  }
+  return out;
+}
+
+export const COMPACT_HARM_DETRIMENT_IDLE =
+  "Filled slots apply until healed/cleared: L1 reduced effect · L2 −1d · L3 incapacitated · L4 fatal.";
+
 export const EMPTY_HARM_PAYLOAD = {
   harm_level1_name: "",
   harm_level1_used: false,

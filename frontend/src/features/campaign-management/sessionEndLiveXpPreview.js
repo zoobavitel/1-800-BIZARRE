@@ -4,6 +4,7 @@ import {
   archetypeLabelsJoined,
   normalizePlaybookXpArchetypeKeys,
 } from "../character-sheet/utils/playbookXpTriggerSrd";
+import { hasPlaybook } from "../character-sheet/services/api";
 
 export const SESSION_ENCODED_XP_CAP = 2;
 
@@ -92,6 +93,15 @@ export function buildSessionEndLiveSummary(rolls, campaignChars, clocks, session
 /** Preview Stand Development session XP banked to the session pool at settle (SRD_DEV). */
 export function developmentSessionXpPreviewFromCharacter(ch) {
   if (!ch) return 0;
+  if (
+    !hasPlaybook(
+      ch?.playbook,
+      ch?.secondaryPlaybook ?? ch?.secondary_playbook,
+      "Stand",
+    )
+  ) {
+    return 0;
+  }
   const g = String(
     ch?.stand?.development ??
       ch?.coin_stats?.DEVELOPMENT ??

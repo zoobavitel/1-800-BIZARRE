@@ -25,6 +25,7 @@ import { SessionHelpTip } from "../components/session/sessionShellUi";
 import ProgressClock from "../components/ProgressClock";
 import AvatarCropModal from "../components/AvatarCropModal";
 import CampaignRosterPanels from "../components/campaign/CampaignRosterPanels";
+import CampaignShellPanels from "../components/campaign/CampaignShellPanels";
 import HomeCardThumb from "../components/home/HomeCardThumb";
 import { compressImageForUpload } from "../utils/compressImageForUpload";
 import {
@@ -1243,6 +1244,31 @@ function CampaignDetail({
     }
   };
 
+  const toggleNpcVisibleToPlayers = useCallback(
+    async (npcId, visible) => {
+      setFactionError(null);
+      try {
+        await npcAPI.patchNPC(npcId, { visible_to_players: !!visible });
+        setFactionForm((p) =>
+          p
+            ? {
+                ...p,
+                npcs: (p.npcs || []).map((n) =>
+                  Number(n.id) === Number(npcId)
+                    ? { ...n, visible_to_players: !!visible }
+                    : n,
+                ),
+              }
+            : p,
+        );
+        onRefresh();
+      } catch (err) {
+        setFactionError(err.message);
+      }
+    },
+    [onRefresh],
+  );
+
   const applyFactionFormNpcMove = (npcId, targetFactionId) => {
     setFactionForm((p) => {
       if (!p?.id) return p;
@@ -1815,90 +1841,130 @@ function CampaignDetail({
                 onRefresh={onRefresh}
               />
             )}
+            {!isGM &&
+              campaign.players?.some((p) => p.id === user?.id) &&
+              typeof onOpenSession === "function" && (
+                <CampaignSessionsPanel
+                  campaign={campaign}
+                  onOpenSession={onOpenSession}
+                  onRefresh={onRefresh}
+                  readOnly
+                />
+              )}
           </>
         )}
       </div>
 
-      <CampaignRosterPanels
+      <CampaignShellPanels
         campaign={campaign}
-        isGM={isGM}
-        user={user}
         S={S}
-        inviteUsername={inviteUsername}
-        setInviteUsername={setInviteUsername}
-        invitableUsers={invitableUsers}
-        inviteError={inviteError}
-        inviteSuccess={inviteSuccess}
-        onInvite={handleInvite}
-        dragOverFactionKey={dragOverFactionKey}
-        setDragOverFactionKey={setDragOverFactionKey}
-        onNpcFactionDrop={handleNpcFactionDrop}
-        onNavigateToNPC={onNavigateToNPC}
-        onNavigateToCharacter={onNavigateToCharacter}
-        onUnassignNPC={handleUnassignNPC}
-        onMoveNpcToFaction={handleMoveNpcToFaction}
-        onUnassignCharacter={handleUnassignCharacter}
-        onRemovePlayerFromCampaign={handleRemovePlayerFromCampaign}
-        onWithdrawInvitation={handleWithdrawInvitation}
-        onAssignNPCById={handleAssignNPCById}
-        onCreateNpcForFaction={handleCreateNpcForFaction}
-        factionForm={factionForm}
-        setFactionForm={setFactionForm}
-        factionError={factionError}
-        factionImagePreview={factionImagePreview}
-        factionPreviewError={factionPreviewError}
-        setFactionPreviewError={setFactionPreviewError}
-        factionCropOpen={factionCropOpen}
-        setFactionCropOpen={setFactionCropOpen}
-        startFactionEdit={startFactionEdit}
-        startFactionCreate={startFactionCreate}
-        cancelFactionForm={cancelFactionForm}
-        handleFactionSave={handleFactionSave}
-        handleFactionDelete={handleFactionDelete}
-        handleAddNpcToFaction={handleAddNpcToFaction}
-        handleRemoveNpcFromFaction={handleRemoveNpcFromFaction}
-        factionAddNpcId={factionAddNpcId}
-        setFactionAddNpcId={setFactionAddNpcId}
-        campaignNPCs={campaignNPCs}
-        npcsThatCanBeAdded={npcsThatCanBeAdded}
-        crewForm={crewForm}
-        crewError={crewError}
-        startCrewCreate={startCrewCreate}
-        startCrewEdit={startCrewEdit}
-        handleCrewSave={handleCrewSave}
-        handleCrewDelete={handleCrewDelete}
-        setCrewForm={setCrewForm}
-        setCrewError={setCrewError}
-        onRefresh={onRefresh}
         characters={rosterCharacters}
+        onOpenSession={onOpenSession}
         onCharactersRefresh={refreshRosterCharacters}
-        rosterActionError={rosterActionError}
-        setRosterActionError={setRosterActionError}
-      />
+        isGM={isGM}
+      >
+        {({ showNpc, showPc }) => (
+          <CampaignRosterPanels
+            campaign={campaign}
+            isGM={isGM}
+            user={user}
+            S={S}
+            inviteUsername={inviteUsername}
+            setInviteUsername={setInviteUsername}
+            invitableUsers={invitableUsers}
+            inviteError={inviteError}
+            inviteSuccess={inviteSuccess}
+            onInvite={handleInvite}
+            dragOverFactionKey={dragOverFactionKey}
+            setDragOverFactionKey={setDragOverFactionKey}
+            onNpcFactionDrop={handleNpcFactionDrop}
+            onNavigateToNPC={onNavigateToNPC}
+            onNavigateToCharacter={onNavigateToCharacter}
+            onUnassignNPC={handleUnassignNPC}
+            onMoveNpcToFaction={handleMoveNpcToFaction}
+            onUnassignCharacter={handleUnassignCharacter}
+            onRemovePlayerFromCampaign={handleRemovePlayerFromCampaign}
+            onWithdrawInvitation={handleWithdrawInvitation}
+            onAssignNPCById={handleAssignNPCById}
+            onCreateNpcForFaction={handleCreateNpcForFaction}
+            factionForm={factionForm}
+            setFactionForm={setFactionForm}
+            factionError={factionError}
+            factionImagePreview={factionImagePreview}
+            factionPreviewError={factionPreviewError}
+            setFactionPreviewError={setFactionPreviewError}
+            factionCropOpen={factionCropOpen}
+            setFactionCropOpen={setFactionCropOpen}
+            startFactionEdit={startFactionEdit}
+            startFactionCreate={startFactionCreate}
+            cancelFactionForm={cancelFactionForm}
+            handleFactionSave={handleFactionSave}
+            handleFactionDelete={handleFactionDelete}
+            handleAddNpcToFaction={handleAddNpcToFaction}
+            handleRemoveNpcFromFaction={handleRemoveNpcFromFaction}
+            handleToggleNpcVisibleToPlayers={toggleNpcVisibleToPlayers}
+            factionAddNpcId={factionAddNpcId}
+            setFactionAddNpcId={setFactionAddNpcId}
+            campaignNPCs={campaignNPCs}
+            npcsThatCanBeAdded={npcsThatCanBeAdded}
+            crewForm={crewForm}
+            crewError={crewError}
+            startCrewCreate={startCrewCreate}
+            startCrewEdit={startCrewEdit}
+            handleCrewSave={handleCrewSave}
+            handleCrewDelete={handleCrewDelete}
+            setCrewForm={setCrewForm}
+            setCrewError={setCrewError}
+            onRefresh={onRefresh}
+            characters={rosterCharacters}
+            onCharactersRefresh={refreshRosterCharacters}
+            rosterActionError={rosterActionError}
+            setRosterActionError={setRosterActionError}
+            showNpcColumn={showNpc}
+            showPcColumn={showPc}
+          />
+        )}
+      </CampaignShellPanels>
 
-      {/* Assign Character (GM or player who is in the campaign) */}
-      {(isGM || campaign.players?.some((p) => p.id === user?.id)) &&
-        availableToAssign.length > 0 && (
+      {/* Assign / create character (GM or player in the campaign) */}
+      {(isGM || campaign.players?.some((p) => p.id === user?.id)) && (
           <div style={S.card}>
             <span style={S.sectionLbl}>Assign a Character</span>
-            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-              <select
-                style={{ ...S.select, flex: 1 }}
-                defaultValue=""
-                onChange={(e) =>
-                  e.target.value &&
-                  handleAssignCharacter(parseInt(e.target.value, 10))
-                }
-              >
-                <option value="" disabled>
-                  Select a character...
-                </option>
-                {availableToAssign.map((ch) => (
-                  <option key={ch.id} value={ch.id}>
-                    {ch.true_name || ch.alias || `Character #${ch.id}`}
+            <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+              {availableToAssign.length > 0 ? (
+                <select
+                  style={{ ...S.select, flex: 1, minWidth: 160 }}
+                  defaultValue=""
+                  onChange={(e) =>
+                    e.target.value &&
+                    handleAssignCharacter(parseInt(e.target.value, 10))
+                  }
+                >
+                  <option value="" disabled>
+                    Select a character...
                   </option>
-                ))}
-              </select>
+                  {availableToAssign.map((ch) => (
+                    <option key={ch.id} value={ch.id}>
+                      {ch.true_name || ch.alias || `Character #${ch.id}`}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <span style={{ fontSize: 12, color: "var(--text-muted)", flex: 1 }}>
+                  No unassigned characters available to link.
+                </span>
+              )}
+              {typeof onNavigateToCharacter === "function" ? (
+                <button
+                  type="button"
+                  style={S.btnPrimary}
+                  onClick={() =>
+                    onNavigateToCharacter(null, { campaignId: campaign.id })
+                  }
+                >
+                  Create character
+                </button>
+              ) : null}
             </div>
           </div>
         )}
@@ -2571,7 +2637,12 @@ function sessionIsEndedForManagementHeader(sess) {
 // ---------------------------------------------------------------------------
 // Sessions list + create + records modal (embedded in CampaignDetail)
 // ---------------------------------------------------------------------------
-function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
+function CampaignSessionsPanel({
+  campaign,
+  onOpenSession,
+  onRefresh,
+  readOnly = false,
+}) {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -3165,13 +3236,15 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
           <span style={{ ...S.sectionLbl, marginTop: 0, marginBottom: 0 }}>
             Sessions
           </span>
-          <button
-            onClick={handleCreateSession}
-            style={S.btnSuccess}
-            disabled={creating}
-          >
-            {creating ? "Creating..." : "+ New Session"}
-          </button>
+          {!readOnly ? (
+            <button
+              onClick={handleCreateSession}
+              style={S.btnSuccess}
+              disabled={creating}
+            >
+              {creating ? "Creating..." : "+ New Session"}
+            </button>
+          ) : null}
           {!loading && olderSessions.length > 0 ? (
             <button
               type="button"
@@ -3197,7 +3270,9 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
           </div>
         ) : !sessions?.length ? (
           <div style={{ color: "var(--text-dim)", padding: "8px 0" }}>
-            No sessions yet. Create one to get started.
+            {readOnly
+              ? "No sessions yet."
+              : "No sessions yet. Create one to get started."}
           </div>
         ) : (
           <div style={{ marginTop: "4px" }}>
@@ -3277,7 +3352,7 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
                     >
                       View records
                     </button>
-                    {!rowEnded && !rowLive ? (
+                    {!readOnly && !rowEnded && !rowLive ? (
                       <>
                         <button
                           type="button"
@@ -3317,7 +3392,9 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
                         </button>
                       </>
                     ) : null}
-                    {activeId != null && Number(activeId) === Number(s.id) && (
+                    {activeId != null &&
+                      Number(activeId) === Number(s.id) &&
+                      !readOnly && (
                       <button
                         type="button"
                         onClick={(e) => {
@@ -3335,6 +3412,7 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
                         {busySessionId === s.id ? "…" : "Clear active"}
                       </button>
                     )}
+                    {!readOnly ? (
                     <button
                       type="button"
                       onClick={(e) => {
@@ -3346,6 +3424,7 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
                     >
                       {busySessionId === s.id ? "…" : "Delete"}
                     </button>
+                    ) : null}
                   </div>
                 </div>
               </div>
@@ -4808,40 +4887,54 @@ function SessionDetail({
             borderTop: "1px solid var(--border)",
           }}
         >
-          <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "6px" }}>
-            Session date (editable)
-          </div>
-          <div
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: "8px",
-              alignItems: "center",
-            }}
-          >
-            <input
-              type="date"
-              value={sessionDateInput}
-              onChange={(e) => setSessionDateInput(e.target.value)}
-              style={{
-                fontFamily: "monospace",
-                fontSize: "12px",
-                background: "var(--hftf-deep)",
-                color: "var(--text-primary)",
-                border: "1px solid var(--border)",
-                borderRadius: "4px",
-                padding: "6px 8px",
-                outline: "none",
-              }}
-            />
-            <button
-              type="button"
-              onClick={handleSaveSessionDate}
-              style={S.btnGhost}
-            >
-              Save date
-            </button>
-          </div>
+          {isGM ? (
+            <>
+              <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "6px" }}>
+                Session date (editable)
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: "8px",
+                  alignItems: "center",
+                }}
+              >
+                <input
+                  type="date"
+                  value={sessionDateInput}
+                  onChange={(e) => setSessionDateInput(e.target.value)}
+                  style={{
+                    fontFamily: "monospace",
+                    fontSize: "12px",
+                    background: "var(--hftf-deep)",
+                    color: "var(--text-primary)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "4px",
+                    padding: "6px 8px",
+                    outline: "none",
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={handleSaveSessionDate}
+                  style={S.btnGhost}
+                >
+                  Save date
+                </button>
+              </div>
+            </>
+          ) : (
+            <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+              Session date:{" "}
+              <span style={{ color: "var(--text-primary)" }}>
+                {sessionDateInput ||
+                  (sessionData?.session_date
+                    ? String(sessionData.session_date).slice(0, 10)
+                    : "—")}
+              </span>
+            </div>
+          )}
           <div style={{ fontSize: "10px", color: "var(--text-dim)", marginTop: "6px" }}>
             Created at:{" "}
             {sessionData?.session_date
@@ -4895,6 +4988,7 @@ function SessionDetail({
         user={user}
         equipmentCatalogItems={sessionEquipmentCatalog}
         scorecardPanel={scorecardPanel}
+        isGM={isGM}
       />
 
       {/* Fortune rolls */}

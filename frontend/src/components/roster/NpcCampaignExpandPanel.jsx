@@ -58,6 +58,7 @@ export default function NpcCampaignExpandPanel({
   onRefresh,
   onError,
   onClose,
+  readOnly = false,
 }) {
   const [detail, setDetail] = useState(null);
   const [activeTab, setActiveTab] = useState("info");
@@ -115,7 +116,7 @@ export default function NpcCampaignExpandPanel({
 
   const patchNpc = useCallback(
     async (partial) => {
-      if (!npcId) return;
+      if (readOnly || !npcId) return;
       setBusy(true);
       onError?.(null);
       try {
@@ -129,12 +130,12 @@ export default function NpcCampaignExpandPanel({
         setBusy(false);
       }
     },
-    [npcId, onError, onRefresh],
+    [npcId, onError, onRefresh, readOnly],
   );
 
   const handleStandStep = useCallback(
     async (key, delta) => {
-      if (!npcId) return;
+      if (readOnly || !npcId) return;
       const next = {
         ...grades,
         [key]: stepGrade(grades[key], delta),
@@ -152,7 +153,7 @@ export default function NpcCampaignExpandPanel({
         setBusy(false);
       }
     },
-    [grades, npcId, onError, onRefresh],
+    [grades, npcId, onError, onRefresh, readOnly],
   );
 
   if (!npcId) return null;
@@ -253,16 +254,38 @@ export default function NpcCampaignExpandPanel({
       activeTab === "abilities" ||
       activeTab === "items" ? (
         <>
-          <RosterNpcExpandEditableTabs
-            activeTab={activeTab}
-            npc={npc}
-            S={S}
-            busy={busy}
-            equipmentCatalog={equipmentCatalog}
-            onPatch={patchNpc}
-          />
+        <RosterNpcExpandEditableTabs
+          activeTab={activeTab}
+          npc={npc}
+          S={S}
+          busy={busy || readOnly}
+          equipmentCatalog={equipmentCatalog}
+          onPatch={readOnly ? undefined : patchNpc}
+        />
+          {activeTab === "info" && !readOnly ? (
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                marginTop: 10,
+                fontSize: 11,
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={npc.visible_to_players !== false}
+                disabled={busy}
+                onChange={(e) =>
+                  patchNpc({ visible_to_players: e.target.checked })
+                }
+              />
+              Visible to players
+            </label>
+          ) : null}
           {activeTab === "info" &&
-          typeof onMoveNpcToFaction === "function" ? (
+          typeof onMoveNpcToFaction === "function" &&
+          !readOnly ? (
             <div style={{ marginTop: 10 }}>
               <div style={lbl}>Faction (campaign)</div>
               <select
@@ -318,7 +341,7 @@ export default function NpcCampaignExpandPanel({
                 <button
                   type="button"
                   style={{ ...S.btnGhost, fontSize: 9, padding: "1px 6px" }}
-                  disabled={busy || vulnCur <= 0}
+                  disabled={busy || readOnly || vulnCur <= 0}
                   onClick={() => bumpVuln(-1)}
                 >
                   −
@@ -334,7 +357,7 @@ export default function NpcCampaignExpandPanel({
                 <button
                   type="button"
                   style={{ ...S.btnGhost, fontSize: 9, padding: "1px 6px" }}
-                  disabled={busy || vulnCur >= vulnMax}
+                  disabled={busy || readOnly || vulnCur >= vulnMax}
                   onClick={() => bumpVuln(1)}
                 >
                   +
@@ -359,7 +382,7 @@ export default function NpcCampaignExpandPanel({
                 if (busy) return;
                 void handleStandStep(k, d);
               }}
-              readOnly={busy}
+              readOnly={busy || readOnly}
               variant="npc"
               hideIdleHint
             />
