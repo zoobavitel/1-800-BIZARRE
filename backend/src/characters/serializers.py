@@ -4,6 +4,7 @@ from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 from django.contrib.auth.models import User
 from .models import (
+    _default_stash_slots,
     AssistHelpPending,
     UserProfile,
     Heritage,
@@ -1945,6 +1946,17 @@ class CharacterSerializer(serializers.ModelSerializer):
         from .services.downtime_train import tracks_trained_this_phase
 
         data["downtime_trained_tracks"] = tracks_trained_this_phase(instance)
+        # Crew-linked PCs store stash on Crew.stash_slots; expose resolved grid on
+        # the character payload so clients hydrate without a separate /crews/ GET.
+        crew_obj = getattr(instance, "crew", None)
+        if crew_obj is not None:
+            data["effective_stash_slots"] = list(
+                crew_obj.stash_slots or _default_stash_slots()
+            )
+        else:
+            data["effective_stash_slots"] = list(
+                instance.stash_slots or _default_stash_slots()
+            )
         return data
 
     def validate_coin_boxes(self, value):
