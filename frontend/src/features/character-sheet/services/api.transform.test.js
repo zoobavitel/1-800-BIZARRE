@@ -9,6 +9,8 @@ import {
   normalizeCharacterInventory,
   normalizeCoinBoxes,
   normalizeStashSlots,
+  resolveStashAfterCharacterSave,
+  shouldSkipEmptyCrewStashPatch,
   buildMultipartOrJson,
   isImageUploadPayload,
   sheetPostChargen,
@@ -572,6 +574,47 @@ describe("transformFrontendToBackend stash_slots", () => {
       }),
     );
     expect(out.stash_slots).toBeUndefined();
+  });
+});
+
+describe("crew-linked save stash merge", () => {
+  test("untouched stash keeps effective_stash_slots when PATCH echoes empty stash_slots", () => {
+    const saved = {
+      stash_slots: Array(40).fill(false),
+      effective_stash_slots: Array.from({ length: 40 }, (_, i) => i < 3),
+      crew: {
+        id: 1,
+        stash_slots: Array.from({ length: 40 }, (_, i) => i < 3),
+      },
+    };
+    const savedFrontend = transformBackendToFrontend(saved);
+    expect(savedFrontend.stash.filter(Boolean).length).toBe(3);
+
+    const merged = resolveStashAfterCharacterSave({
+      stashMerged: null,
+      savedFrontend,
+      frontend: { stash: Array(40).fill(false) },
+    });
+    expect(merged.filter(Boolean).length).toBe(3);
+    expect(merged[0]).toBe(true);
+    expect(merged[1]).toBe(true);
+    expect(merged[2]).toBe(true);
+    expect(merged[3]).toBe(false);
+  });
+
+  test("shouldSkipEmptyCrewStashPatch blocks wipe when local empty but server filled", () => {
+    const local = Array(40).fill(false);
+    const server = Array.from({ length: 40 }, (_, i) => i < 3);
+    expect(shouldSkipEmptyCrewStashPatch(local, server)).toBe(true);
+    expect(shouldSkipEmptyCrewStashPatch(local, Array(40).fill(false))).toBe(
+      false,
+    );
+    expect(
+      shouldSkipEmptyCrewStashPatch(
+        Array.from({ length: 40 }, (_, i) => i < 1),
+        server,
+      ),
+    ).toBe(false);
   });
 });
 
