@@ -1,4 +1,4 @@
-"""Downtime Train endpoint: 1/2 XP, repeatable per track, heritage house-rule."""
+"""Train endpoint: 1/2 XP, repeatable per track, heritage house-rule."""
 
 from django.contrib.auth.models import User
 from django.utils import timezone
@@ -8,14 +8,13 @@ from characters.models import (
     Campaign,
     Character,
     Crew,
-    DowntimeActivity,
     ExperienceTracker,
     Heritage,
     Session,
 )
 
 
-class DowntimeTrainTests(APITestCase):
+class TrainTests(APITestCase):
     def setUp(self):
         self.client = APIClient()
         self.player = User.objects.create_user(username="pc", password="pass")
@@ -58,15 +57,9 @@ class DowntimeTrainTests(APITestCase):
         self.assertEqual(data["amount"], 1)
         self.assertEqual(data["track"], "insight")
         self.assertEqual(data["new_total"], 1)
-        # Before any score completes, phase list stays open (no downtime session UI).
-        self.assertEqual(data["downtime_trained_tracks"], [])
+        self.assertNotIn("downtime_trained_tracks", data)
         self.character.refresh_from_db()
         self.assertEqual(self.character.xp_clocks["insight"], 1)
-        self.assertTrue(
-            DowntimeActivity.objects.filter(
-                character=self.character, activity_type="TRAIN"
-            ).exists()
-        )
         self.assertTrue(
             ExperienceTracker.objects.filter(
                 character=self.character, clock_key="insight", revoked_at__isnull=True
@@ -124,8 +117,7 @@ class DowntimeTrainTests(APITestCase):
         self.assertEqual(res.status_code, 200, res.content)
         self.assertEqual(res.json()["amount"], 2)
 
-    def test_repeat_train_same_track_same_phase(self):
-        """After a score completes, the same track may train multiple times."""
+    def test_repeat_train_same_track_after_completed_session(self):
         Session.objects.create(
             campaign=self.campaign,
             name="Prior score",
@@ -147,7 +139,6 @@ class DowntimeTrainTests(APITestCase):
         self.assertEqual(second.status_code, 200, second.content)
         self.character.refresh_from_db()
         self.assertEqual(self.character.xp_clocks["prowess"], 2)
-        # Different track still ok
         other = self.client.post(
             f"/api/characters/{self.character.id}/train/",
             {"track": "resolve"},
@@ -155,8 +146,7 @@ class DowntimeTrainTests(APITestCase):
         )
         self.assertEqual(other.status_code, 200, other.content)
 
-    def test_train_open_before_first_completed_score(self):
-        """No downtime session mode — tracks stay available before any score ends."""
+    def test_repeat_train_before_first_completed_score(self):
         self.client.force_authenticate(user=self.player)
         first = self.client.post(
             f"/api/characters/{self.character.id}/train/",
@@ -173,8 +163,7 @@ class DowntimeTrainTests(APITestCase):
         self.character.refresh_from_db()
         self.assertEqual(self.character.xp_clocks["insight"], 2)
 
-    def test_live_session_allows_repeat_train_before_first_completed_score(self):
-        """During a live score (before any COMPLETED), same track may train again."""
+    def test_repeat_train_during_live_session(self):
         live = Session.objects.create(
             campaign=self.campaign,
             name="Live score",
@@ -199,8 +188,7 @@ class DowntimeTrainTests(APITestCase):
         self.character.refresh_from_db()
         self.assertEqual(self.character.xp_clocks["resolve"], 2)
 
-    def test_all_trainable_tracks_same_phase(self):
-        """Each track trains at least once per phase; repeats stay allowed."""
+    def test_all_trainable_tracks_then_repeat(self):
         Session.objects.create(
             campaign=self.campaign,
             name="Prior score",
@@ -208,7 +196,6 @@ class DowntimeTrainTests(APITestCase):
             session_date=timezone.now() - timezone.timedelta(days=1),
         )
         self.client.force_authenticate(user=self.player)
-        trained = []
         for track in ("insight", "prowess", "resolve", "heritage", "playbook"):
             res = self.client.post(
                 f"/api/characters/{self.character.id}/train/",
@@ -216,10 +203,6 @@ class DowntimeTrainTests(APITestCase):
                 format="json",
             )
             self.assertEqual(res.status_code, 200, res.content)
-            trained.append(track)
-            self.assertCountEqual(
-                res.json()["downtime_trained_tracks"], trained
-            )
         dup = self.client.post(
             f"/api/characters/{self.character.id}/train/",
             {"track": "insight"},
@@ -229,7 +212,7 @@ class DowntimeTrainTests(APITestCase):
         self.character.refresh_from_db()
         self.assertEqual(self.character.xp_clocks["insight"], 2)
 
-    def test_phase_resets_after_completed_session(self):
+    def test_train_after_new_completed_session(self):
         self.client.force_authenticate(user=self.player)
         first = self.client.post(
             f"/api/characters/{self.character.id}/train/",

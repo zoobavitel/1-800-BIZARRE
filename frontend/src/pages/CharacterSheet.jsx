@@ -15035,10 +15035,10 @@ const CharacterSheetWrapper = ({
                             too); 0-dot desperate → +2. Desperate Power / Speed /
                             Precision stand dice → +1 playbook (innate, uncapped; not
                             Range, Durability, or Dev). End-session toggles + Dev
-                            bonus → free pool (bank onto tracks later). Downtime
-                            Train buttons mark 1 XP (2 with crew Training upgrade)
-                            on that track (Heritage Train is house-rule).
-                            Activity budget not tracked yet. Crew XP: use crew
+                            bonus → free pool (bank onto tracks later). Train
+                            buttons mark 1 XP (2 with crew Training upgrade) on
+                            that track (Heritage Train is house-rule). Crew XP:
+                            use crew
                             scorecard triggers.
                           </p>
                           <p style={{ margin: 0 }}>
@@ -15218,7 +15218,7 @@ const CharacterSheetWrapper = ({
                           disabled={
                             trainBusyTrack === key || poolAllocateBusy
                           }
-                          title={`Downtime train: +${trainXpAmountForTrack(key)} XP${
+                          title={`Train: +${trainXpAmountForTrack(key)} XP${
                             trainXpAmountForTrack(key) > 1
                               ? " (crew Training upgrade)"
                               : ""

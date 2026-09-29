@@ -1974,9 +1974,6 @@ class CharacterSerializer(serializers.ModelSerializer):
         data["advancement_plan"] = [
             serialize_plan_item(item) for item in list_queued_plan_items(instance)
         ]
-        from .services.downtime_train import tracks_trained_this_phase
-
-        data["downtime_trained_tracks"] = tracks_trained_this_phase(instance)
         # Crew-linked PCs store stash on Crew.stash_slots; expose resolved grid on
         # the character payload so clients hydrate without a separate /crews/ GET.
         crew_obj = getattr(instance, "crew", None)
