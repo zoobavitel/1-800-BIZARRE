@@ -62,6 +62,8 @@ class CrewViewSet(viewsets.ModelViewSet):
                 .filter(
                     models.Q(campaign__gm=user)
                     | models.Q(campaign__characters__user=user)
+                    | models.Q(campaign__players=user)
+                    | models.Q(members__user=user)
                 )
                 .distinct()
             )
