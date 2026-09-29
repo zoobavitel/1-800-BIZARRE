@@ -1,14 +1,14 @@
 """
 Downtime Train activity: mark 1 XP (or 2 with crew Training upgrade) on an
-XP track. Once per track per downtime phase.
+XP track. No once-per-track limit — characters may train the same track
+multiple times per downtime phase.
 
 Trainable tracks: insight, prowess, resolve, playbook, heritage.
 Heritage Train is intentional homebrew (SRD train list excludes Heritage).
 
 Phase boundary: after the campaign's most recent COMPLETED Session
-(``session_date``). Before the first completed score, a live session (if any)
-bounds the phase to that session's start. With no completed score and no live
-session, Train does not require a downtime session mode — tracks stay available.
+(``session_date``). Used only to report ``downtime_trained_tracks`` for
+display/audit — not to block repeat trains.
 
 Does not spend a downtime-activity budget — the app has no activity counter yet.
 """
@@ -144,12 +144,6 @@ def assert_can_train(character, track: str) -> None:
         raise DowntimeTrainError(
             "Train only Insight, Prowess, Resolve, Heritage, or Playbook.",
             code="invalid_track",
-        )
-    if key in tracks_trained_this_phase(character):
-        raise DowntimeTrainError(
-            f"Already trained {key} this downtime phase "
-            "(once per track per phase).",
-            code="already_trained",
         )
 
 
