@@ -14,6 +14,7 @@ jest.mock("../features/auth", () => ({
   authAPI: {
     getProfile: jest.fn(),
     updateProfile: jest.fn(),
+    changePassword: jest.fn(),
   },
   useAuth: jest.fn(),
 }));
@@ -34,6 +35,9 @@ describe("AccountSettingsPage avatar upload validation", () => {
     useTheme.mockReturnValue({ theme: "dark", setTheme: jest.fn() });
     authAPI.getProfile.mockResolvedValue(null);
     authAPI.updateProfile.mockResolvedValue({});
+    authAPI.changePassword.mockResolvedValue({
+      message: "Password updated successfully",
+    });
     URL.createObjectURL = jest.fn((file) => `blob:${file.name}`);
     URL.revokeObjectURL = jest.fn();
   });
@@ -59,6 +63,33 @@ describe("AccountSettingsPage avatar upload validation", () => {
       screen.getByText("Avatar must be 10 MB or smaller."),
     ).toBeInTheDocument();
     expect(URL.createObjectURL).not.toHaveBeenCalled();
+  });
+
+  test("change password calls API and shows success", async () => {
+    render(<AccountSettingsPage />);
+    await waitFor(() => expect(authAPI.getProfile).toHaveBeenCalled());
+
+    fireEvent.change(screen.getByLabelText("Current password"), {
+      target: { value: "OldPass123!" },
+    });
+    fireEvent.change(screen.getByLabelText("New password"), {
+      target: { value: "NewPass456!" },
+    });
+    fireEvent.change(screen.getByLabelText("Confirm new password"), {
+      target: { value: "NewPass456!" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Change password" }));
+
+    await waitFor(() =>
+      expect(authAPI.changePassword).toHaveBeenCalledWith({
+        old_password: "OldPass123!",
+        new_password: "NewPass456!",
+        confirm_password: "NewPass456!",
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.getByText("Password updated")).toBeInTheDocument(),
+    );
   });
 
   test("accepts avatar files at or under 10 MB", async () => {

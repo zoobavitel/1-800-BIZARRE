@@ -126,6 +126,11 @@ export default function AccountSettingsPage() {
   const [displayTitle, setDisplayTitle] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState(null);
+  const [oldPassword, setOldPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [passwordMessage, setPasswordMessage] = useState(null);
   const [cropOpen, setCropOpen] = useState(false);
   const avatarFileInputRef = useRef(null);
 
@@ -205,6 +210,38 @@ export default function AccountSettingsPage() {
   };
 
   const previewSrc = avatarPreview || resolveMediaUrl(avatarPath || avatarUrl);
+
+  const handleChangePassword = async () => {
+    setPasswordMessage(null);
+    if (!oldPassword.trim()) {
+      setPasswordMessage("Enter your current password.");
+      return;
+    }
+    if (newPassword.length < 6) {
+      setPasswordMessage("New password must be at least 6 characters.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordMessage("New passwords do not match.");
+      return;
+    }
+    setChangingPassword(true);
+    try {
+      await authAPI.changePassword({
+        old_password: oldPassword,
+        new_password: newPassword,
+        confirm_password: confirmPassword,
+      });
+      setOldPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setPasswordMessage("Password updated");
+    } catch (err) {
+      setPasswordMessage(err.message || "Failed to change password");
+    } finally {
+      setChangingPassword(false);
+    }
+  };
 
   const handleCropApply = (file) => {
     if (avatarPreview && String(avatarPreview).startsWith("blob:")) {
@@ -610,6 +647,71 @@ export default function AccountSettingsPage() {
               Use &quot;Save changes&quot; to store your theme with your profile
               so it carries across devices.
             </p>
+          </div>
+        </section>
+
+        <section style={S.section}>
+          <h2 style={S.sectionTitle}>Password</h2>
+          <div style={S.card}>
+            <p style={S.mutedSmall}>
+              Enter your current password, then choose a new one (at least 6
+              characters).
+            </p>
+            <label style={S.lbl} htmlFor="old-password">
+              Current password
+            </label>
+            <input
+              id="old-password"
+              type="password"
+              autoComplete="current-password"
+              value={oldPassword}
+              onChange={(e) => setOldPassword(e.target.value)}
+              style={{ ...S.inp, marginBottom: "12px" }}
+            />
+            <label style={S.lbl} htmlFor="new-password">
+              New password
+            </label>
+            <input
+              id="new-password"
+              type="password"
+              autoComplete="new-password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              style={{ ...S.inp, marginBottom: "12px" }}
+            />
+            <label style={S.lbl} htmlFor="confirm-password">
+              Confirm new password
+            </label>
+            <input
+              id="confirm-password"
+              type="password"
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              style={{ ...S.inp, marginBottom: "12px" }}
+            />
+            <button
+              type="button"
+              style={S.btn}
+              onClick={handleChangePassword}
+              disabled={changingPassword}
+            >
+              {changingPassword ? "Updating..." : "Change password"}
+            </button>
+            {passwordMessage && (
+              <span
+                style={{
+                  marginLeft: "12px",
+                  fontSize: "12px",
+                  color:
+                    passwordMessage === "Password updated"
+                      ? "#34d399"
+                      : "#f87171",
+                }}
+              >
+                {passwordMessage}
+              </span>
+            )}
           </div>
         </section>
 
