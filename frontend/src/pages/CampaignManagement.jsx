@@ -23,7 +23,6 @@ import {
 import SessionGMManagementPanels from "../components/session/SessionGMManagementPanels";
 import { SessionHelpTip } from "../components/session/sessionShellUi";
 import ProgressClock from "../components/ProgressClock";
-import { buildRouteHref, handleSpaNavClick } from "../utils/spaNavigation";
 import AvatarCropModal from "../components/AvatarCropModal";
 import CampaignRosterPanels from "../components/campaign/CampaignRosterPanels";
 import HomeCardThumb from "../components/home/HomeCardThumb";
@@ -174,36 +173,9 @@ const S = {
   },
 };
 
-const PLAYBOOK_LABELS = {
-  STAND: "Stand User",
-  HAMON: "Hamon User",
-  SPIN: "Spin User",
-  NON_BIZARRE: "Non-Bizarre",
-};
-const PLAYBOOK_COLORS = {
-  STAND: "#a78bfa",
-  HAMON: "#fbbf24",
-  SPIN: "#34d399",
-  NON_BIZARRE: "#9ca3af",
-};
-
 const NPC_DRAG_MIME = "application/x-hftf-npc-id";
 const NPC_DRAG_SOURCE_MIME = "application/x-hftf-npc-source-faction";
 const NO_FACTION_DROP_KEY = "none";
-
-function PlaybookTag({ playbook }) {
-  return (
-    <span
-      style={{
-        ...S.tag,
-        background: PLAYBOOK_COLORS[playbook] || "var(--border)",
-        color: "var(--bg-page)",
-      }}
-    >
-      {PLAYBOOK_LABELS[playbook] || playbook}
-    </span>
-  );
-}
 
 function StatusBadge({ active }) {
   return (
