@@ -8,12 +8,24 @@ import { buildRouteHref, handleSpaNavClick } from "../../utils/spaNavigation";
 import { NestedTabBar } from "../session/sessionShellUi";
 import {
   COMPACT_HARM_FIELDS,
+  COMPACT_HARM_DETRIMENT,
+  COMPACT_HARM_DETRIMENT_IDLE,
   EMPTY_HARM_PAYLOAD,
+  compactHarmActiveDetriments,
   compactHarmFieldStyle,
   harmDraftFromApiCharacter,
   harmPayloadFromDraft,
   rosterStandArmorMaxFromDurabilityGrade,
 } from "./rosterHarmUtils";
+import {
+  RosterPcInfoFields,
+  RosterPcStressTraumaStrip,
+  rosterPcInfoDraftFromCharacter,
+  rosterPcInfoPayloadFromDraft,
+  rosterPcInfoPayloadEqual,
+  rosterPcStressCount,
+  rosterPcTraumaLabel,
+} from "./rosterPcInfoUtils";
 import { rosterExpandPanelChrome } from "./rosterShared";
 
 const GRADES = ["F", "D", "C", "B", "A", "S"];
@@ -36,6 +48,7 @@ function rawStandToGrades(raw) {
 }
 
 const CAMPAIGN_PC_TABS = [
+  { id: "info", label: "Info" },
   { id: "harm", label: "Harm" },
   { id: "actions", label: "Actions" },
   { id: "playbook", label: "Playbook" },
@@ -65,19 +78,25 @@ export default function RosterPcExpandPanel({
   onRefresh,
   onCharactersRefresh,
   onError,
+  readOnly = false,
 }) {
   const full = character || summaryCharacter;
   const charId = full?.id;
   const [activeTab, setActiveTab] = useState("harm");
   const [harmDraft, setHarmDraft] = useState(() => harmDraftFromApiCharacter(full));
+  const [infoDraft, setInfoDraft] = useState(() =>
+    rosterPcInfoDraftFromCharacter(full),
+  );
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    setHarmDraft(harmDraftFromApiCharacter(character || summaryCharacter));
+    const ch = character || summaryCharacter;
+    setHarmDraft(harmDraftFromApiCharacter(ch));
+    setInfoDraft(rosterPcInfoDraftFromCharacter(ch));
   }, [character, summaryCharacter]);
 
   const patchHarmFromDraft = useCallback(async () => {
-    if (!charId) return;
+    if (readOnly || !charId) return;
     setBusy(true);
     onError?.(null);
     try {
@@ -89,10 +108,10 @@ export default function RosterPcExpandPanel({
     } finally {
       setBusy(false);
     }
-  }, [charId, harmDraft, onCharactersRefresh, onRefresh, onError]);
+  }, [charId, harmDraft, onCharactersRefresh, onRefresh, onError, readOnly]);
 
   const confirmResetHarm = useCallback(async () => {
-    if (!charId) return;
+    if (readOnly || !charId) return;
     const nm =
       full?.true_name || full?.name || full?.alias || `PC ${charId}`;
     if (
@@ -117,11 +136,11 @@ export default function RosterPcExpandPanel({
     } finally {
       setBusy(false);
     }
-  }, [charId, full, onCharactersRefresh, onRefresh, onError]);
+  }, [charId, full, onCharactersRefresh, onRefresh, onError, readOnly]);
 
   const handleArmorUsedChange = useCallback(
     async (field, nextUsed, max) => {
-      if (!charId) return;
+      if (readOnly || !charId) return;
       const cap = Math.max(0, Math.floor(Number(max) || 0));
       const next = Math.max(0, Math.min(cap, Math.floor(Number(nextUsed) || 0)));
       setBusy(true);
@@ -136,7 +155,59 @@ export default function RosterPcExpandPanel({
         setBusy(false);
       }
     },
-    [charId, onCharactersRefresh, onRefresh, onError],
+    [charId, onCharactersRefresh, onRefresh, onError, readOnly],
+  );
+
+  const commitInfo = useCallback(
+    async (overrideDraft) => {
+      if (readOnly || !charId) return;
+      const server = rosterPcInfoPayloadFromDraft(
+        rosterPcInfoDraftFromCharacter(full),
+      );
+      const payload = rosterPcInfoPayloadFromDraft(overrideDraft || infoDraft);
+      if (rosterPcInfoPayloadEqual(payload, server)) {
+        return;
+      }
+      setBusy(true);
+      onError?.(null);
+      try {
+        await characterAPI.patchCharacter(charId, payload);
+        await onCharactersRefresh?.();
+        onRefresh?.();
+      } catch (e) {
+        onError?.(e.message || "Could not update character info.");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [
+      charId,
+      full,
+      infoDraft,
+      onCharactersRefresh,
+      onRefresh,
+      onError,
+      readOnly,
+    ],
+  );
+
+  const handleStressChange = useCallback(
+    async (nextStress) => {
+      if (readOnly || !charId) return;
+      const n = Math.max(0, Math.min(9, Math.floor(Number(nextStress) || 0)));
+      setBusy(true);
+      onError?.(null);
+      try {
+        await characterAPI.patchCharacter(charId, { stress: n });
+        await onCharactersRefresh?.();
+        onRefresh?.();
+      } catch (e) {
+        onError?.(e.message || "Could not update stress.");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [charId, onCharactersRefresh, onRefresh, onError, readOnly],
   );
 
   if (!full?.id) return null;
@@ -158,12 +229,15 @@ export default function RosterPcExpandPanel({
     full.secondary_playbook ?? full.secondaryPlaybook,
     "Stand",
   );
+  const traumaLabel = rosterPcTraumaLabel(full);
+  const stressCount = rosterPcStressCount(full);
 
   const canUnassign =
-    (meta.role === "GM" && user?.id === campaign?.gm?.id) ||
-    (meta.role === "Player" &&
-      ((isGM && meta.user?.id !== campaign?.gm?.id) ||
-        meta.user?.id === user?.id));
+    !readOnly &&
+    ((meta.role === "GM" && user?.id === campaign?.gm?.id) ||
+      (meta.role === "Player" &&
+        ((isGM && meta.user?.id !== campaign?.gm?.id) ||
+          meta.user?.id === user?.id)));
 
   if (mode === "session" && children) {
     return (
@@ -240,8 +314,30 @@ export default function RosterPcExpandPanel({
         </a>
       ) : null}
 
+      {activeTab === "info" ? (
+        <RosterPcInfoFields
+          draft={infoDraft}
+          setDraft={setInfoDraft}
+          onCommit={commitInfo}
+          readOnly={readOnly}
+          busy={busy}
+          S={S}
+          traumaLabel={traumaLabel}
+          character={full}
+          campaign={campaign}
+        />
+      ) : null}
+
       {activeTab === "harm" ? (
         <>
+          <RosterPcStressTraumaStrip
+            stress={stressCount}
+            traumaLabel={traumaLabel}
+            readOnly={readOnly}
+            busy={busy}
+            onStressChange={handleStressChange}
+            S={S}
+          />
           <div
             style={{
               display: "flex",
@@ -256,7 +352,7 @@ export default function RosterPcExpandPanel({
               type="button"
               onClick={confirmResetHarm}
               style={{ ...S.btnGhost, fontSize: 10 }}
-              disabled={busy}
+              disabled={busy || readOnly}
             >
               Reset harm
             </button>
@@ -278,7 +374,9 @@ export default function RosterPcExpandPanel({
                 }
                 onBlur={patchHarmFromDraft}
                 placeholder={label}
-                disabled={busy}
+                disabled={busy || readOnly}
+                readOnly={readOnly}
+                title={COMPACT_HARM_DETRIMENT[key] || label}
                 style={{
                   ...S.inp,
                   fontSize: 10,
@@ -290,27 +388,56 @@ export default function RosterPcExpandPanel({
               />
             ))}
           </div>
+          <div
+            style={{
+              fontSize: 9,
+              color: "#9ca3af",
+              lineHeight: 1.35,
+              marginTop: 4,
+            }}
+          >
+            {(() => {
+              const active = compactHarmActiveDetriments(harmDraft);
+              return active.length > 0 ? (
+                <>
+                  <span style={{ color: "#fbbf24", fontWeight: 600 }}>
+                    Active:{" "}
+                  </span>
+                  {active.join(" · ")}
+                </>
+              ) : (
+                COMPACT_HARM_DETRIMENT_IDLE
+              );
+            })()}
+          </div>
           <div style={{ ...lbl, marginTop: 10 }}>Armor uses</div>
           <div style={{ display: "grid", gap: 8, fontSize: 10, color: "#9ca3af" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <span style={{ minWidth: 52 }}>Physical</span>
               {hasPhyArmor && phyArmorMax > 0 ? (
-                <ArmorChargeBoxes
-                  count={phyArmorMax}
-                  used={phyArmorUsed}
-                  onToggleAt={(i, spent) =>
-                    handleArmorUsedChange(
-                      "physical_armor_used",
-                      spent ? i : i + 1,
-                      phyArmorMax,
-                    )
-                  }
-                  spentColor="#0d1117"
-                  activeColor="#b45309"
-                  borderColor="#4b5563"
-                  spendTitle="Click to spend physical armor"
-                  restoreTitle="Used — click to restore"
-                />
+                <span
+                  style={{
+                    opacity: busy || readOnly ? 0.5 : 1,
+                    pointerEvents: busy || readOnly ? "none" : "auto",
+                  }}
+                >
+                  <ArmorChargeBoxes
+                    count={phyArmorMax}
+                    used={phyArmorUsed}
+                    onToggleAt={(i, spent) =>
+                      handleArmorUsedChange(
+                        "physical_armor_used",
+                        spent ? i : i + 1,
+                        phyArmorMax,
+                      )
+                    }
+                    spentColor="#0d1117"
+                    activeColor="#b45309"
+                    borderColor="#4b5563"
+                    spendTitle="Click to spend physical armor"
+                    restoreTitle="Used — click to restore"
+                  />
+                </span>
               ) : (
                 <span style={{ color: "#52525b" }}>—</span>
               )}
@@ -318,23 +445,30 @@ export default function RosterPcExpandPanel({
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <span style={{ minWidth: 52 }}>Stand</span>
               {isStandUser && standArmorMax > 0 ? (
-                <ArmorChargeBoxes
-                  count={standArmorMax}
-                  used={standArmorUsed}
-                  onToggleAt={(i, spent) =>
-                    handleArmorUsedChange(
-                      "stand_armor_used",
-                      spent ? i : i + 1,
-                      standArmorMax,
-                    )
-                  }
-                  spentColor="#0d1117"
-                  activeColor="#0d1117"
-                  borderColor="#4b5563"
-                  showCheck
-                  spendTitle="Click to spend Stand armor"
-                  restoreTitle="Used — click to restore"
-                />
+                <span
+                  style={{
+                    opacity: busy || readOnly ? 0.5 : 1,
+                    pointerEvents: busy || readOnly ? "none" : "auto",
+                  }}
+                >
+                  <ArmorChargeBoxes
+                    count={standArmorMax}
+                    used={standArmorUsed}
+                    onToggleAt={(i, spent) =>
+                      handleArmorUsedChange(
+                        "stand_armor_used",
+                        spent ? i : i + 1,
+                        standArmorMax,
+                      )
+                    }
+                    spentColor="#0d1117"
+                    activeColor="#0d1117"
+                    borderColor="#4b5563"
+                    showCheck
+                    spendTitle="Click to spend Stand armor"
+                    restoreTitle="Used — click to restore"
+                  />
+                </span>
               ) : (
                 <span style={{ color: "#52525b" }}>—</span>
               )}
