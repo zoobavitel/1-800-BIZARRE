@@ -741,8 +741,39 @@ class UserSerializer(serializers.ModelSerializer):
         return instance
 
 class ChangePasswordSerializer(serializers.Serializer):
-    old_password = serializers.CharField(required=True)
-    new_password = serializers.CharField(required=True)
+    old_password = serializers.CharField(required=True, write_only=True)
+    new_password = serializers.CharField(required=True, write_only=True)
+    confirm_password = serializers.CharField(required=True, write_only=True)
+
+    def validate(self, attrs):
+        user = self.context.get("user")
+        if user is None:
+            raise serializers.ValidationError("Authentication required.")
+
+        if attrs["new_password"] != attrs["confirm_password"]:
+            raise serializers.ValidationError(
+                {"confirm_password": ["Passwords do not match."]}
+            )
+
+        if not user.check_password(attrs["old_password"]):
+            raise serializers.ValidationError(
+                {"old_password": ["Incorrect current password."]}
+            )
+
+        if attrs["old_password"] == attrs["new_password"]:
+            raise serializers.ValidationError(
+                {"new_password": ["New password must differ from current password."]}
+            )
+
+        from django.contrib.auth.password_validation import validate_password
+        from django.core.exceptions import ValidationError as DjangoValidationError
+
+        try:
+            validate_password(attrs["new_password"], user=user)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError({"new_password": list(exc.messages)}) from exc
+
+        return attrs
 
 class SessionNPCInvolvementWriteSerializer(serializers.Serializer):
     """For PATCH: {npc: id, show_clocks_to_players: bool, show_vulnerability_clock_to_players: bool}"""
