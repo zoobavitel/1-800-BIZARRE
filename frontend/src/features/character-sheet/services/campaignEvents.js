@@ -4,16 +4,19 @@
  *
  * On error, reconnects with exponential backoff (capped) instead of closing forever —
  * Firefox / extensions can drop the stream; permanent close left panels stale until reload.
+ *
+ * Returns an unsubscribe function with `getLastEventAt()` attached so callers can skip
+ * redundant poll sync while the stream is healthy (server sends heartbeat data events ~25s).
  */
 import { getApiBaseUrl } from "../../../config/apiConfig";
 
-const RECONNECT_BASE_MS = 1000;
-const RECONNECT_MAX_MS = 30000;
+const RECONNECT_BASE_MS = 3000;
+const RECONNECT_MAX_MS = 60000;
 
 /**
  * @param {number} campaignId
  * @param {{ onUpdate?: (reason?: string) => void }} handlers
- * @returns {() => void} unsubscribe
+ * @returns {(() => void) & { getLastEventAt?: () => number }}
  */
 export function subscribeCampaignEvents(campaignId, { onUpdate } = {}) {
   const base = getApiBaseUrl();
@@ -22,7 +25,9 @@ export function subscribeCampaignEvents(campaignId, { onUpdate } = {}) {
       ? localStorage.getItem("authToken")
       : null;
   if (!campaignId || !base || !token) {
-    return () => {};
+    const noop = () => {};
+    noop.getLastEventAt = () => 0;
+    return noop;
   }
   const url = `${base.replace(/\/+$/, "")}/campaigns/${campaignId}/events/?token=${encodeURIComponent(token)}`;
 
@@ -30,6 +35,11 @@ export function subscribeCampaignEvents(campaignId, { onUpdate } = {}) {
   let reconnectTimer = null;
   let attempt = 0;
   let closed = false;
+  let lastEventAt = 0;
+
+  const touchTraffic = () => {
+    lastEventAt = Date.now();
+  };
 
   const clearReconnect = () => {
     if (reconnectTimer != null) {
@@ -73,11 +83,24 @@ export function subscribeCampaignEvents(campaignId, { onUpdate } = {}) {
     next.onmessage = (e) => {
       try {
         const data = JSON.parse(e.data);
+        if (
+          data &&
+          (data.type === "campaign_update" ||
+            data.type === "connected" ||
+            data.type === "heartbeat")
+        ) {
+          touchTraffic();
+        }
         if (data && data.type === "campaign_update") {
           onUpdate?.(data.reason || "update");
         }
         // Successful traffic: reset backoff so transient blips recover quickly.
-        if (data && (data.type === "campaign_update" || data.type === "connected")) {
+        if (
+          data &&
+          (data.type === "campaign_update" ||
+            data.type === "connected" ||
+            data.type === "heartbeat")
+        ) {
           attempt = 0;
         }
       } catch {
@@ -97,7 +120,7 @@ export function subscribeCampaignEvents(campaignId, { onUpdate } = {}) {
 
   connect();
 
-  return () => {
+  const unsubscribe = () => {
     closed = true;
     clearReconnect();
     if (es) {
@@ -109,4 +132,19 @@ export function subscribeCampaignEvents(campaignId, { onUpdate } = {}) {
       es = null;
     }
   };
+  unsubscribe.getLastEventAt = () => lastEventAt;
+  return unsubscribe;
+}
+
+/** Skip interval poll when SSE delivered traffic within this window (ms). */
+export const SSE_HEALTH_SKIP_POLL_MS = 35000;
+
+/**
+ * @param {(() => void) & { getLastEventAt?: () => number } | null | undefined} unsub
+ * @returns {boolean}
+ */
+export function isCampaignSseHealthy(unsub) {
+  const at = unsub?.getLastEventAt?.();
+  if (!at) return false;
+  return Date.now() - at < SSE_HEALTH_SKIP_POLL_MS;
 }
