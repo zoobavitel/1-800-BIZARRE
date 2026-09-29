@@ -16,7 +16,10 @@ import { normalizeListResponse } from "../features/character-sheet/services/api"
 import { EQUIPMENT_CATEGORY_OPTIONS, categoryLabel } from "../features/character-sheet/utils/loadoutUtils";
 import { isGmManagedProgressClock } from "../features/character-sheet/utils/progressClockVisibility";
 import { useAuth } from "../features/auth";
-import { subscribeCampaignEvents } from "../features/character-sheet/services/campaignEvents";
+import {
+  isCampaignSseHealthy,
+  subscribeCampaignEvents,
+} from "../features/character-sheet/services/campaignEvents";
 import SessionGMManagementPanels from "../components/session/SessionGMManagementPanels";
 import { SessionHelpTip } from "../components/session/sessionShellUi";
 import ProgressClock from "../components/ProgressClock";
@@ -4804,7 +4807,7 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
 // Session Detail View (GM-only)
 // ---------------------------------------------------------------------------
 /** Poll session panel while tab visible (backup if SSE disconnects). Mirrors CharacterPage. */
-const SESSION_PANEL_SYNC_INTERVAL_MS = 12000;
+const SESSION_PANEL_SYNC_INTERVAL_MS = 30000;
 
 function SessionDetail({
   campaign,
@@ -4852,6 +4855,7 @@ function SessionDetail({
   const [sessionManualXpSyncReady, setSessionManualXpSyncReady] =
     useState(false);
   const [sessionEquipmentCatalog, setSessionEquipmentCatalog] = useState([]);
+  const sessionSseUnsubRef = useRef(null);
 
   useEffect(() => {
     if (!campaign?.id) {
@@ -5048,8 +5052,10 @@ function SessionDetail({
     const unsubscribe = subscribeCampaignEvents(campaign.id, {
       onUpdate: schedule,
     });
+    sessionSseUnsubRef.current = unsubscribe;
     return () => {
       if (pending) clearTimeout(pending);
+      sessionSseUnsubRef.current = null;
       unsubscribe();
     };
   }, [campaign?.id, session?.id, refetchSessionPanel]);
@@ -5071,6 +5077,7 @@ function SessionDetail({
     if (!session?.id) return undefined;
     const id = window.setInterval(() => {
       if (document.visibilityState !== "visible") return;
+      if (isCampaignSseHealthy(sessionSseUnsubRef.current)) return;
       void refetchSessionPanel("interval");
     }, SESSION_PANEL_SYNC_INTERVAL_MS);
     return () => window.clearInterval(id);
