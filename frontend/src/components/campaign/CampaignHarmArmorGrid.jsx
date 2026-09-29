@@ -382,13 +382,55 @@ function CampaignPcHarmCard({
   );
 }
 
+/** Owner user id on a character row (nested user, user_id, or scalar user). */
+export function characterOwnerUserId(character) {
+  if (!character || typeof character !== "object") return null;
+  if (character.user != null && typeof character.user === "object") {
+    const n = Number(character.user.id);
+    return Number.isFinite(n) ? n : null;
+  }
+  if (character.user_id != null && character.user_id !== "") {
+    const n = Number(character.user_id);
+    return Number.isFinite(n) ? n : null;
+  }
+  if (character.user != null && character.user !== "") {
+    const n = Number(character.user);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+/**
+ * True when the viewer may edit this PC's harm/armor on the campaign grid.
+ * GM (or forced readOnly=false path) edits all; players only their own.
+ */
+export function harmCardEditable({ isGM, userId, character, forceReadOnly }) {
+  if (forceReadOnly) return false;
+  if (isGM) return true;
+  const owner = characterOwnerUserId(character);
+  const uid = userId != null && userId !== "" ? Number(userId) : null;
+  return (
+    owner != null &&
+    uid != null &&
+    Number.isFinite(uid) &&
+    Number(owner) === uid
+  );
+}
+
 /**
  * Campaign / session-style Harm+Armor cards in a responsive columns×rows grid.
+ *
+ * @param {object} props
+ * @param {boolean} [props.readOnly] — force all cards read-only (legacy)
+ * @param {boolean} [props.isGM]
+ * @param {number|string|null} [props.userId] — logged-in user; players edit own PC only
  */
 export default function CampaignHarmArmorGrid({
   characters = [],
   S,
   readOnly = false,
+  isGM = false,
+  userId = null,
   onRefresh,
   onError,
 }) {
@@ -423,7 +465,14 @@ export default function CampaignHarmArmorGrid({
           key={ch.id}
           character={ch}
           S={S}
-          readOnly={readOnly}
+          readOnly={
+            !harmCardEditable({
+              isGM,
+              userId,
+              character: ch,
+              forceReadOnly: readOnly,
+            })
+          }
           onRefresh={onRefresh}
           onError={onError}
         />
