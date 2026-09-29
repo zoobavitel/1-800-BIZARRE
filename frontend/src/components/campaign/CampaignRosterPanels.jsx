@@ -1,48 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { factionAPI } from "../../features/character-sheet";
-import { buildRouteHref, handleSpaNavClick } from "../../utils/spaNavigation";
-import { getCharacterPortraitSrc } from "../../utils/homeAvatar";
-import HomeCardThumb from "../home/HomeCardThumb";
-import CampaignFactionEditor from "./CampaignFactionEditor";
-import {
-  SessionFactionToken,
-  SessionNpcToken,
-  SessionPcToken,
-} from "../session/SessionTokenFaces";
-import {
-  NO_FACTION_DROP_KEY,
-  groupCampaignNpcsByFaction,
-} from "../session/sessionShellUi";
+import RosterCrewInlineSection from "../roster/RosterCrewInlineSection";
+import RosterPcExpandPanel from "../roster/RosterPcExpandPanel";
+import RosterNpcColumn from "../roster/RosterNpcColumn";
+import RosterTwoColumnShell from "../roster/RosterTwoColumnShell";
+import RosterCollapsibleSection from "../roster/RosterCollapsibleSection";
+import { SessionPcToken } from "../session/SessionTokenFaces";
+import { groupCampaignNpcsByFaction } from "../session/sessionShellUi";
 import "../../styles/Home.css";
 import "../../styles/SessionTokenCards.css";
-
-const expandPanelChrome = {
-  marginTop: 8,
-  padding: 12,
-  background: "#0d1117",
-  border: "1px solid #4338ca",
-  borderRadius: 8,
-  position: "relative",
-};
-
-function RoleBadge({ role }) {
-  const isGm = role === "GM";
-  return (
-    <span
-      style={{
-        fontSize: 10,
-        padding: "2px 8px",
-        borderRadius: 9999,
-        fontWeight: "bold",
-        display: "inline-block",
-        background: isGm ? "#78350f" : "var(--accent)",
-        color: "#fff",
-      }}
-    >
-      {role}
-    </span>
-  );
-}
 
 function buildCharacterMeta(campaign, isGM) {
   const campaignCharacters = campaign?.campaign_characters || [];
@@ -103,6 +69,7 @@ export default function CampaignRosterPanels({
   onRemovePlayerFromCampaign,
   onWithdrawInvitation,
   onAssignNPCById,
+  onCreateNpcForFaction,
   factionForm,
   setFactionForm,
   factionError,
@@ -131,6 +98,10 @@ export default function CampaignRosterPanels({
   setCrewForm,
   setCrewError,
   onRefresh,
+  characters = [],
+  onCharactersRefresh,
+  rosterActionError,
+  setRosterActionError,
 }) {
   const [npcRosterCollapsed, setNpcRosterCollapsed] = useState(false);
   const [playerRosterCollapsed, setPlayerRosterCollapsed] = useState(false);
@@ -142,7 +113,6 @@ export default function CampaignRosterPanels({
   const [quickFactionName, setQuickFactionName] = useState("");
   const [quickFactionBusy, setQuickFactionBusy] = useState(false);
   const [npcDragging, setNpcDragging] = useState(false);
-  const [collapsedCrewIds, setCollapsedCrewIds] = useState({});
   const addNpcChooserRef = useRef(null);
 
   const { factionGroups, unaffiliated } = useMemo(
@@ -154,6 +124,19 @@ export default function CampaignRosterPanels({
     () => buildCharacterMeta(campaign, isGM),
     [campaign, isGM],
   );
+
+  const fullCharById = useMemo(() => {
+    const m = new Map();
+    for (const c of characters || []) {
+      if (c?.id != null) m.set(Number(c.id), c);
+    }
+    for (const ch of campaignCharacters || []) {
+      const id = Number(ch?.id);
+      if (!Number.isFinite(id)) continue;
+      if (!m.has(id)) m.set(id, ch);
+    }
+    return m;
+  }, [characters, campaignCharacters]);
 
   useEffect(() => {
     if (!addNpcChooserOpen) return undefined;
@@ -248,764 +231,175 @@ export default function CampaignRosterPanels({
       }),
     );
 
+  const inviteHeaderExtra = isGM ? (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "stretch",
+        gap: 4,
+        flex: "1 1 220px",
+        maxWidth: 340,
+        minWidth: 180,
+      }}
+    >
+      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+        <input
+          style={{
+            ...S.inp,
+            flex: 1,
+            minWidth: 0,
+            fontSize: 11,
+            padding: "4px 8px",
+          }}
+          value={inviteUsername}
+          onChange={(e) => setInviteUsername(e.target.value)}
+          placeholder="Invite username…"
+          list="campaign-invite-users"
+          aria-label="Invite player by username"
+          onKeyDown={(e) => e.key === "Enter" && onInvite()}
+        />
+        <datalist id="campaign-invite-users">
+          {invitableUsers.map((u) => (
+            <option key={u.id} value={u.username} />
+          ))}
+        </datalist>
+        <button
+          type="button"
+          onClick={onInvite}
+          style={{
+            ...S.btnPrimary,
+            fontSize: 11,
+            padding: "4px 10px",
+            flexShrink: 0,
+          }}
+        >
+          Invite
+        </button>
+      </div>
+      {inviteError ? (
+        <div
+          style={{
+            ...S.err,
+            marginBottom: 0,
+            fontSize: 10,
+            padding: "4px 8px",
+          }}
+        >
+          {inviteError}
+        </div>
+      ) : null}
+      {inviteSuccess ? (
+        <div
+          style={{
+            background: "#064e3b",
+            border: "1px solid #059669",
+            borderRadius: 4,
+            padding: "4px 8px",
+            fontSize: 10,
+            color: "#6ee7b7",
+          }}
+        >
+          {inviteSuccess}
+        </div>
+      ) : null}
+    </div>
+  ) : null;
+
   return (
-    <div style={{ minWidth: 0 }}>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: isGM ? "1fr 1fr" : "1fr",
-          gap: 16,
-          marginBottom: 12,
-          alignItems: "start",
-        }}
-      >
-        {isGM ? (
-          <div style={{ ...S.card, marginBottom: 0 }}>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "flex-start",
-                gap: 8,
-              }}
-            >
-              <span style={{ ...S.sectionLbl, marginBottom: 0, marginTop: 16 }}>
-                Factions &amp; NPCs
-              </span>
-              <button
-                type="button"
-                onClick={() => setNpcRosterCollapsed((v) => !v)}
-                style={{
-                  ...S.btnGhost,
-                  fontSize: 10,
-                  padding: "2px 8px",
-                  flexShrink: 0,
-                }}
-                title={
-                  npcRosterCollapsed
-                    ? "Expand factions & NPCs"
-                    : "Collapse factions & NPCs"
-                }
-              >
-                {npcRosterCollapsed ? "Expand" : "Collapse"}
-              </button>
-            </div>
-            {!npcRosterCollapsed ? (
-              <>
-                <div
-                  style={{
-                    fontSize: 11,
-                    color: "var(--text-muted)",
-                    marginTop: 10,
-                    marginBottom: 4,
-                  }}
-                >
-                  Drag strip thumbs onto another faction to reassign. Click a thumb for Leave faction / Remove from campaign.
-                </div>
-                <div
-                  className="home-poc session-roster-tokens"
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 14,
-                    marginTop: 10,
-                  }}
-                >
-                  <div className="home-faction-grid">
-                    {factionGroups.map(({ faction, npcs }) => {
-                      const dropKey = String(faction.id);
-                      const isExpanded = expandedFactionId === faction.id;
-                      const isEditing = factionForm?.id === faction.id;
-                      return (
-                        <div
-                          className="session-roster-cell"
-                          key={`faction-${faction.id}`}
-                        >
-                          <SessionFactionToken
-                            faction={faction}
-                            npcList={npcs}
-                            isExpanded={isExpanded}
-                            isDragOver={dragOverFactionKey === dropKey}
-                            dropKey={dropKey}
-                            onToggleExpand={() => toggleFactionExpand(faction)}
-                            onNpcThumbClick={(npc) => {
-                              setExpandedNpcId(npc.id);
-                              setExpandedPcId(null);
-                            }}
-                            onAddNpc={() => startFactionEdit(faction)}
-                            onDragOver={() => setDragOverFactionKey(dropKey)}
-                            onDragLeave={() =>
-                              setDragOverFactionKey((k) =>
-                                k === dropKey ? null : k,
-                              )
-                            }
-                            onDrop={(e) => onNpcFactionDrop(e, dropKey)}
-                            onNpcDragBegin={() => setNpcDragging(true)}
-                            onNpcDragEnd={clearNpcDrag}
-                          />
-                          {isExpanded && isEditing ? (
-                            <div
-                              id={`faction-editor-${faction.id}`}
-                              className="session-faction-expand-panel"
-                              style={expandPanelChrome}
-                            >
-                              <div
-                                style={{
-                                  display: "flex",
-                                  justifyContent: "flex-end",
-                                  gap: 8,
-                                  marginBottom: 8,
-                                }}
-                              >
-                                <button
-                                  type="button"
-                                  style={{ ...S.btnGhost, fontSize: 10 }}
-                                  onClick={() => startFactionEdit(faction)}
-                                >
-                                  Edit
-                                </button>
-                                <button
-                                  type="button"
-                                  style={{
-                                    ...S.btn,
-                                    fontSize: 10,
-                                    background: "#7f1d1d",
-                                    color: "#fca5a5",
-                                  }}
-                                  onClick={() => handleFactionDelete(faction)}
-                                >
-                                  Del
-                                </button>
-                              </div>
-                              <CampaignFactionEditor
-                                factionForm={factionForm}
-                                setFactionForm={setFactionForm}
-                                factionError={factionError}
-                                factionImagePreview={factionImagePreview}
-                                factionPreviewError={factionPreviewError}
-                                setFactionPreviewError={setFactionPreviewError}
-                                factionCropOpen={factionCropOpen}
-                                setFactionCropOpen={setFactionCropOpen}
-                                campaignNPCs={campaignNPCs}
-                                factionAddNpcId={factionAddNpcId}
-                                setFactionAddNpcId={setFactionAddNpcId}
-                                onSave={handleFactionSave}
-                                onCancel={cancelFactionForm}
-                                onAddNpc={handleAddNpcToFaction}
-                                onRemoveNpc={handleRemoveNpcFromFaction}
-                                embedded
-                                S={S}
-                              />
-                            </div>
-                          ) : null}
-                          {expandedNpcId &&
-                          npcs.some((n) => n.id === expandedNpcId) ? (
-                            <NpcCampaignExpandPanel
-                              npc={npcs.find((n) => n.id === expandedNpcId)}
-                              S={S}
-                              onNavigateToNPC={onNavigateToNPC}
-                              onLeaveFaction={() =>
-                                onMoveNpcToFaction(expandedNpcId, null)
-                              }
-                              onRemoveFromCampaign={() =>
-                                onUnassignNPC(expandedNpcId)
-                              }
-                              onClose={() => setExpandedNpcId(null)}
-                            />
-                          ) : null}
-                        </div>
-                      );
-                    })}
-
-                    <div
-                      className="f-card session-make-faction-tile"
-                      style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 8,
-                        padding: 10,
-                        minHeight: 120,
-                        borderStyle: "dashed",
-                        cursor: "default",
-                      }}
-                      onClick={(e) => e.stopPropagation()}
-                      onKeyDown={(e) => e.stopPropagation()}
-                      role="group"
-                      aria-label="Make a faction"
-                    >
-                      <div className="f-card-name" style={{ fontSize: 13 }}>
-                        Make a faction
-                      </div>
-                      <input
-                        type="text"
-                        value={quickFactionName}
-                        onChange={(e) => setQuickFactionName(e.target.value)}
-                        placeholder="Faction name"
-                        style={{
-                          ...S.inp,
-                          width: "100%",
-                          boxSizing: "border-box",
-                          fontSize: 11,
-                        }}
-                        disabled={quickFactionBusy || !campaign?.id}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            handleQuickCreateFaction();
-                          }
-                        }}
-                      />
-                      <button
-                        type="button"
-                        style={{
-                          ...S.btnPrimary,
-                          fontSize: 11,
-                          alignSelf: "stretch",
-                        }}
-                        onClick={handleQuickCreateFaction}
-                        disabled={
-                          quickFactionBusy ||
-                          !campaign?.id ||
-                          !quickFactionName.trim()
-                        }
-                      >
-                        {quickFactionBusy ? "Working…" : "Create faction"}
-                      </button>
-                      <button
-                        type="button"
-                        style={{
-                          ...S.btnGhost,
-                          fontSize: 10,
-                          alignSelf: "stretch",
-                        }}
-                        onClick={() => {
-                          startFactionCreate();
-                          if (quickFactionName.trim()) {
-                            setFactionForm((p) => ({
-                              ...(p || {}),
-                              name: quickFactionName.trim(),
-                            }));
-                          }
-                        }}
-                      >
-                        Full editor…
-                      </button>
-                    </div>
-
-                    <div
-                      ref={addNpcChooserRef}
-                      className="session-add-npc-chooser"
-                      style={{ position: "relative", minWidth: 0 }}
-                    >
-                      <button
-                        type="button"
-                        className="f-card session-add-npc-tile"
-                        onClick={() => setAddNpcChooserOpen((o) => !o)}
-                        aria-expanded={addNpcChooserOpen}
-                        aria-haspopup="menu"
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: 6,
-                          padding: 10,
-                          minHeight: 120,
-                          borderStyle: "dashed",
-                          cursor: "pointer",
-                          justifyContent: "center",
-                          alignItems: "center",
-                          textAlign: "center",
-                        }}
-                      >
-                        <span
-                          style={{ fontSize: 22, color: "#6b7280", lineHeight: 1 }}
-                        >
-                          +
-                        </span>
-                        <span
-                          style={{ color: "#9ca3af", fontSize: 11, lineHeight: 1.3 }}
-                        >
-                          Add NPC to campaign
-                        </span>
-                        <span
-                          style={{
-                            fontSize: 9,
-                            color: "#6b7280",
-                            lineHeight: 1.35,
-                          }}
-                        >
-                          Existing or create new
-                        </span>
-                      </button>
-                      {addNpcChooserOpen ? (
-                        <div
-                          role="menu"
-                          className="session-add-npc-chooser-menu"
-                          style={{
-                            position: "absolute",
-                            top: "calc(100% + 4px)",
-                            left: 0,
-                            right: 0,
-                            zIndex: 50,
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: 2,
-                            padding: 6,
-                            background: "#111827",
-                            border: "1px solid #4b5563",
-                            borderRadius: 6,
-                            boxShadow: "0 8px 24px rgba(0,0,0,0.45)",
-                          }}
-                        >
-                          {npcsThatCanBeAdded.length === 0 ? (
-                            <div
-                              style={{
-                                fontSize: 10,
-                                color: "#6b7280",
-                                padding: "6px 8px",
-                              }}
-                            >
-                              No unassigned NPCs — create one instead.
-                            </div>
-                          ) : (
-                            npcsThatCanBeAdded.map((n) => (
-                              <button
-                                key={n.id}
-                                type="button"
-                                role="menuitem"
-                                onClick={() => {
-                                  onAssignNPCById(n.id);
-                                  setAddNpcChooserOpen(false);
-                                }}
-                                style={{
-                                  ...S.btnGhost,
-                                  width: "100%",
-                                  textAlign: "left",
-                                  fontSize: 11,
-                                  padding: "8px 10px",
-                                  border: "1px solid transparent",
-                                  borderRadius: 4,
-                                }}
-                              >
-                                {n.name} (Lv.{n.level})
-                              </button>
-                            ))
-                          )}
-                          {typeof onNavigateToNPC === "function" ? (
-                            <a
-                              href={buildRouteHref("npcs", {
-                                campaignId: campaign.id,
-                              })}
-                              role="menuitem"
-                              onClick={(e) => {
-                                handleSpaNavClick(e, () =>
-                                  onNavigateToNPC(null, {
-                                    campaignId: campaign.id,
-                                  }),
-                                );
-                                setAddNpcChooserOpen(false);
-                              }}
-                              style={{
-                                ...S.btnGhost,
-                                width: "100%",
-                                textAlign: "left",
-                                fontSize: 11,
-                                padding: "8px 10px",
-                                border: "1px solid transparent",
-                                borderRadius: 4,
-                                textDecoration: "none",
-                                color: "#86efac",
-                              }}
-                            >
-                              Create NPC
-                            </a>
-                          ) : null}
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-
-                  {unaffiliated.length > 0 ? (
-                    <div
-                      style={{ display: "flex", flexDirection: "column", gap: 10 }}
-                    >
-                      <span
-                        style={{ ...S.sectionLbl, marginBottom: 0, fontSize: 11 }}
-                      >
-                        No faction ({unaffiliated.length} NPC
-                        {unaffiliated.length === 1 ? "" : "s"})
-                      </span>
-                      <div className="home-card-grid">
-                        {unaffiliated.map((npc) => (
-                          <div
-                            className="session-roster-cell"
-                            key={`unaffiliated-${npc.id}`}
-                          >
-                            <SessionNpcToken
-                              npc={npc}
-                              selected={expandedNpcId === npc.id}
-                              draggable
-                              sourceFactionKey={NO_FACTION_DROP_KEY}
-                              onOpen={() => setExpandedNpcId(npc.id)}
-                              onDragBegin={() => setNpcDragging(true)}
-                              onDragEnd={clearNpcDrag}
-                            />
-                            {expandedNpcId === npc.id ? (
-                              <NpcCampaignExpandPanel
-                                npc={npc}
-                                S={S}
-                                onNavigateToNPC={onNavigateToNPC}
-                                onLeaveFaction={null}
-                                onRemoveFromCampaign={() =>
-                                  onUnassignNPC(npc.id)
-                                }
-                                onClose={() => setExpandedNpcId(null)}
-                              />
-                            ) : null}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {npcDragging ? (
-                    <div
-                      className={`session-unassign-drop${
-                        dragOverFactionKey === NO_FACTION_DROP_KEY
-                          ? " session-token-drag-over"
-                          : ""
-                      }`}
-                      onDragOver={(e) => {
-                        e.preventDefault();
-                        e.dataTransfer.dropEffect = "move";
-                        setDragOverFactionKey(NO_FACTION_DROP_KEY);
-                      }}
-                      onDragLeave={() =>
-                        setDragOverFactionKey((k) =>
-                          k === NO_FACTION_DROP_KEY ? null : k,
-                        )
-                      }
-                      onDrop={(e) => onNpcFactionDrop(e, NO_FACTION_DROP_KEY)}
-                    >
-                      Drop to leave faction
-                    </div>
-                  ) : null}
-                </div>
-
-                {factionForm && !factionForm.id ? (
-                  <div style={{ marginTop: 12 }}>
-                    <CampaignFactionEditor
-                      factionForm={factionForm}
-                      setFactionForm={setFactionForm}
-                      factionError={factionError}
-                      factionImagePreview={factionImagePreview}
-                      factionPreviewError={factionPreviewError}
-                      setFactionPreviewError={setFactionPreviewError}
-                      factionCropOpen={factionCropOpen}
-                      setFactionCropOpen={setFactionCropOpen}
-                      campaignNPCs={campaignNPCs}
-                      factionAddNpcId={factionAddNpcId}
-                      setFactionAddNpcId={setFactionAddNpcId}
-                      onSave={handleFactionSave}
-                      onCancel={cancelFactionForm}
-                      onAddNpc={handleAddNpcToFaction}
-                      onRemoveNpc={handleRemoveNpcFromFaction}
-                      S={S}
-                    />
-                  </div>
-                ) : null}
-              </>
-            ) : null}
-          </div>
-        ) : null}
-
-        <div style={{ ...S.card, marginBottom: 0 }}>
-          <div
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              justifyContent: "space-between",
-              alignItems: "flex-start",
-              gap: 10,
-            }}
+    <RosterTwoColumnShell
+      showSecondColumn={isGM}
+      leftColumn={
+        isGM ? (
+          <RosterCollapsibleSection
+            title="Factions & NPCs"
+            collapsed={npcRosterCollapsed}
+            onToggleCollapsed={() => setNpcRosterCollapsed((v) => !v)}
+            collapseExpandLabel="Expand factions & NPCs"
+            collapseCollapseLabel="Collapse factions & NPCs"
+            S={S}
           >
-            <span style={{ ...S.sectionLbl, marginBottom: 0, marginTop: 16 }}>
-              Players, Crew &amp; Characters
-            </span>
-            {isGM ? (
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "stretch",
-                  gap: 4,
-                  flex: "1 1 220px",
-                  maxWidth: 340,
-                  minWidth: 180,
-                }}
-              >
-                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                  <input
-                    style={{
-                      ...S.inp,
-                      flex: 1,
-                      minWidth: 0,
-                      fontSize: 11,
-                      padding: "4px 8px",
-                    }}
-                    value={inviteUsername}
-                    onChange={(e) => setInviteUsername(e.target.value)}
-                    placeholder="Invite username…"
-                    list="campaign-invite-users"
-                    aria-label="Invite player by username"
-                    onKeyDown={(e) => e.key === "Enter" && onInvite()}
-                  />
-                  <datalist id="campaign-invite-users">
-                    {invitableUsers.map((u) => (
-                      <option key={u.id} value={u.username} />
-                    ))}
-                  </datalist>
-                  <button
-                    type="button"
-                    onClick={onInvite}
-                    style={{
-                      ...S.btnPrimary,
-                      fontSize: 11,
-                      padding: "4px 10px",
-                      flexShrink: 0,
-                    }}
-                  >
-                    Invite
-                  </button>
-                </div>
-                {inviteError ? (
-                  <div
-                    style={{
-                      ...S.err,
-                      marginBottom: 0,
-                      fontSize: 10,
-                      padding: "4px 8px",
-                    }}
-                  >
-                    {inviteError}
-                  </div>
-                ) : null}
-                {inviteSuccess ? (
-                  <div
-                    style={{
-                      background: "#064e3b",
-                      border: "1px solid #059669",
-                      borderRadius: 4,
-                      padding: "4px 8px",
-                      fontSize: 10,
-                      color: "#6ee7b7",
-                    }}
-                  >
-                    {inviteSuccess}
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-            <button
-              type="button"
-              onClick={() => setPlayerRosterCollapsed((v) => !v)}
-              style={{
-                ...S.btnGhost,
-                fontSize: 10,
-                padding: "2px 8px",
-                flexShrink: 0,
-                marginLeft: isGM ? 0 : "auto",
-              }}
-              title={
-                playerRosterCollapsed
-                  ? "Expand player roster"
-                  : "Collapse player roster"
-              }
-            >
-              {playerRosterCollapsed ? "Expand" : "Collapse"}
-            </button>
-          </div>
-
-          {!playerRosterCollapsed ? (
+            <RosterNpcColumn
+              S={S}
+              campaign={campaign}
+              factionGroups={factionGroups}
+              unaffiliated={unaffiliated}
+              dragOverFactionKey={dragOverFactionKey}
+              setDragOverFactionKey={setDragOverFactionKey}
+              expandedFactionId={expandedFactionId}
+              expandedNpcId={expandedNpcId}
+              setExpandedNpcId={setExpandedNpcId}
+              setExpandedPcId={setExpandedPcId}
+              toggleFactionExpand={toggleFactionExpand}
+              startFactionEdit={startFactionEdit}
+              startFactionCreate={startFactionCreate}
+              handleFactionDelete={handleFactionDelete}
+              handleFactionSave={handleFactionSave}
+              cancelFactionForm={cancelFactionForm}
+              handleAddNpcToFaction={handleAddNpcToFaction}
+              handleRemoveNpcFromFaction={handleRemoveNpcFromFaction}
+              factionForm={factionForm}
+              setFactionForm={setFactionForm}
+              factionError={factionError}
+              factionImagePreview={factionImagePreview}
+              factionPreviewError={factionPreviewError}
+              setFactionPreviewError={setFactionPreviewError}
+              factionCropOpen={factionCropOpen}
+              setFactionCropOpen={setFactionCropOpen}
+              factionAddNpcId={factionAddNpcId}
+              setFactionAddNpcId={setFactionAddNpcId}
+              campaignNPCs={campaignNPCs}
+              onNpcFactionDrop={onNpcFactionDrop}
+              onNavigateToNPC={onNavigateToNPC}
+              onUnassignNPC={onUnassignNPC}
+              onMoveNpcToFaction={onMoveNpcToFaction}
+              onAssignNPCById={onAssignNPCById}
+              onCreateNpcForFaction={onCreateNpcForFaction}
+              npcsThatCanBeAdded={npcsThatCanBeAdded}
+              quickFactionName={quickFactionName}
+              setQuickFactionName={setQuickFactionName}
+              quickFactionBusy={quickFactionBusy}
+              handleQuickCreateFaction={handleQuickCreateFaction}
+              addNpcChooserOpen={addNpcChooserOpen}
+              setAddNpcChooserOpen={setAddNpcChooserOpen}
+              addNpcChooserRef={addNpcChooserRef}
+              npcDragging={npcDragging}
+              setNpcDragging={setNpcDragging}
+              clearNpcDrag={clearNpcDrag}
+              onRefresh={onRefresh}
+              onError={setRosterActionError}
+            />
+          </RosterCollapsibleSection>
+        ) : null
+      }
+      rightColumn={
+        <RosterCollapsibleSection
+          title="Players, Crew & Characters"
+          collapsed={playerRosterCollapsed}
+          onToggleCollapsed={() => setPlayerRosterCollapsed((v) => !v)}
+          collapseExpandLabel="Expand player roster"
+          collapseCollapseLabel="Collapse player roster"
+          headerExtra={inviteHeaderExtra}
+          S={S}
+        >
             <>
-              {canManageCrew ? (
-                <div
-                  style={{
-                    marginTop: 12,
-                    marginBottom: 14,
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 12,
-                  }}
-                >
-                  {(campaign.crews || []).length === 0 && !crewForm ? (
-                    <div style={{ fontSize: 12, color: "var(--text-dim)" }}>
-                      No crew yet.{" "}
-                      <button
-                        type="button"
-                        onClick={startCrewCreate}
-                        style={{
-                          ...S.btnPrimary,
-                          fontSize: 10,
-                          padding: "2px 8px",
-                        }}
-                      >
-                        + New Crew
-                      </button>
-                    </div>
-                  ) : null}
-                  {(campaign.crews || []).map((crew) => {
-                    const crewOpen = !!collapsedCrewIds[crew.id];
-                    const memberNames = (crew.members || [])
-                      .map((m) => m.true_name || m.alias || `#${m.id}`)
-                      .join(", ");
-                    return (
-                      <div
-                        key={crew.id}
-                        style={{
-                          width: "100%",
-                          boxSizing: "border-box",
-                          border: "1px solid #4338ca",
-                          borderRadius: 8,
-                          padding: 12,
-                          background: "#0d1117",
-                        }}
-                      >
-                        <div
-                          role="button"
-                          tabIndex={0}
-                          onClick={() =>
-                            setCollapsedCrewIds((p) => ({
-                              ...p,
-                              [crew.id]: !p[crew.id],
-                            }))
-                          }
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.preventDefault();
-                              setCollapsedCrewIds((p) => ({
-                                ...p,
-                                [crew.id]: !p[crew.id],
-                              }));
-                            }
-                          }}
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            alignItems: "center",
-                            gap: 8,
-                            flexWrap: "wrap",
-                            cursor: "pointer",
-                          }}
-                          title={crewOpen ? "Collapse crew" : "Expand crew"}
-                        >
-                          <div
-                            style={{
-                              display: "flex",
-                              gap: 8,
-                              alignItems: "center",
-                              minWidth: 0,
-                            }}
-                          >
-                            <HomeCardThumb
-                              src={null}
-                              label={crew.name}
-                              style={{
-                                width: 48,
-                                height: 48,
-                                borderRadius: 6,
-                                border: "1px solid #374151",
-                                background: "#111827",
-                                flexShrink: 0,
-                              }}
-                            />
-                            <span
-                              style={{
-                                fontWeight: "bold",
-                                color: "#a78bfa",
-                                fontSize: 12,
-                              }}
-                            >
-                              Crew · {crew.name}
-                            </span>
-                          </div>
-                          <span
-                            style={{
-                              ...S.btnGhost,
-                              fontSize: 10,
-                              padding: "2px 8px",
-                            }}
-                          >
-                            {crewOpen ? "▾" : "▸"}
-                          </span>
-                        </div>
-                        {crewOpen ? (
-                          <div style={{ marginTop: 10, fontSize: 11 }}>
-                            <div
-                              style={{
-                                display: "flex",
-                                gap: 12,
-                                color: "var(--text-muted)",
-                                flexWrap: "wrap",
-                                marginBottom: 6,
-                              }}
-                            >
-                              <span>Tier {crew.level ?? 0}</span>
-                              <span>Hold: {crew.hold || "—"}</span>
-                              <span>Rep: {crew.rep ?? 0}</span>
-                              <span>Coin: {crew.coin ?? 0}</span>
-                              <span>Wanted: {crew.wanted_level ?? 0}</span>
-                            </div>
-                            {crew.description ? (
-                              <div
-                                style={{
-                                  color: "var(--text-dim)",
-                                  marginBottom: 6,
-                                }}
-                              >
-                                {crew.description}
-                              </div>
-                            ) : null}
-                            {memberNames ? (
-                              <div style={{ color: "var(--text-dim)" }}>
-                                Members: {memberNames}
-                              </div>
-                            ) : null}
-                            <div
-                              style={{
-                                display: "flex",
-                                gap: 8,
-                                marginTop: 8,
-                                flexWrap: "wrap",
-                              }}
-                            >
-                              <button
-                                type="button"
-                                style={{ ...S.btnGhost, fontSize: 10 }}
-                                onClick={() => startCrewEdit(crew)}
-                              >
-                                Edit
-                              </button>
-                              {isGM ? (
-                                <button
-                                  type="button"
-                                  style={{
-                                    ...S.btn,
-                                    fontSize: 10,
-                                    background: "#7f1d1d",
-                                    color: "#fca5a5",
-                                  }}
-                                  onClick={() => handleCrewDelete(crew.id)}
-                                >
-                                  Del
-                                </button>
-                              ) : null}
-                            </div>
-                          </div>
-                        ) : null}
-                      </div>
-                    );
-                  })}
+              {rosterActionError ? (
+                <div style={{ ...S.err, marginTop: 10, fontSize: 11 }}>
+                  {rosterActionError}
                 </div>
+              ) : null}
+              {canManageCrew ? (
+                <RosterCrewInlineSection
+                  campaign={campaign}
+                  crews={campaign.crews || []}
+                  S={S}
+                  onRefresh={onRefresh}
+                  onError={setRosterActionError}
+                  canManageCrew={canManageCrew}
+                  crewForm={crewForm}
+                  startCrewCreate={startCrewCreate}
+                  crewError={crewError}
+                />
               ) : null}
 
               {crewForm ? (
@@ -1142,14 +536,7 @@ export default function CampaignRosterPanels({
                     </div>
                     <div className="home-card-grid">
                       {pcEntries.map(({ ch, name }) => {
-                        const meta = charMetaById.get(ch.id) || {};
                         const pcExpanded = expandedPcId === ch.id;
-                        const canUnassign =
-                          (meta.role === "GM" &&
-                            user?.id === campaign.gm?.id) ||
-                          (meta.role === "Player" &&
-                            ((isGM && meta.user?.id !== campaign.gm?.id) ||
-                              meta.user?.id === user?.id));
                         return (
                           <div className="session-roster-cell" key={ch.id}>
                             <SessionPcToken
@@ -1158,111 +545,43 @@ export default function CampaignRosterPanels({
                               isExpanded={pcExpanded}
                               onToggleExpand={() => togglePcExpand(ch.id)}
                             />
-                            {pcExpanded ? (
-                              <div
-                                className="session-pc-expand-panel"
-                                style={expandPanelChrome}
-                              >
-                                <button
-                                  type="button"
-                                  className="session-expand-close"
-                                  aria-label="Close PC panel"
-                                  title="Close"
-                                  onClick={() => setExpandedPcId(null)}
-                                >
-                                  ×
-                                </button>
-                                <div
-                                  style={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: 8,
-                                    flexWrap: "wrap",
-                                    marginBottom: 8,
-                                  }}
-                                >
-                                  <span
-                                    style={{
-                                      fontWeight: "bold",
-                                      color: "var(--hftf-text-cream)",
-                                      fontSize: 12,
-                                    }}
-                                  >
-                                    {meta.user?.username || "—"}
-                                  </span>
-                                  {meta.role ? (
-                                    <RoleBadge role={meta.role} />
-                                  ) : null}
-                                </div>
-                                {typeof onNavigateToCharacter === "function" ? (
-                                  <a
-                                    href={buildRouteHref("character", {
-                                      characterId: ch.id,
-                                    })}
-                                    onClick={(e) =>
-                                      handleSpaNavClick(e, () =>
-                                        onNavigateToCharacter(ch.id),
-                                      )
-                                    }
-                                    style={{
-                                      ...S.btnGhost,
-                                      fontSize: 10,
-                                      display: "inline-block",
-                                      textDecoration: "none",
-                                      marginBottom: 8,
-                                    }}
-                                  >
-                                    Open sheet
-                                  </a>
-                                ) : null}
-                                <div
-                                  style={{
-                                    display: "flex",
-                                    flexWrap: "wrap",
-                                    gap: 6,
-                                    marginTop: 8,
-                                  }}
-                                >
-                                  {canUnassign ? (
-                                    <button
-                                      type="button"
-                                      style={{
-                                        ...S.btn,
-                                        fontSize: 10,
-                                        background: "#7f1d1d",
-                                        color: "#fca5a5",
-                                      }}
-                                      onClick={() => onUnassignCharacter(ch.id)}
-                                    >
-                                      Remove character
-                                    </button>
-                                  ) : null}
-                                  {meta.showRemovePlayer ? (
-                                    <button
-                                      type="button"
-                                      style={{
-                                        ...S.btn,
-                                        fontSize: 10,
-                                        background: "#7f1d1d",
-                                        color: "#fca5a5",
-                                      }}
-                                      onClick={() =>
-                                        onRemovePlayerFromCampaign(
-                                          meta.user.id,
-                                          meta.user.username,
-                                        )
-                                      }
-                                    >
-                                      Remove from campaign
-                                    </button>
-                                  ) : null}
-                                </div>
-                              </div>
-                            ) : null}
                           </div>
                         );
                       })}
                     </div>
+                    {(() => {
+                      if (expandedPcId == null) return null;
+                      const entry = pcEntries.find(
+                        ({ ch }) => ch.id === expandedPcId,
+                      );
+                      if (!entry) return null;
+                      const { ch } = entry;
+                      const meta = charMetaById.get(ch.id) || {};
+                      const full =
+                        fullCharById.get(Number(ch.id)) || ch;
+                      return (
+                        <div className="session-roster-expand-slot">
+                          <RosterPcExpandPanel
+                            character={full}
+                            summaryCharacter={ch}
+                            S={S}
+                            meta={meta}
+                            campaign={campaign}
+                            user={user}
+                            isGM={isGM}
+                            onClose={() => setExpandedPcId(null)}
+                            onNavigateToCharacter={onNavigateToCharacter}
+                            onUnassignCharacter={onUnassignCharacter}
+                            onRemovePlayerFromCampaign={
+                              onRemovePlayerFromCampaign
+                            }
+                            onRefresh={onRefresh}
+                            onCharactersRefresh={onCharactersRefresh}
+                            onError={setRosterActionError}
+                          />
+                        </div>
+                      );
+                    })()}
                   </>
                 )}
               </div>
@@ -1320,94 +639,8 @@ export default function CampaignRosterPanels({
                 </>
               ) : null}
             </>
-          ) : null}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function NpcCampaignExpandPanel({
-  npc,
-  S,
-  onNavigateToNPC,
-  onLeaveFaction,
-  onRemoveFromCampaign,
-  onClose,
-}) {
-  if (!npc) return null;
-  const portraitSrc = getCharacterPortraitSrc(npc);
-  return (
-    <div className="session-npc-expand-panel" style={expandPanelChrome}>
-      <button
-        type="button"
-        className="session-expand-close"
-        aria-label="Close NPC panel"
-        title="Close"
-        onClick={onClose}
-      >
-        ×
-      </button>
-      <div style={{ fontWeight: "bold", fontSize: 13, marginBottom: 4 }}>
-        {npc.name}
-      </div>
-      {npc.stand_name ? (
-        <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 8 }}>
-          Stand: {npc.stand_name}
-        </div>
-      ) : null}
-      {portraitSrc ? (
-        <img
-          src={portraitSrc}
-          alt=""
-          style={{
-            width: 80,
-            height: 80,
-            objectFit: "cover",
-            borderRadius: 6,
-            marginBottom: 8,
-          }}
-          referrerPolicy="no-referrer"
-        />
-      ) : null}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-        {typeof onNavigateToNPC === "function" ? (
-          <a
-            href={buildRouteHref("npcs", { npcId: npc.id })}
-            onClick={(e) =>
-              handleSpaNavClick(e, () => onNavigateToNPC(npc.id))
-            }
-            style={{
-              ...S.btnGhost,
-              fontSize: 10,
-              textDecoration: "none",
-            }}
-          >
-            Open NPC
-          </a>
-        ) : null}
-        {onLeaveFaction ? (
-          <button
-            type="button"
-            style={{ ...S.btnGhost, fontSize: 10 }}
-            onClick={onLeaveFaction}
-          >
-            Leave faction
-          </button>
-        ) : null}
-        <button
-          type="button"
-          style={{
-            ...S.btn,
-            fontSize: 10,
-            background: "#7f1d1d",
-            color: "#fca5a5",
-          }}
-          onClick={onRemoveFromCampaign}
-        >
-          Remove from campaign
-        </button>
-      </div>
-    </div>
+        </RosterCollapsibleSection>
+      }
+    />
   );
 }

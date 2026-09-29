@@ -879,7 +879,26 @@ function CampaignDetail({
     setCampaignCropOpen(false);
   }, [campaignEditImagePreview]);
   const [actionError, setActionError] = useState(null);
+  const [rosterActionError, setRosterActionError] = useState(null);
   const [dragOverFactionKey, setDragOverFactionKey] = useState(null);
+
+  const rosterCharacters = useMemo(() => {
+    if (!campaign?.id) return [];
+    const cid = Number(campaign.id);
+    return (myCharacters || []).filter((c) => {
+      const cc = c?.campaign;
+      return Number(cc) === cid || Number(cc?.id) === cid;
+    });
+  }, [myCharacters, campaign?.id]);
+
+  const refreshRosterCharacters = useCallback(async () => {
+    try {
+      const list = await characterAPI.getCharacters();
+      setMyCharacters(Array.isArray(list) ? list : []);
+    } catch {
+      /* keep prior list */
+    }
+  }, []);
 
   const factionEditFiredRef = useRef(false);
   useEffect(() => {
@@ -1045,6 +1064,52 @@ function CampaignDetail({
       onRefresh();
     } catch (err) {
       setActionError(err.message);
+    }
+  };
+
+  /** Faction card +: create NPC into this faction (prompt when campaign empty / always create). */
+  const handleCreateNpcForFaction = async (factionId) => {
+    if (!campaign?.id || factionId == null) return null;
+    setActionError(null);
+    const emptyCampaign = !(campaignNPCs && campaignNPCs.length);
+    const name = window.prompt(
+      emptyCampaign
+        ? "No NPCs in this campaign yet. Name for a new NPC in this faction?"
+        : "Name for a new NPC in this faction?",
+    );
+    if (name == null) return null;
+    const trimmed = String(name).trim();
+    if (!trimmed) {
+      setActionError("NPC name is required.");
+      return null;
+    }
+    try {
+      const created = await npcAPI.createNPC({
+        name: trimmed,
+        campaign: campaign.id,
+        faction: factionId,
+        playbook: "STAND",
+        stand_coin_stats: {
+          POWER: "D",
+          SPEED: "D",
+          RANGE: "D",
+          DURABILITY: "D",
+          PRECISION: "D",
+          DEVELOPMENT: "D",
+        },
+        notes: "",
+        inventory_notes: "",
+      });
+      await onRefresh?.();
+      return created?.id ?? null;
+    } catch (err) {
+      const msg =
+        err?.message ||
+        err?.detail ||
+        (Array.isArray(err?.name) ? err.name[0] : null) ||
+        "Failed to create NPC.";
+      setActionError(typeof msg === "string" ? msg : "Failed to create NPC.");
+      return null;
     }
   };
 
@@ -1776,6 +1841,7 @@ function CampaignDetail({
         onRemovePlayerFromCampaign={handleRemovePlayerFromCampaign}
         onWithdrawInvitation={handleWithdrawInvitation}
         onAssignNPCById={handleAssignNPCById}
+        onCreateNpcForFaction={handleCreateNpcForFaction}
         factionForm={factionForm}
         setFactionForm={setFactionForm}
         factionError={factionError}
@@ -1804,6 +1870,10 @@ function CampaignDetail({
         setCrewForm={setCrewForm}
         setCrewError={setCrewError}
         onRefresh={onRefresh}
+        characters={rosterCharacters}
+        onCharactersRefresh={refreshRosterCharacters}
+        rosterActionError={rosterActionError}
+        setRosterActionError={setRosterActionError}
       />
 
       {/* Assign Character (GM or player who is in the campaign) */}
@@ -2506,6 +2576,8 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [creating, setCreating] = useState(false);
+  /** Collapsed by default: only live/newest session shown when many episodes. */
+  const [sessionsListExpanded, setSessionsListExpanded] = useState(false);
   const [recordsModalSession, setRecordsModalSession] = useState(null);
   const [busySessionId, setBusySessionId] = useState(null);
   const [clearActiveModalSession, setClearActiveModalSession] = useState(null);
@@ -2563,6 +2635,29 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
   };
 
   const activeId = campaignActiveSessionId(campaign);
+
+  /** Live campaign session if any; else most recent list row (API/create puts newest first). */
+  const { featuredSession, olderSessions } = useMemo(() => {
+    const list = sessions || [];
+    if (!list.length) {
+      return { featuredSession: null, olderSessions: [] };
+    }
+    const live =
+      activeId != null
+        ? list.find((s) => Number(s.id) === Number(activeId))
+        : null;
+    const featured = live || list[0];
+    const older = list.filter((s) => Number(s.id) !== Number(featured.id));
+    return { featuredSession: featured, olderSessions: older };
+  }, [sessions, activeId]);
+
+  const visibleSessions = useMemo(() => {
+    if (!featuredSession) return [];
+    if (sessionsListExpanded || olderSessions.length === 0) {
+      return [featuredSession, ...olderSessions];
+    }
+    return [featuredSession];
+  }, [featuredSession, olderSessions, sessionsListExpanded]);
 
   const resetClearActiveModal = useCallback(() => {
     setClearActiveModalSession(null);
@@ -3077,6 +3172,24 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
           >
             {creating ? "Creating..." : "+ New Session"}
           </button>
+          {!loading && olderSessions.length > 0 ? (
+            <button
+              type="button"
+              onClick={() => setSessionsListExpanded((v) => !v)}
+              style={{ ...S.btnGhost, fontSize: 11, padding: "4px 10px" }}
+              title={
+                sessionsListExpanded
+                  ? "Hide older sessions"
+                  : `Show ${olderSessions.length} older session${
+                      olderSessions.length === 1 ? "" : "s"
+                    }`
+              }
+            >
+              {sessionsListExpanded
+                ? "Hide older"
+                : `Show ${olderSessions.length} older`}
+            </button>
+          ) : null}
         </div>
         {loading ? (
           <div style={{ color: "var(--text-dim)", padding: "12px 0" }}>
@@ -3088,7 +3201,7 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
           </div>
         ) : (
           <div style={{ marginTop: "4px" }}>
-            {sessions.map((s) => {
+            {visibleSessions.map((s) => {
               const rowEnded = sessionIsEndedForManagementHeader(s);
               const rowLive =
                 activeId != null && Number(activeId) === Number(s.id);
