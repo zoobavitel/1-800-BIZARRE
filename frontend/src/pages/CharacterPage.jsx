@@ -26,6 +26,8 @@ import {
   normalizeListResponse,
   resolveHeritagePkForSave,
   normalizeStashSlots,
+  resolveStashAfterCharacterSave,
+  shouldSkipEmptyCrewStashPatch,
   isImageUploadPayload,
   normalizeHarmObject,
   EMPTY_HARM_SHAPE,
@@ -976,6 +978,7 @@ export default function CharacterPage({
             saved.id,
             saved.true_name || frontend.name,
           );
+        const savedFrontend = transformBackendToFrontend(saved);
         let stashMerged = null;
         if (touches.stash && saved?.id && Array.isArray(frontend.stash)) {
           const crewPk =
@@ -983,20 +986,29 @@ export default function CharacterPage({
               ? parseInt(String(frontend.crewId), 10)
               : NaN;
           if (Number.isFinite(crewPk) && crewPk > 0) {
-            try {
-              const crewUpdated = await crewAPI.patchCrew(crewPk, {
-                stash_slots: normalizeStashSlots(frontend.stash),
-              });
-              stashMerged = Array.isArray(crewUpdated?.stash_slots)
-                ? normalizeStashSlots(crewUpdated.stash_slots)
-                : normalizeStashSlots(frontend.stash);
-            } catch (e) {
-              console.error("Crew stash save failed:", e);
-              stashMerged = normalizeStashSlots(frontend.stash);
+            const localStash = normalizeStashSlots(frontend.stash);
+            if (
+              shouldSkipEmptyCrewStashPatch(localStash, savedFrontend.stash)
+            ) {
+              console.warn(
+                "Crew stash save skipped: local grid empty but server had filled slots (possible UI corruption)",
+              );
+              stashMerged = normalizeStashSlots(savedFrontend.stash);
+            } else {
+              try {
+                const crewUpdated = await crewAPI.patchCrew(crewPk, {
+                  stash_slots: localStash,
+                });
+                stashMerged = Array.isArray(crewUpdated?.stash_slots)
+                  ? normalizeStashSlots(crewUpdated.stash_slots)
+                  : localStash;
+              } catch (e) {
+                console.error("Crew stash save failed:", e);
+                stashMerged = localStash;
+              }
             }
           }
         }
-        const savedFrontend = transformBackendToFrontend(saved);
         const serverEchoesFullHarm =
           saved &&
           Object.prototype.hasOwnProperty.call(saved, "harm_level1_slot2_used");
@@ -1074,12 +1086,12 @@ export default function CharacterPage({
               : (frontend.playbookXpArchetypes ??
                 payload.playbookXpArchetypes ??
                 savedFrontend.playbookXpArchetypes),
-          stash:
-            stashMerged !== null
-              ? stashMerged
-              : normalizeStashSlots(
-                  saved?.stash_slots ?? savedFrontend.stash ?? frontend.stash,
-                ),
+          // Same class of bug as coin: empty character stash_slots must not beat crew effective_stash_slots.
+          stash: resolveStashAfterCharacterSave({
+            stashMerged,
+            savedFrontend,
+            frontend,
+          }),
           // Prefer payload ∪ echo so a weak/partial PATCH response cannot blank local rows.
           inventory: (() => {
             const fromPayload = normalizeCharacterInventory(
