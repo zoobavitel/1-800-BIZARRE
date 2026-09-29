@@ -15295,9 +15295,7 @@ const CharacterSheetWrapper = ({
                         >
                           {trainBusyTrack === key
                             ? "…"
-                            : downtimeTrainedTracks.includes(key)
-                              ? "Trained"
-                              : `Train (+${trainXpAmountForTrack(key)})`}
+                            : `Train (+${trainXpAmountForTrack(key)})`}
                         </button>
                       ) : null}
                       {canTakeAdvance && canEditSheet && character?.id ? (
