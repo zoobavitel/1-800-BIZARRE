@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   experienceTrackerAPI,
   normalizeListResponse,
+  resolveMediaUrl,
   rollAPI,
   sessionAPI,
 } from "../../features/character-sheet/services/api";
@@ -9,9 +10,30 @@ import {
   SESSION_SHELL_TABS,
   SessionShellTabBar,
 } from "../session/sessionShellUi";
+import HomeCardThumb from "../home/HomeCardThumb";
+import { getCharacterPortraitSrc } from "../../utils/homeAvatar";
 import CampaignHarmArmorGrid from "./CampaignHarmArmorGrid";
 
 const lbl = { fontSize: 10, color: "#9ca3af", textTransform: "uppercase" };
+
+const PC_COLUMN_GRID = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+  gap: 12,
+  alignItems: "start",
+  maxHeight: 420,
+  overflowY: "auto",
+};
+
+const PC_COLUMN_CARD = {
+  border: "1px solid #374151",
+  borderRadius: 6,
+  padding: "8px 10px",
+  background: "#0b1220",
+  fontSize: 11,
+  color: "#d1d5db",
+  minWidth: 0,
+};
 
 function campaignActiveSessionId(campaign) {
   const a = campaign?.active_session;
@@ -21,35 +43,153 @@ function campaignActiveSessionId(campaign) {
   return Number.isFinite(n) ? n : null;
 }
 
-function formatRollLine(r) {
+function pcDisplayName(ch) {
+  return ch?.true_name || ch?.name || ch?.alias || `PC ${ch?.id ?? "?"}`;
+}
+
+function sortPcsByName(characters) {
+  return [...(characters || [])].sort((a, b) =>
+    String(pcDisplayName(a)).localeCompare(String(pcDisplayName(b)), undefined, {
+      sensitivity: "base",
+    }),
+  );
+}
+
+function characterIdFromRoll(r) {
+  if (r?.character != null && typeof r.character === "object") {
+    const n = Number(r.character.id);
+    return Number.isFinite(n) ? n : null;
+  }
+  if (r?.character != null && r.character !== "") {
+    const n = Number(r.character);
+    return Number.isFinite(n) ? n : null;
+  }
+  if (r?.character_id != null) {
+    const n = Number(r.character_id);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+function characterIdFromXp(row) {
+  if (row?.character != null && typeof row.character === "object") {
+    const n = Number(row.character.id);
+    return Number.isFinite(n) ? n : null;
+  }
+  if (row?.character != null && row.character !== "") {
+    const n = Number(row.character);
+    return Number.isFinite(n) ? n : null;
+  }
+  if (row?.character_id != null) {
+    const n = Number(row.character_id);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+/** Roll line without leading actor (used inside a PC column). */
+function formatRollLineBody(r) {
   const rt = String(r.roll_type || "").toUpperCase();
   const diceStr = [].concat(r.results || []).join(", ");
   const outcomeStr = String(r.outcome || "").trim();
-  const actor =
-    String(r.rolled_by_username || "").trim() ||
-    String(r.character_name || "").trim() ||
-    String(r.character ?? "") ||
-    "—";
   if (rt === "FORTUNE") {
     const mid = String(r.fortune_public_label || r.goal_label || "").trim();
-    return `${actor} · Fortune${mid ? ` · ${mid}` : ""} · ${diceStr} → ${outcomeStr}`;
+    return `Fortune${mid ? ` · ${mid}` : ""} · ${diceStr} → ${outcomeStr}`;
   }
   const action = String(r.action_name || "").trim() || "Roll";
-  return `${actor} · ${action} · ${diceStr} → ${outcomeStr}`;
+  return `${action} · ${diceStr} → ${outcomeStr}`;
 }
 
-function formatXpLine(row) {
-  const who =
-    row.character_name ||
-    row.character?.true_name ||
-    row.character?.name ||
-    (row.character != null ? `PC ${row.character}` : "—");
+/** XP line without leading character name. */
+function formatXpLineBody(row) {
   const trig = String(row.trigger || row.source || row.kind || "XP").trim();
   const amt = row.amount != null ? `+${row.amount}` : "+1";
   const sess =
     row.session_name ||
     (row.session != null ? `Session ${row.session}` : "");
-  return `${who} · ${trig} ${amt}${sess ? ` · ${sess}` : ""}`;
+  return `${trig} ${amt}${sess ? ` · ${sess}` : ""}`;
+}
+
+function formatSignedRep(v) {
+  if (v == null || v === "") return null;
+  const n = Number(v);
+  if (!Number.isFinite(n)) return String(v);
+  if (n > 0) return `+${n}`;
+  return String(n);
+}
+
+function factionThumbSrc(facOrRel) {
+  if (!facOrRel || typeof facOrRel !== "object") return null;
+  const fromUpload = resolveMediaUrl(
+    facOrRel.faction_image || facOrRel.image || "",
+  );
+  if (fromUpload) return fromUpload;
+  const url = String(
+    facOrRel.faction_image_url ?? facOrRel.image_url ?? "",
+  ).trim();
+  return url || null;
+}
+
+function PcColumnCard({ title, children }) {
+  return (
+    <div style={PC_COLUMN_CARD}>
+      <div style={{ fontWeight: 700, marginBottom: 6, color: "#f3f4f6" }}>
+        {title}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function StandingRow({ thumbSrc, label, value }) {
+  const signed = formatSignedRep(value);
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        marginBottom: 6,
+        minWidth: 0,
+      }}
+    >
+      <HomeCardThumb
+        src={thumbSrc}
+        label={label}
+        style={{
+          width: 28,
+          height: 28,
+          borderRadius: 4,
+          overflow: "hidden",
+          flexShrink: 0,
+          background: "#111827",
+          border: "1px solid #374151",
+          fontSize: 12,
+        }}
+      />
+      <div style={{ flex: 1, minWidth: 0, lineHeight: 1.35 }}>
+        <div
+          style={{
+            color: "#d1d5db",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {label}
+        </div>
+      </div>
+      <div
+        style={{
+          flexShrink: 0,
+          color: "#9ca3af",
+          fontVariantNumeric: "tabular-nums",
+        }}
+      >
+        {signed != null ? signed : "—"}
+      </div>
+    </div>
+  );
 }
 
 /**
@@ -60,10 +200,12 @@ export default function CampaignShellPanels({
   campaign,
   S,
   characters = [],
+  npcs = [],
   children,
   onOpenSession,
   onCharactersRefresh,
   isGM = false,
+  userId = null,
 }) {
   const [shellTab, setShellTab] = useState("rosters");
   const [rosterShowNpc, setRosterShowNpc] = useState(true);
@@ -77,6 +219,7 @@ export default function CampaignShellPanels({
   const [harmError, setHarmError] = useState(null);
 
   const activeId = campaignActiveSessionId(campaign);
+  const sortedPcs = useMemo(() => sortPcsByName(characters), [characters]);
 
   useEffect(() => {
     if (!campaign?.id) return undefined;
@@ -130,6 +273,7 @@ export default function CampaignShellPanels({
                 const rows = normalizeListResponse(data);
                 return rows.map((r) => ({
                   ...r,
+                  character_id: r.character_id ?? c.id,
                   character_name:
                     r.character_name ||
                     c.true_name ||
@@ -165,6 +309,108 @@ export default function CampaignShellPanels({
   useEffect(() => {
     void loadLedgers();
   }, [loadLedgers]);
+
+  const rollsByPc = useMemo(() => {
+    const map = new Map();
+    for (const ch of sortedPcs) {
+      map.set(Number(ch.id), []);
+    }
+    const other = [];
+    for (const r of rolls || []) {
+      const cid = characterIdFromRoll(r);
+      if (cid != null && map.has(cid)) {
+        map.get(cid).push(r);
+      } else {
+        other.push(r);
+      }
+    }
+    return { map, other };
+  }, [rolls, sortedPcs]);
+
+  const xpByPc = useMemo(() => {
+    const map = new Map();
+    for (const ch of sortedPcs) {
+      map.set(Number(ch.id), []);
+    }
+    for (const row of xpRows || []) {
+      const cid = characterIdFromXp(row);
+      if (cid != null && map.has(cid)) {
+        map.get(cid).push(row);
+      }
+    }
+    return map;
+  }, [xpRows, sortedPcs]);
+
+  const factionByName = useMemo(() => {
+    const m = new Map();
+    for (const f of campaign?.factions || []) {
+      const key = String(f?.name || "")
+        .trim()
+        .toLowerCase();
+      if (key) m.set(key, f);
+    }
+    return m;
+  }, [campaign?.factions]);
+
+  const npcByName = useMemo(() => {
+    const m = new Map();
+    for (const n of npcs || []) {
+      const key = String(n?.name || "")
+        .trim()
+        .toLowerCase();
+      if (key) m.set(key, n);
+    }
+    return m;
+  }, [npcs]);
+
+  const repColumns = useMemo(() => {
+    const crews = campaign?.crews || [];
+    return sortedPcs.map((full) => {
+      const name = pcDisplayName(full);
+      const crewId = full.crew ?? full.crew_id;
+      const crew = crews.find((c) => Number(c.id) === Number(crewId));
+      const standing = [];
+
+      const rels = Array.isArray(crew?.faction_relationships)
+        ? crew.faction_relationships
+        : [];
+      for (const rel of rels) {
+        if (rel.reputation_value == null && !isGM) continue;
+        standing.push({
+          key: `crew-fac-${rel.id ?? rel.faction_id}`,
+          kind: "faction",
+          label: rel.faction_name || `Faction ${rel.faction_id}`,
+          value: rel.reputation_value,
+          thumbSrc: factionThumbSrc(rel),
+        });
+      }
+
+      const status =
+        full.reputation_status && typeof full.reputation_status === "object"
+          ? full.reputation_status
+          : {};
+      for (const [rawName, rawVal] of Object.entries(status)) {
+        const label = String(rawName || "").trim();
+        if (!label) continue;
+        const key = label.toLowerCase();
+        const fac = factionByName.get(key);
+        const npc = !fac ? npcByName.get(key) : null;
+        standing.push({
+          key: `status-${key}`,
+          kind: fac ? "faction" : npc ? "npc" : "other",
+          label,
+          value: rawVal,
+          thumbSrc: fac
+            ? factionThumbSrc(fac)
+            : npc
+              ? getCharacterPortraitSrc(npc)
+              : null,
+        });
+      }
+
+      return { id: full.id, name, standing };
+    });
+  }, [sortedPcs, campaign?.crews, factionByName, npcByName, isGM]);
 
   const scopeSelect = (
     <div
@@ -218,28 +464,6 @@ export default function CampaignShellPanels({
       ) : null}
     </div>
   );
-
-  const repRows = useMemo(() => {
-    return (characters || []).map((full) => {
-      const name = full.true_name || full.name || `PC ${full.id}`;
-      const crewId = full.crew ?? full.crew_id;
-      const crews = campaign?.crews || [];
-      const crew = crews.find((c) => Number(c.id) === Number(crewId));
-      const rels = Array.isArray(crew?.faction_relationships)
-        ? crew.faction_relationships
-            .map(
-              (r) =>
-                `${r.faction_name || r.faction_id}: ${r.reputation_value}`,
-            )
-            .join(" · ")
-        : "";
-      return {
-        id: full.id,
-        name,
-        body: rels || (crew ? `Crew: ${crew.name || crew.id}` : "—"),
-      };
-    });
-  }, [characters, campaign?.crews]);
 
   const rosterChildren =
     typeof children === "function"
@@ -310,38 +534,50 @@ export default function CampaignShellPanels({
           {ledgerError ? <div style={S.err}>{ledgerError}</div> : null}
           {ledgerBusy ? (
             <div style={{ fontSize: 12, color: "#6b7280" }}>Loading…</div>
+          ) : sortedPcs.length === 0 && rollsByPc.other.length === 0 ? (
+            <div style={{ fontSize: 12, color: "#6b7280" }}>No rolls.</div>
           ) : (
-            <ul
-              style={{
-                margin: 0,
-                padding: 0,
-                listStyle: "none",
-                display: "grid",
-                gap: 6,
-                maxHeight: 420,
-                overflowY: "auto",
-              }}
-            >
-              {rolls.length === 0 ? (
-                <li style={{ color: "#6b7280", fontSize: 12 }}>No rolls.</li>
-              ) : (
-                rolls.map((r) => (
-                  <li
-                    key={r.id}
-                    style={{
-                      border: "1px solid #374151",
-                      borderRadius: 6,
-                      padding: "8px 10px",
-                      background: "#0b1220",
-                      fontSize: 11,
-                      color: "#d1d5db",
-                    }}
-                  >
-                    {formatRollLine(r)}
-                  </li>
-                ))
-              )}
-            </ul>
+            <div style={PC_COLUMN_GRID}>
+              {sortedPcs.map((ch) => {
+                const rows = rollsByPc.map.get(Number(ch.id)) || [];
+                return (
+                  <PcColumnCard key={ch.id} title={pcDisplayName(ch)}>
+                    {rows.length === 0 ? (
+                      <div style={{ color: "#6b7280" }}>No rolls.</div>
+                    ) : (
+                      rows.map((r) => (
+                        <div
+                          key={r.id}
+                          style={{
+                            marginBottom: 4,
+                            lineHeight: 1.4,
+                            color: "#d1d5db",
+                          }}
+                        >
+                          {formatRollLineBody(r)}
+                        </div>
+                      ))
+                    )}
+                  </PcColumnCard>
+                );
+              })}
+              {rollsByPc.other.length > 0 ? (
+                <PcColumnCard title="Other">
+                  {rollsByPc.other.map((r) => (
+                    <div
+                      key={r.id}
+                      style={{
+                        marginBottom: 4,
+                        lineHeight: 1.4,
+                        color: "#d1d5db",
+                      }}
+                    >
+                      {formatRollLineBody(r)}
+                    </div>
+                  ))}
+                </PcColumnCard>
+              ) : null}
+            </div>
           )}
         </div>
       ) : null}
@@ -357,38 +593,34 @@ export default function CampaignShellPanels({
           {ledgerError ? <div style={S.err}>{ledgerError}</div> : null}
           {ledgerBusy ? (
             <div style={{ fontSize: 12, color: "#6b7280" }}>Loading…</div>
+          ) : sortedPcs.length === 0 ? (
+            <div style={{ fontSize: 12, color: "#6b7280" }}>No XP rows.</div>
           ) : (
-            <ul
-              style={{
-                margin: 0,
-                padding: 0,
-                listStyle: "none",
-                display: "grid",
-                gap: 6,
-                maxHeight: 420,
-                overflowY: "auto",
-              }}
-            >
-              {xpRows.length === 0 ? (
-                <li style={{ color: "#6b7280", fontSize: 12 }}>No XP rows.</li>
-              ) : (
-                xpRows.map((r) => (
-                  <li
-                    key={r.id}
-                    style={{
-                      border: "1px solid #374151",
-                      borderRadius: 6,
-                      padding: "8px 10px",
-                      background: "#0b1220",
-                      fontSize: 11,
-                      color: "#d1d5db",
-                    }}
-                  >
-                    {formatXpLine(r)}
-                  </li>
-                ))
-              )}
-            </ul>
+            <div style={PC_COLUMN_GRID}>
+              {sortedPcs.map((ch) => {
+                const rows = xpByPc.get(Number(ch.id)) || [];
+                return (
+                  <PcColumnCard key={ch.id} title={pcDisplayName(ch)}>
+                    {rows.length === 0 ? (
+                      <div style={{ color: "#6b7280" }}>No XP.</div>
+                    ) : (
+                      rows.map((r) => (
+                        <div
+                          key={r.id}
+                          style={{
+                            marginBottom: 4,
+                            lineHeight: 1.4,
+                            color: "#d1d5db",
+                          }}
+                        >
+                          {formatXpLineBody(r)}
+                        </div>
+                      ))
+                    )}
+                  </PcColumnCard>
+                );
+              })}
+            </div>
           )}
         </div>
       ) : null}
@@ -397,14 +629,17 @@ export default function CampaignShellPanels({
         <div style={S.card}>
           <span style={S.sectionLbl}>Harm / Armor</span>
           <p style={{ fontSize: 11, color: "#6b7280", margin: "4px 0 10px" }}>
-            Live compact harm tables for campaign PCs (grid). Edits save to the
-            character sheet.
+            Live compact harm tables for campaign PCs (grid).{" "}
+            {isGM
+              ? "Edits save to the character sheet."
+              : "You can edit your own PC; others are view-only. Edits save to the character sheet."}
           </p>
           {harmError ? <div style={S.err}>{harmError}</div> : null}
           <CampaignHarmArmorGrid
             characters={characters}
             S={S}
-            readOnly={!isGM}
+            isGM={isGM}
+            userId={userId}
             onRefresh={onCharactersRefresh}
             onError={setHarmError}
           />
@@ -415,37 +650,31 @@ export default function CampaignShellPanels({
         <div style={S.card}>
           <span style={S.sectionLbl}>Reputation</span>
           <p style={{ fontSize: 11, color: "#6b7280", margin: "4px 0 10px" }}>
-            Crew faction standing from current sheets (not session-scoped).
+            Crew faction and personal standing from current sheets (not
+            session-scoped).
           </p>
-          <ul
-            style={{
-              margin: 0,
-              padding: 0,
-              listStyle: "none",
-              display: "grid",
-              gap: 8,
-            }}
-          >
-            {repRows.length === 0 ? (
-              <li style={{ color: "#6b7280", fontSize: 12 }}>No PCs.</li>
-            ) : (
-              repRows.map((r) => (
-                <li
-                  key={r.id}
-                  style={{
-                    border: "1px solid #374151",
-                    borderRadius: 6,
-                    padding: "8px 10px",
-                    background: "#0b1220",
-                    fontSize: 11,
-                  }}
-                >
-                  <div style={{ fontWeight: 700, marginBottom: 4 }}>{r.name}</div>
-                  <div style={{ color: "#9ca3af", lineHeight: 1.4 }}>{r.body}</div>
-                </li>
-              ))
-            )}
-          </ul>
+          {repColumns.length === 0 ? (
+            <div style={{ fontSize: 12, color: "#6b7280" }}>No PCs.</div>
+          ) : (
+            <div style={{ ...PC_COLUMN_GRID, maxHeight: undefined }}>
+              {repColumns.map((col) => (
+                <PcColumnCard key={col.id} title={col.name}>
+                  {col.standing.length === 0 ? (
+                    <div style={{ color: "#6b7280" }}>—</div>
+                  ) : (
+                    col.standing.map((row) => (
+                      <StandingRow
+                        key={row.key}
+                        thumbSrc={row.thumbSrc}
+                        label={row.label}
+                        value={row.value}
+                      />
+                    ))
+                  )}
+                </PcColumnCard>
+              ))}
+            </div>
+          )}
         </div>
       ) : null}
     </>
