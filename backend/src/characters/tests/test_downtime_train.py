@@ -58,7 +58,8 @@ class DowntimeTrainTests(APITestCase):
         self.assertEqual(data["amount"], 1)
         self.assertEqual(data["track"], "insight")
         self.assertEqual(data["new_total"], 1)
-        self.assertIn("insight", data["downtime_trained_tracks"])
+        # Before any score completes, phase list stays open (no downtime session UI).
+        self.assertEqual(data["downtime_trained_tracks"], [])
         self.character.refresh_from_db()
         self.assertEqual(self.character.xp_clocks["insight"], 1)
         self.assertTrue(
@@ -124,6 +125,13 @@ class DowntimeTrainTests(APITestCase):
         self.assertEqual(res.json()["amount"], 2)
 
     def test_once_per_track_per_phase(self):
+        """After a score completes, each track trains once until the next score."""
+        Session.objects.create(
+            campaign=self.campaign,
+            name="Prior score",
+            status="COMPLETED",
+            session_date=timezone.now() - timezone.timedelta(days=1),
+        )
         self.client.force_authenticate(user=self.player)
         first = self.client.post(
             f"/api/characters/{self.character.id}/train/",
@@ -146,8 +154,57 @@ class DowntimeTrainTests(APITestCase):
         )
         self.assertEqual(other.status_code, 200, other.content)
 
+    def test_train_open_before_first_completed_score(self):
+        """No downtime session mode — tracks stay available before any score ends."""
+        self.client.force_authenticate(user=self.player)
+        first = self.client.post(
+            f"/api/characters/{self.character.id}/train/",
+            {"track": "insight"},
+            format="json",
+        )
+        self.assertEqual(first.status_code, 200, first.content)
+        again = self.client.post(
+            f"/api/characters/{self.character.id}/train/",
+            {"track": "insight"},
+            format="json",
+        )
+        self.assertEqual(again.status_code, 200, again.content)
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.xp_clocks["insight"], 2)
+
+    def test_live_session_bounds_train_before_first_completed_score(self):
+        """During a live score (before any COMPLETED), once per track per session."""
+        live = Session.objects.create(
+            campaign=self.campaign,
+            name="Live score",
+            status="ACTIVE",
+            session_date=timezone.now(),
+        )
+        self.campaign.active_session = live
+        self.campaign.save(update_fields=["active_session"])
+        self.client.force_authenticate(user=self.player)
+        first = self.client.post(
+            f"/api/characters/{self.character.id}/train/",
+            {"track": "resolve"},
+            format="json",
+        )
+        self.assertEqual(first.status_code, 200, first.content)
+        second = self.client.post(
+            f"/api/characters/{self.character.id}/train/",
+            {"track": "resolve"},
+            format="json",
+        )
+        self.assertEqual(second.status_code, 400)
+        self.assertEqual(second.json().get("code"), "already_trained")
+
     def test_all_trainable_tracks_same_phase(self):
         """Each track trains once per phase; others stay available."""
+        Session.objects.create(
+            campaign=self.campaign,
+            name="Prior score",
+            status="COMPLETED",
+            session_date=timezone.now() - timezone.timedelta(days=1),
+        )
         self.client.force_authenticate(user=self.player)
         trained = []
         for track in ("insight", "prowess", "resolve", "heritage", "playbook"):
