@@ -300,7 +300,7 @@ export default function CampaignRosterPanels({
                     marginBottom: 4,
                   }}
                 >
-                  Drag NPCs between factions. Counts reflect all campaign NPCs.
+                  Drag strip thumbs onto another faction to reassign. Click a thumb for Leave faction / Remove from campaign.
                 </div>
                 <div
                   className="home-poc session-roster-tokens"
