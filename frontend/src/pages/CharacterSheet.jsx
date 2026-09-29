@@ -2098,6 +2098,7 @@ const CharacterSheetWrapper = ({
   }, [character?.id, character?.pendingAdvanceCounts, sheetDraftIsDirty]);
 
   useEffect(() => {
+    if (sheetDraftIsDirty) return;
     const trained = character?.downtimeTrainedTracks;
     if (Array.isArray(trained)) {
       setDowntimeTrainedTracks(
@@ -2108,7 +2109,11 @@ const CharacterSheetWrapper = ({
         ),
       );
     }
-  }, [character?.id, character?.downtimeTrainedTracks]);
+  }, [
+    character?.id,
+    character?.downtimeTrainedTracks,
+    sheetDraftIsDirty,
+  ]);
 
   useEffect(() => {
     const plan = character?.advancementPlan;
@@ -15218,7 +15223,7 @@ const CharacterSheetWrapper = ({
                         <button
                           type="button"
                           disabled={
-                            !!trainBusyTrack ||
+                            trainBusyTrack === key ||
                             poolAllocateBusy ||
                             downtimeTrainedTracks.includes(key)
                           }
