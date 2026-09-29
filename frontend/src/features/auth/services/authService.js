@@ -157,6 +157,17 @@ export const authAPI = {
       Array.isArray(data) ? data[0] : (data?.results?.[0] ?? data),
     ),
 
+  // Change password (current + new + confirm)
+  changePassword: ({ old_password, new_password, confirm_password }) =>
+    apiRequest("/user-profiles/change-password/", {
+      method: "POST",
+      body: JSON.stringify({
+        old_password,
+        new_password,
+        confirm_password,
+      }),
+    }),
+
   // Update current user's profile (JSON or multipart when avatarFile present)
   updateProfile: (profileData) => {
     const { multipart, body } = buildProfileBody(profileData);
