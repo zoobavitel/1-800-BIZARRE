@@ -9,7 +9,6 @@ import {
   sessionAPI,
   npcAPI,
   characterAPI,
-  crewAPI,
   factionAPI,
   rollAPI,
   experienceTrackerAPI,
@@ -42,7 +41,6 @@ import {
 } from "../../features/character-sheet/utils/playbookXpTriggerSrd";
 import {
   rosterHasLinkedCrewForCrewSheetFactionUi,
-  standardAbilities,
 } from "../../features/character-sheet/utils/characterUtils";
 import {
   bandLabel,
@@ -61,10 +59,7 @@ import {
   PC_NESTED_TABS,
   SessionShellTabBar,
   NestedTabBar,
-  SessionPortraitThumb,
   SessionHelpTip,
-  entityPortraitSrc,
-  AddNpcStripTile,
   groupSessionNpcsByFaction,
   npcIdsEqual,
   sessionInvolvedNpcIds,
@@ -74,6 +69,9 @@ import {
   SessionNpcToken,
   SessionPcToken,
 } from "./SessionTokenFaces";
+import RosterCrewInlineSection from "../roster/RosterCrewInlineSection";
+import RosterPcExpandPanel from "../roster/RosterPcExpandPanel";
+import RosterNpcExpandEditableTabs from "../roster/RosterNpcExpandEditableTabs";
 import "../../styles/Home.css";
 import "../../styles/SessionTokenCards.css";
 
@@ -1448,9 +1446,6 @@ export default function SessionGMManagementPanels({
   const [goalAssignCharId, setGoalAssignCharId] = useState("");
   const [goalAssignDraft, setGoalAssignDraft] = useState("");
   const [goalAssignMode, setGoalAssignMode] = useState("global");
-  const [crewSavingId, setCrewSavingId] = useState(null);
-  /** Local crew field drafts; reset when `crews` refetch from parent. */
-  const [crewDraftById, setCrewDraftById] = useState({});
   const [manualRollCardOpen, setManualRollCardOpen] = useState(true);
   const [sessionXpCardOpen, setSessionXpCardOpen] = useState(true);
   const [bulkPeSectionCollapsed, setBulkPeSectionCollapsed] = useState(false);
@@ -1476,7 +1471,6 @@ export default function SessionGMManagementPanels({
   const [npcFactionSavingId, setNpcFactionSavingId] = useState(null);
   /** `vuln:<npcId>` or `clk:<progressClockId>` while a roster NPC clock save runs */
   const [npcUiBusyKey, setNpcUiBusyKey] = useState(null);
-  const [collapsedCrewCards, setCollapsedCrewCards] = useState({});
   const [collapsedFactionCards, setCollapsedFactionCards] = useState({});
   const [collapsedPcCards, setCollapsedPcCards] = useState({});
   /** Primary session shell tab (Rosters default). */
@@ -1485,6 +1479,7 @@ export default function SessionGMManagementPanels({
   useEffect(() => {
     if (sessionShellTab === "armor") setSessionShellTab("harm");
     else if (sessionShellTab === "scorecard") setSessionShellTab("xp");
+    else if (sessionShellTab === "crew") setSessionShellTab("rosters");
   }, [sessionShellTab]);
   /** Nested tab id per NPC / PC card when photo-expanded. */
   const [npcNestedTabById, setNpcNestedTabById] = useState({});
@@ -1847,6 +1842,7 @@ export default function SessionGMManagementPanels({
     [session.id, sessionData, setSessionData, onRefresh, setError],
   );
 
+  /** Session rosters list all campaign PCs (no per-session PC involvement API). */
   const campaignChars = useMemo(
     () =>
       campaign?.campaign_characters ||
@@ -3302,28 +3298,6 @@ export default function SessionGMManagementPanels({
 
   useEffect(() => {
     const m = {};
-    for (const c of crews || []) {
-      if (c?.id == null) continue;
-      m[c.id] = {
-        name: c.name ?? "",
-        description: c.description ?? "",
-        notes: c.notes ?? "",
-        level: String(c.level ?? ""),
-        hold: String(c.hold ?? ""),
-        rep: String(c.rep ?? ""),
-        turf: String(c.turf ?? ""),
-        wanted_level: String(c.wanted_level ?? ""),
-        coin: String(c.coin ?? ""),
-        stash: String(c.stash ?? ""),
-        xp: String(c.xp ?? ""),
-        advancement_points: String(c.advancement_points ?? ""),
-      };
-    }
-    setCrewDraftById(m);
-  }, [crews]);
-
-  useEffect(() => {
-    const m = {};
     for (const f of campaign?.factions || []) {
       if (f?.id == null) continue;
       m[f.id] = {
@@ -3342,20 +3316,6 @@ export default function SessionGMManagementPanels({
     }
     setFactionDraftById(m);
   }, [campaign?.factions]);
-
-  const patchCrewSnapshot = async (crewId, partial) => {
-    if (!crewId) return;
-    setCrewSavingId(crewId);
-    setError(null);
-    try {
-      await crewAPI.patchCrew(crewId, partial);
-      onRefresh();
-    } catch (e) {
-      setError(e.message || "Crew update failed");
-    } finally {
-      setCrewSavingId(null);
-    }
-  };
 
   const patchFactionSnapshot = useCallback(async (factionId) => {
     if (!factionId) return;
@@ -3849,17 +3809,19 @@ export default function SessionGMManagementPanels({
   const openNpcPhotoExpand = useCallback(
     async (npc) => {
       if (!npc?.id) return;
+      if (
+        expandedNpcPhotoId === npc.id ||
+        npcIdsEqual(expandedNpcPhotoId, npc.id)
+      ) {
+        setExpandedNpcPhotoId(null);
+        return;
+      }
       setExpandedNpcPhotoId(npc.id);
       setNpcNestedTabById((p) => ({
         ...p,
         [npc.id]: p[npc.id] || "info",
       }));
-      const thin =
-        npc.close_friend == null &&
-        npc.rival == null &&
-        npc.vice == null &&
-        !(npc.trauma && String(npc.trauma).length);
-      if (thin && !npcDetailById[npc.id]) {
+      if (!npcDetailById[npc.id]) {
         try {
           const full = await npcAPI.getNPC(npc.id);
           if (full?.id) {
@@ -3870,7 +3832,28 @@ export default function SessionGMManagementPanels({
         }
       }
     },
-    [npcDetailById],
+    [expandedNpcPhotoId, npcDetailById],
+  );
+
+  const patchNpcExpandFields = useCallback(
+    async (npcId, partial) => {
+      if (!npcId || !partial) return;
+      setNpcUiBusyKey(`edit:${npcId}`);
+      setError(null);
+      try {
+        await npcAPI.patchNPC(npcId, partial);
+        const full = await npcAPI.getNPC(npcId).catch(() => null);
+        if (full?.id) {
+          setNpcDetailById((p) => ({ ...p, [full.id]: full }));
+        }
+        onRefresh?.();
+      } catch (e) {
+        setError(e?.message || "NPC update failed");
+      } finally {
+        setNpcUiBusyKey(null);
+      }
+    },
+    [onRefresh, setError],
   );
 
   const openAddNpcForFaction = useCallback(
@@ -4163,136 +4146,67 @@ export default function SessionGMManagementPanels({
             gap: 8,
             marginBottom: 8,
             paddingRight: 32,
+            flexWrap: "wrap",
           }}
         >
-          <div style={{ width: 120, flexShrink: 0 }}>
-            <SessionNpcToken npc={npc} selected />
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontWeight: "bold", fontSize: 13, color: "#e5e7eb" }}>
+              {npc.name || `NPC ${npc.id}`}
+            </div>
+            {npc.stand_name ? (
+              <div style={{ fontSize: 11, color: "#9ca3af" }}>
+                「{npc.stand_name}」
+              </div>
+            ) : null}
           </div>
-          <button
-            type="button"
-            onClick={() => removeNpcFromSession(npc.id)}
-            style={{ ...S.btnDanger, fontSize: 10, flexShrink: 0 }}
-            disabled={saving}
-            title="Remove this NPC from the session roster"
-          >
-            Remove from session
-          </button>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, flexShrink: 0 }}>
+            {typeof onNavigateToNPC === "function" ? (
+              <a
+                href={buildRouteHref("npcs", { npcId: npc.id })}
+                onClick={(e) =>
+                  handleSpaNavClick(e, () => onNavigateToNPC(npc.id))
+                }
+                style={{
+                  ...S.btnGhost,
+                  fontSize: 10,
+                  textDecoration: "none",
+                }}
+              >
+                Open sheet
+              </a>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => removeNpcFromSession(npc.id)}
+              style={{ ...S.btnDanger, fontSize: 10, flexShrink: 0 }}
+              disabled={saving}
+              title="Remove this NPC from the session roster"
+            >
+              Remove from session
+            </button>
+          </div>
         </div>
         <NestedTabBar
           tabs={NPC_NESTED_TABS}
           active={nestedTab}
           onChange={setNested}
         />
-        {nestedTab === "info" ? (
-          <div style={{ display: "grid", gap: 6, fontSize: 11 }}>
-            <div>
-              <span style={lbl}>Heritage</span>
-              <div style={{ color: "#d1d5db" }}>
-                {npc.heritage || npc.heritage_name || "—"}
-              </div>
-            </div>
-            <div>
-              <span style={lbl}>Close friend</span>
-              <div style={{ color: "#d1d5db" }}>{npc.close_friend || "—"}</div>
-            </div>
-            <div>
-              <span style={lbl}>Rival</span>
-              <div style={{ color: "#d1d5db" }}>{npc.rival || "—"}</div>
-            </div>
-            <div>
-              <span style={lbl}>Vice</span>
-              <div style={{ color: "#d1d5db" }}>{npc.vice || "—"}</div>
-            </div>
-            <div>
-              <span style={lbl}>Trauma</span>
-              <div style={{ color: "#d1d5db" }}>
-                {Array.isArray(npc.trauma)
-                  ? npc.trauma.join(", ") || "—"
-                  : npc.trauma || "—"}
-              </div>
-            </div>
-          </div>
-        ) : null}
-        {nestedTab === "abilities" ? (
-          <div>
-            <div style={lbl}>Abilities</div>
-            <ul style={{ margin: "4px 0 8px", paddingLeft: 16, color: "#9ca3af" }}>
-              {(npc.abilities || []).map((a, i) => (
-                <li key={i}>{(a && a.name) || JSON.stringify(a).slice(0, 40)}</li>
-              ))}
-              {(!npc.abilities || npc.abilities.length === 0) && <li>—</li>}
-            </ul>
-            <div style={lbl}>Premade templates (narrative)</div>
-            <div style={{ fontSize: 10, color: "#6b7280", marginBottom: 6 }}>
-              Pick a name to copy onto the NPC sheet later — no dice.
-            </div>
-            <select
-              style={{ ...S.select, width: "100%", fontSize: 11 }}
-              defaultValue=""
-              onChange={async (e) => {
-                const name = e.target.value;
-                e.target.value = "";
-                if (!name) return;
-                const next = [
-                  ...(Array.isArray(npc.abilities) ? npc.abilities : []),
-                  { name, description: "", type: "standard" },
-                ];
-                try {
-                  await npcAPI.patchNPC(npc.id, { abilities: next });
-                  onRefresh();
-                } catch (err) {
-                  setError(err?.message || "Could not add ability.");
-                }
-              }}
-            >
-              <option value="">+ Add from standard list…</option>
-              {standardAbilities.map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
-          </div>
-        ) : null}
-        {nestedTab === "items" ? (
-          <div>
-            <div style={lbl}>Items / equipment</div>
-            {(() => {
-              const invRows = Array.isArray(npc.inventory)
-                ? npc.inventory
-                : Array.isArray(npc.equipment)
-                  ? npc.equipment
-                  : [];
-              const lines = invRows
-                .map((row) =>
-                  typeof rosterFormatInventoryLine === "function"
-                    ? rosterFormatInventoryLine(row)
-                    : row?.name || String(row),
-                )
-                .filter(Boolean);
-              if (!lines.length) {
-                return (
-                  <p style={{ fontSize: 11, color: "#6b7280", margin: "6px 0" }}>
-                    No inventory or equipment on this NPC.
-                  </p>
-                );
-              }
-              return (
-                <ul
-                  style={{
-                    margin: "6px 0 0",
-                    paddingLeft: 16,
-                    color: "#9ca3af",
-                    fontSize: 11,
-                  }}
-                >
-                  {lines.map((line, i) => (
-                    <li key={`npc-item-${npc.id}-${i}`}>{line}</li>
-                  ))}
-                </ul>
-              );
-            })()}
-          </div>
+        {nestedTab === "info" ||
+        nestedTab === "abilities" ||
+        nestedTab === "items" ? (
+          <RosterNpcExpandEditableTabs
+            activeTab={nestedTab}
+            npc={npc}
+            S={S}
+            busy={
+              saving ||
+              busy ||
+              npcUiBusyKey === `edit:${npc.id}` ||
+              npcUiBusyKey === `vuln:${npc.id}`
+            }
+            equipmentCatalog={equipmentCatalog}
+            onPatch={(partial) => patchNpcExpandFields(npc.id, partial)}
+          />
         ) : null}
         {nestedTab === "more" ? (
           <div>
@@ -4399,21 +4313,6 @@ export default function SessionGMManagementPanels({
                 ))}
               </select>
             </div>
-            <a
-              href={buildRouteHref("npcs", { npcId: npc.id })}
-              onClick={(e) =>
-                handleSpaNavClick(e, () => onNavigateToNPC?.(npc.id))
-              }
-              style={{
-                ...S.btnGhost,
-                fontSize: 10,
-                marginTop: 8,
-                display: "inline-block",
-                textDecoration: "none",
-              }}
-            >
-              Full sheet
-            </a>
           </div>
         ) : null}
         {nestedTab === "clocks" ? (
@@ -4899,22 +4798,18 @@ export default function SessionGMManagementPanels({
         }
       />
       <div style={{ minWidth: 0 }}>
-      {sessionShellTab === "rosters" || sessionShellTab === "crew" ? (
+      {sessionShellTab === "rosters" ? (
       <div
         style={{
           display: "grid",
           gridTemplateColumns:
-            sessionShellTab === "crew"
-              ? "1fr"
-              : rosterShowNpc && rosterShowPc
-                ? "1fr 1fr"
-                : "1fr",
+            rosterShowNpc && rosterShowPc ? "1fr 1fr" : "1fr",
           gap: 16,
           marginBottom: 12,
           alignItems: "start",
         }}
       >
-      {sessionShellTab === "rosters" && rosterShowNpc ? (
+      {rosterShowNpc ? (
       <div style={S.card}>
         <div
           style={{
@@ -4953,31 +4848,6 @@ export default function SessionGMManagementPanels({
               factionsById[String(fid)] ||
               {};
             const name = fac.name || `Faction ${fid}`;
-            const draft = factionDraftById[fid] || {
-              name: name,
-              faction_type: String(fac.faction_type ?? ""),
-              level: String(fac.level ?? 0),
-              hold: String(fac.hold ?? "weak"),
-              reputation: String(fac.reputation ?? 0),
-              notes: String(fac.notes ?? ""),
-              crew_notes: String(fac.crew_notes ?? ""),
-              visible_to_players: !!fac.visible_to_players,
-              players_see_tier: fac.players_see_tier !== false,
-              players_see_hold: fac.players_see_hold !== false,
-              players_see_reputation: fac.players_see_reputation !== false,
-              players_see_notes: fac.players_see_notes !== false,
-              players_see_npcs: fac.players_see_npcs !== false,
-              contacts: JSON.stringify(fac.contacts ?? [], null, 2),
-              inventory: JSON.stringify(fac.inventory ?? [], null, 2),
-              faction_status: JSON.stringify(fac.faction_status ?? {}, null, 2),
-            };
-            const setDraftField = (field, value) => {
-              setFactionDraftById((prev) => ({
-                ...prev,
-                [fid]: { ...(prev[fid] || draft), [field]: value },
-              }));
-              scheduleFactionAutosave(fid);
-            };
             const factionCollapseKey = String(fid);
             const dropKey = String(fid);
             const factionExpanded = !!collapsedFactionCards[factionCollapseKey];
@@ -5007,22 +4877,220 @@ export default function SessionGMManagementPanels({
                   onNpcDragBegin={() => setSessionNpcDragging(true)}
                   onNpcDragEnd={clearSessionNpcDrag}
                 />
-                {expandedNpcPhotoId &&
-                npcList.some((n) => n.id === expandedNpcPhotoId) ? (
-                  <div
-                    className="session-npc-expand-panel"
-                    style={expandPanelChrome}
-                  >
-                    {renderNpcSessionCard(
-                      npcList.find((n) => n.id === expandedNpcPhotoId),
-                    )}
-                  </div>
-                ) : null}
-                {factionExpanded ? (
-                  <div
-                    className="session-faction-expand-panel"
-                    style={expandPanelChrome}
-                  >
+              </div>
+            );
+          })}
+          <div
+            className="f-card session-make-faction-tile"
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+              padding: 10,
+              minHeight: 120,
+              borderStyle: "dashed",
+              cursor: "default",
+            }}
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+            role="group"
+            aria-label="Make a faction"
+          >
+            <div className="f-card-name" style={{ fontSize: 13 }}>
+              Make a faction
+            </div>
+            <input
+              type="text"
+              value={sessionQuickFactionName}
+              onChange={(e) => setSessionQuickFactionName(e.target.value)}
+              placeholder="Faction name"
+              style={{
+                ...S.inp,
+                width: "100%",
+                boxSizing: "border-box",
+                fontSize: 11,
+              }}
+              disabled={sessionQuickFactionBusy || saving || !campaign?.id}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleCreateFactionAndAssignUngrouped();
+                }
+              }}
+            />
+            <button
+              type="button"
+              style={{ ...S.btnPrimary, fontSize: 11, alignSelf: "stretch" }}
+              onClick={handleCreateFactionAndAssignUngrouped}
+              disabled={
+                sessionQuickFactionBusy ||
+                saving ||
+                !campaign?.id ||
+                !sessionQuickFactionName.trim()
+              }
+            >
+              {sessionQuickFactionBusy
+                ? "Working…"
+                : sessionFactionNpcGroups.ungrouped.length > 0
+                  ? `Create & assign ${sessionFactionNpcGroups.ungrouped.length}`
+                  : "Create faction"}
+            </button>
+          </div>
+          <div
+            ref={addNpcChooserRef}
+            className="session-add-npc-chooser"
+            style={{ position: "relative", minWidth: 0 }}
+          >
+            <button
+              type="button"
+              className="f-card session-add-npc-tile"
+              onClick={handleAddNpcTileClick}
+              disabled={saving}
+              aria-expanded={addNpcChooserOpen}
+              aria-haspopup="menu"
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 6,
+                padding: 10,
+                minHeight: 120,
+                borderStyle: "dashed",
+                cursor: saving ? "not-allowed" : "pointer",
+                justifyContent: "center",
+                alignItems: "center",
+                textAlign: "center",
+              }}
+            >
+              <span style={{ fontSize: 22, color: "#6b7280", lineHeight: 1 }}>+</span>
+              <span style={{ color: "#9ca3af", fontSize: 11, lineHeight: 1.3 }}>
+                Add NPC to session
+              </span>
+              <span
+                style={{
+                  fontSize: 9,
+                  color: "#6b7280",
+                  lineHeight: 1.35,
+                }}
+              >
+                Existing or create new
+              </span>
+            </button>
+            {addNpcChooserOpen ? (
+              <div
+                role="menu"
+                className="session-add-npc-chooser-menu"
+                style={{
+                  position: "absolute",
+                  top: "calc(100% + 4px)",
+                  left: 0,
+                  right: 0,
+                  zIndex: 50,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 2,
+                  padding: 6,
+                  background: "#111827",
+                  border: "1px solid #4b5563",
+                  borderRadius: 6,
+                  boxShadow: "0 8px 24px rgba(0,0,0,0.45)",
+                }}
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={saving || addableNpcList.length === 0}
+                  title={
+                    addableNpcList.length === 0
+                      ? "No campaign NPCs left to add — create one instead"
+                      : undefined
+                  }
+                  onClick={() => openAddNpcModal("pick", null)}
+                  style={{
+                    ...S.btnGhost,
+                    width: "100%",
+                    textAlign: "left",
+                    fontSize: 11,
+                    padding: "8px 10px",
+                    border: "1px solid transparent",
+                    borderRadius: 4,
+                    color:
+                      addableNpcList.length === 0 ? "#6b7280" : "#e5e7eb",
+                    cursor:
+                      saving || addableNpcList.length === 0
+                        ? "not-allowed"
+                        : "pointer",
+                  }}
+                >
+                  Add existing to session
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={saving || !campaign?.id}
+                  onClick={() => openAddNpcModal("create", null)}
+                  style={{
+                    ...S.btnGhost,
+                    width: "100%",
+                    textAlign: "left",
+                    fontSize: 11,
+                    padding: "8px 10px",
+                    border: "1px solid transparent",
+                    borderRadius: 4,
+                    color: "#e5e7eb",
+                    cursor:
+                      saving || !campaign?.id ? "not-allowed" : "pointer",
+                  }}
+                >
+                  Create NPC
+                </button>
+              </div>
+            ) : null}
+          </div>
+          </div>
+
+          {(() => {
+            const expandedPair = sessionFactionNpcGroups.factionPairs.find(
+              ([fid]) => !!collapsedFactionCards[String(fid)],
+            );
+            if (!expandedPair) return null;
+            const [fid] = expandedPair;
+            const fac =
+              factionsById[fid] ||
+              (campaign?.factions || []).find((f) => String(f.id) === String(fid)) ||
+              { id: fid, name: `Faction ${fid}` };
+            const draft =
+              factionDraftById[fid] || {
+                name: fac.name ?? "",
+                faction_type: fac.faction_type ?? "",
+                level: String(fac.level ?? 0),
+                hold: String(fac.hold ?? "weak"),
+                reputation: String(fac.reputation ?? 0),
+                notes: fac.notes ?? "",
+                crew_notes: fac.crew_notes ?? "",
+                visible_to_players: !!fac.visible_to_players,
+                players_see_tier: fac.players_see_tier !== false,
+                players_see_hold: fac.players_see_hold !== false,
+                players_see_reputation: fac.players_see_reputation !== false,
+                players_see_notes: fac.players_see_notes !== false,
+                players_see_npcs: fac.players_see_npcs !== false,
+                contacts: JSON.stringify(fac.contacts ?? [], null, 2),
+                inventory: JSON.stringify(fac.inventory ?? [], null, 2),
+                faction_status: JSON.stringify(fac.faction_status ?? {}, null, 2),
+              };
+            const setDraftField = (field, value) => {
+              setFactionDraftById((prev) => ({
+                ...prev,
+                [fid]: { ...(prev[fid] || draft), [field]: value },
+              }));
+              scheduleFactionAutosave(fid);
+            };
+            return (
+              <div className="session-roster-expand-slot">
+                <div
+                  className="session-faction-expand-panel"
+                  style={expandPanelChrome}
+                >
+
                     <div style={{ marginBottom: 10 }}>
                   <div
                     style={{
@@ -5287,178 +5355,28 @@ export default function SessionGMManagementPanels({
                     </span>
                   </div>
                     </div>
-                  </div>
-                ) : null}
+
+                </div>
               </div>
             );
-          })}
-          <div
-            className="f-card session-make-faction-tile"
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 8,
-              padding: 10,
-              minHeight: 120,
-              borderStyle: "dashed",
-              cursor: "default",
-            }}
-            onClick={(e) => e.stopPropagation()}
-            onKeyDown={(e) => e.stopPropagation()}
-            role="group"
-            aria-label="Make a faction"
-          >
-            <div className="f-card-name" style={{ fontSize: 13 }}>
-              Make a faction
-            </div>
-            <input
-              type="text"
-              value={sessionQuickFactionName}
-              onChange={(e) => setSessionQuickFactionName(e.target.value)}
-              placeholder="Faction name"
-              style={{
-                ...S.inp,
-                width: "100%",
-                boxSizing: "border-box",
-                fontSize: 11,
-              }}
-              disabled={sessionQuickFactionBusy || saving || !campaign?.id}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  handleCreateFactionAndAssignUngrouped();
-                }
-              }}
-            />
-            <button
-              type="button"
-              style={{ ...S.btnPrimary, fontSize: 11, alignSelf: "stretch" }}
-              onClick={handleCreateFactionAndAssignUngrouped}
-              disabled={
-                sessionQuickFactionBusy ||
-                saving ||
-                !campaign?.id ||
-                !sessionQuickFactionName.trim()
-              }
-            >
-              {sessionQuickFactionBusy
-                ? "Working…"
-                : sessionFactionNpcGroups.ungrouped.length > 0
-                  ? `Create & assign ${sessionFactionNpcGroups.ungrouped.length}`
-                  : "Create faction"}
-            </button>
-          </div>
-          <div
-            ref={addNpcChooserRef}
-            className="session-add-npc-chooser"
-            style={{ position: "relative", minWidth: 0 }}
-          >
-            <button
-              type="button"
-              className="f-card session-add-npc-tile"
-              onClick={handleAddNpcTileClick}
-              disabled={saving}
-              aria-expanded={addNpcChooserOpen}
-              aria-haspopup="menu"
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: 6,
-                padding: 10,
-                minHeight: 120,
-                borderStyle: "dashed",
-                cursor: saving ? "not-allowed" : "pointer",
-                justifyContent: "center",
-                alignItems: "center",
-                textAlign: "center",
-              }}
-            >
-              <span style={{ fontSize: 22, color: "#6b7280", lineHeight: 1 }}>+</span>
-              <span style={{ color: "#9ca3af", fontSize: 11, lineHeight: 1.3 }}>
-                Add NPC to session
-              </span>
-              <span
-                style={{
-                  fontSize: 9,
-                  color: "#6b7280",
-                  lineHeight: 1.35,
-                }}
-              >
-                Existing or create new
-              </span>
-            </button>
-            {addNpcChooserOpen ? (
-              <div
-                role="menu"
-                className="session-add-npc-chooser-menu"
-                style={{
-                  position: "absolute",
-                  top: "calc(100% + 4px)",
-                  left: 0,
-                  right: 0,
-                  zIndex: 50,
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 2,
-                  padding: 6,
-                  background: "#111827",
-                  border: "1px solid #4b5563",
-                  borderRadius: 6,
-                  boxShadow: "0 8px 24px rgba(0,0,0,0.45)",
-                }}
-              >
-                <button
-                  type="button"
-                  role="menuitem"
-                  disabled={saving || addableNpcList.length === 0}
-                  title={
-                    addableNpcList.length === 0
-                      ? "No campaign NPCs left to add — create one instead"
-                      : undefined
-                  }
-                  onClick={() => openAddNpcModal("pick", null)}
-                  style={{
-                    ...S.btnGhost,
-                    width: "100%",
-                    textAlign: "left",
-                    fontSize: 11,
-                    padding: "8px 10px",
-                    border: "1px solid transparent",
-                    borderRadius: 4,
-                    color:
-                      addableNpcList.length === 0 ? "#6b7280" : "#e5e7eb",
-                    cursor:
-                      saving || addableNpcList.length === 0
-                        ? "not-allowed"
-                        : "pointer",
-                  }}
+          })()}
+
+          {(() => {
+            const expandedInFaction = sessionFactionNpcGroups.factionPairs
+              .flatMap(([, list]) => list || [])
+              .find((n) => n?.id === expandedNpcPhotoId);
+            if (!expandedInFaction) return null;
+            return (
+              <div className="session-roster-expand-slot">
+                <div
+                  className="session-npc-expand-panel"
+                  style={expandPanelChrome}
                 >
-                  Add existing to session
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  disabled={saving || !campaign?.id}
-                  onClick={() => openAddNpcModal("create", null)}
-                  style={{
-                    ...S.btnGhost,
-                    width: "100%",
-                    textAlign: "left",
-                    fontSize: 11,
-                    padding: "8px 10px",
-                    border: "1px solid transparent",
-                    borderRadius: 4,
-                    color: "#e5e7eb",
-                    cursor:
-                      saving || !campaign?.id ? "not-allowed" : "pointer",
-                  }}
-                >
-                  Create NPC
-                </button>
+                  {renderNpcSessionCard(expandedInFaction)}
+                </div>
               </div>
-            ) : null}
-          </div>
-          </div>
+            );
+          })()}
 
           {sessionFactionNpcGroups.ungrouped.length > 0 ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -5474,10 +5392,6 @@ export default function SessionGMManagementPanels({
                 <span style={{ ...S.sectionLbl, marginBottom: 0, fontSize: 11 }}>
                   Unassigned NPCs
                 </span>
-                <AddNpcStripTile
-                  disabled={saving}
-                  onClick={() => openAddNpcForFaction(null)}
-                />
               </div>
               <div className="home-card-grid">
                 {sessionFactionNpcGroups.ungrouped.map((npc) => (
@@ -5496,17 +5410,26 @@ export default function SessionGMManagementPanels({
                       onDragBegin={() => setSessionNpcDragging(true)}
                       onDragEnd={clearSessionNpcDrag}
                     />
-                    {expandedNpcPhotoId === npc.id ? (
-                      <div
-                        className="session-npc-expand-panel"
-                        style={expandPanelChrome}
-                      >
-                        {renderNpcSessionCard(npc)}
-                      </div>
-                    ) : null}
                   </div>
                 ))}
               </div>
+              {expandedNpcPhotoId &&
+              sessionFactionNpcGroups.ungrouped.some(
+                (n) => n.id === expandedNpcPhotoId,
+              ) ? (
+                <div className="session-roster-expand-slot">
+                  <div
+                    className="session-npc-expand-panel"
+                    style={expandPanelChrome}
+                  >
+                    {renderNpcSessionCard(
+                      sessionFactionNpcGroups.ungrouped.find(
+                        (n) => n.id === expandedNpcPhotoId,
+                      ),
+                    )}
+                  </div>
+                </div>
+              ) : null}
             </div>
           ) : null}
 
@@ -5540,7 +5463,7 @@ export default function SessionGMManagementPanels({
       </div>
       ) : null}
 
-      {(sessionShellTab === "crew" || rosterShowPc) ? (
+      {rosterShowPc ? (
       <div style={S.card}>
         <div
           style={{
@@ -5568,417 +5491,16 @@ export default function SessionGMManagementPanels({
         </div>
         {!playerRosterSectionCollapsed ? (
           <>
-            {(crews || []).length === 0 ? (
-          <div style={{ fontSize: 12, color: "#6b7280", marginTop: 10 }}>
-            No crews linked to this campaign.
-          </div>
-        ) : (
-          <div style={{ marginTop: 12, marginBottom: 14, display: "flex", flexDirection: "column", gap: 12 }}>
-            {(crews || []).map((crew) => {
-              const d = crewDraftById[crew.id] || {};
-              const busy = crewSavingId === crew.id;
-              const crewCollapseKey = String(crew.id);
-              const crewCollapsed = !!collapsedCrewCards[crewCollapseKey];
-              const playbookLabel =
-                crew.playbook == null
-                  ? "—"
-                  : typeof crew.playbook === "string"
-                    ? crew.playbook
-                    : crew.playbook?.name || "—";
-              const memberNames = Array.isArray(crew.members)
-                ? crew.members
-                    .map((m) => m.true_name || m.name || m.username)
-                    .filter(Boolean)
-                    .join(", ")
-                : "";
-              const rels = crew.faction_relationships;
-              const relRows = Array.isArray(rels)
-                ? rels.map((rel) =>
-                    `${rel.faction_name || rel.faction_id}: ${rel.reputation_value}`,
-                  )
-                : [];
-              const stashSlots = crew.stash_slots;
-              const stashFilled =
-                Array.isArray(stashSlots) ? stashSlots.filter(Boolean).length : null;
-              return (
-                <div
-                  key={crew.id}
-                  style={{
-                    width: "100%",
-                    boxSizing: "border-box",
-                    border: "1px solid #4338ca",
-                    borderRadius: 8,
-                    padding: 12,
-                    background: "#0d1117",
-                  }}
-                >
-                  <div
-                    role="button"
-                    tabIndex={0}
-                    onClick={() =>
-                      toggleCollapsedCard(setCollapsedCrewCards, crewCollapseKey)
-                    }
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        toggleCollapsedCard(setCollapsedCrewCards, crewCollapseKey);
-                      }
-                    }}
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      gap: 8,
-                      flexWrap: "wrap",
-                      cursor: "pointer",
-                    }}
-                    title={crewCollapsed ? "Collapse crew" : "Expand crew"}
-                  >
-                    <div style={{ display: "flex", gap: 8, alignItems: "center", minWidth: 0 }}>
-                      <SessionPortraitThumb
-                        src={entityPortraitSrc(crew)}
-                        label={(d.name ?? crew.name) || `Crew ${crew.id}`}
-                        size={48}
-                        onClick={() =>
-                          toggleCollapsedCard(setCollapsedCrewCards, crewCollapseKey)
-                        }
-                      />
-                      <span style={{ fontWeight: "bold", color: "#a78bfa", fontSize: 12 }}>
-                        Crew · {(d.name ?? crew.name)?.trim() || `Crew ${crew.id}`}
-                      </span>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      {busy ? (
-                        <span style={{ fontSize: 10, color: "#9ca3af" }}>Saving…</span>
-                      ) : null}
-                      <span style={{ ...S.btnGhost, fontSize: 10, padding: "2px 8px" }}>
-                        {crewCollapsed ? "▾" : "▸"}
-                      </span>
-                    </div>
-                  </div>
-                  {crewCollapsed ? (
-                    <>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
-                          gap: 10,
-                          marginTop: 10,
-                        }}
-                      >
-                        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                          <span style={{ fontSize: 10, color: "#9ca3af" }}>Name</span>
-                          <input
-                            style={S.inp}
-                            value={d.name ?? ""}
-                            onChange={(e) =>
-                              setCrewDraftById((p) => ({
-                                ...p,
-                                [crew.id]: { ...(p[crew.id] || {}), name: e.target.value },
-                              }))
-                            }
-                            onBlur={() => {
-                              const v = String(d.name || "").trim();
-                              if (v !== String(crew.name || "").trim()) {
-                                patchCrewSnapshot(crew.id, { name: v });
-                              }
-                            }}
-                            disabled={busy}
-                          />
-                        </label>
-                        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                          <span style={{ fontSize: 10, color: "#9ca3af" }}>Level</span>
-                          <input
-                            style={S.inp}
-                            value={d.level ?? ""}
-                            inputMode="numeric"
-                            onChange={(e) =>
-                              setCrewDraftById((p) => ({
-                                ...p,
-                                [crew.id]: { ...(p[crew.id] || {}), level: e.target.value },
-                              }))
-                            }
-                            onBlur={() => {
-                              const n = parseInt(String(d.level).trim(), 10);
-                              if (!Number.isFinite(n) || n === crew.level) return;
-                              patchCrewSnapshot(crew.id, { level: n });
-                            }}
-                            disabled={busy}
-                          />
-                        </label>
-                        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                          <span style={{ fontSize: 10, color: "#9ca3af" }}>Hold</span>
-                          <input
-                            style={S.inp}
-                            value={d.hold ?? ""}
-                            onChange={(e) =>
-                              setCrewDraftById((p) => ({
-                                ...p,
-                                [crew.id]: { ...(p[crew.id] || {}), hold: e.target.value },
-                              }))
-                            }
-                            onBlur={() => {
-                              const s = String(d.hold || "").trim();
-                              if (s === String(crew.hold ?? "").trim()) return;
-                              patchCrewSnapshot(crew.id, { hold: s });
-                            }}
-                            disabled={busy}
-                          />
-                        </label>
-                        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                          <span style={{ fontSize: 10, color: "#9ca3af" }}>Rep</span>
-                          <input
-                            style={S.inp}
-                            value={d.rep ?? ""}
-                            inputMode="numeric"
-                            onChange={(e) =>
-                              setCrewDraftById((p) => ({
-                                ...p,
-                                [crew.id]: { ...(p[crew.id] || {}), rep: e.target.value },
-                              }))
-                            }
-                            onBlur={() => {
-                              const n = parseInt(String(d.rep).trim(), 10);
-                              if (!Number.isFinite(n) || n === crew.rep) return;
-                              patchCrewSnapshot(crew.id, { rep: n });
-                            }}
-                            disabled={busy}
-                          />
-                        </label>
-                        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                          <span style={{ fontSize: 10, color: "#9ca3af" }}>Wanted ★</span>
-                          <input
-                            style={S.inp}
-                            value={String(campaign?.wanted_stars ?? 0)}
-                            inputMode="numeric"
-                            readOnly
-                            disabled
-                          />
-                          <span style={{ fontSize: 9, color: "#6b7280" }}>
-                            Synced from campaign Wanted Level
-                          </span>
-                        </label>
-                        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                          <span style={{ fontSize: 10, color: "#9ca3af" }}>Turf (0–6)</span>
-                          <input
-                            style={S.inp}
-                            value={d.turf ?? ""}
-                            inputMode="numeric"
-                            onChange={(e) =>
-                              setCrewDraftById((p) => ({
-                                ...p,
-                                [crew.id]: { ...(p[crew.id] || {}), turf: e.target.value },
-                              }))
-                            }
-                            onBlur={() => {
-                              const n = parseInt(String(d.turf).trim(), 10);
-                              if (!Number.isFinite(n) || n === crew.turf) return;
-                              patchCrewSnapshot(crew.id, { turf: n });
-                            }}
-                            disabled={busy}
-                          />
-                        </label>
-                        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                          <span style={{ fontSize: 10, color: "#9ca3af" }}>Coin</span>
-                          <input
-                            style={S.inp}
-                            value={d.coin ?? ""}
-                            inputMode="numeric"
-                            onChange={(e) =>
-                              setCrewDraftById((p) => ({
-                                ...p,
-                                [crew.id]: { ...(p[crew.id] || {}), coin: e.target.value },
-                              }))
-                            }
-                            onBlur={() => {
-                              const n = parseInt(String(d.coin).trim(), 10);
-                              if (!Number.isFinite(n) || n === crew.coin) return;
-                              patchCrewSnapshot(crew.id, { coin: n });
-                            }}
-                            disabled={busy}
-                          />
-                        </label>
-                        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                          <span style={{ fontSize: 10, color: "#9ca3af" }}>Stash</span>
-                          <input
-                            style={S.inp}
-                            value={d.stash ?? ""}
-                            inputMode="numeric"
-                            onChange={(e) =>
-                              setCrewDraftById((p) => ({
-                                ...p,
-                                [crew.id]: { ...(p[crew.id] || {}), stash: e.target.value },
-                              }))
-                            }
-                            onBlur={() => {
-                              const n = parseInt(String(d.stash).trim(), 10);
-                              if (!Number.isFinite(n) || n === crew.stash) return;
-                              patchCrewSnapshot(crew.id, { stash: n });
-                            }}
-                            disabled={busy}
-                          />
-                        </label>
-                        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                          <span style={{ fontSize: 10, color: "#9ca3af" }}>XP</span>
-                          <input
-                            style={S.inp}
-                            value={d.xp ?? ""}
-                            inputMode="numeric"
-                            onChange={(e) =>
-                              setCrewDraftById((p) => ({
-                                ...p,
-                                [crew.id]: { ...(p[crew.id] || {}), xp: e.target.value },
-                              }))
-                            }
-                            onBlur={() => {
-                              const n = parseInt(String(d.xp).trim(), 10);
-                              if (!Number.isFinite(n) || n === crew.xp) return;
-                              patchCrewSnapshot(crew.id, { xp: n });
-                            }}
-                            disabled={busy}
-                          />
-                        </label>
-                        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                          <span style={{ fontSize: 10, color: "#9ca3af" }}>
-                            Advancement pts
-                          </span>
-                          <input
-                            style={S.inp}
-                            value={d.advancement_points ?? ""}
-                            inputMode="numeric"
-                            onChange={(e) =>
-                              setCrewDraftById((p) => ({
-                                ...p,
-                                [crew.id]: {
-                                  ...(p[crew.id] || {}),
-                                  advancement_points: e.target.value,
-                                },
-                              }))
-                            }
-                            onBlur={() => {
-                              const n = parseInt(
-                                String(d.advancement_points).trim(),
-                                10,
-                              );
-                              if (
-                                !Number.isFinite(n) ||
-                                n === crew.advancement_points
-                              )
-                                return;
-                              patchCrewSnapshot(crew.id, {
-                                advancement_points: n,
-                              });
-                            }}
-                            disabled={busy}
-                          />
-                        </label>
-                      </div>
-                      <label
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: 4,
-                          marginTop: 10,
-                        }}
-                      >
-                        <span style={{ fontSize: 10, color: "#9ca3af" }}>Description</span>
-                        <textarea
-                          style={{
-                            ...S.inp,
-                            minHeight: 56,
-                            resize: "vertical",
-                            fontFamily: "monospace",
-                            fontSize: 11,
-                          }}
-                          value={d.description ?? ""}
-                          onChange={(e) =>
-                            setCrewDraftById((p) => ({
-                              ...p,
-                              [crew.id]: {
-                                ...(p[crew.id] || {}),
-                                description: e.target.value,
-                              },
-                            }))
-                          }
-                          onBlur={() => {
-                            const v = String(d.description || "");
-                            if (v !== String(crew.description || "")) {
-                              patchCrewSnapshot(crew.id, { description: v });
-                            }
-                          }}
-                          disabled={busy}
-                        />
-                      </label>
-                      <label
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: 4,
-                          marginTop: 8,
-                        }}
-                      >
-                        <span style={{ fontSize: 10, color: "#9ca3af" }}>Notes</span>
-                        <textarea
-                          style={{
-                            ...S.inp,
-                            minHeight: 44,
-                            resize: "vertical",
-                            fontFamily: "monospace",
-                            fontSize: 11,
-                          }}
-                          value={d.notes ?? ""}
-                          onChange={(e) =>
-                            setCrewDraftById((p) => ({
-                              ...p,
-                              [crew.id]: { ...(p[crew.id] || {}), notes: e.target.value },
-                            }))
-                          }
-                          onBlur={() => {
-                            const v = String(d.notes || "");
-                            if (v !== String(crew.notes || "")) {
-                              patchCrewSnapshot(crew.id, { notes: v });
-                            }
-                          }}
-                          disabled={busy}
-                        />
-                      </label>
-                      <div style={{ marginTop: 10, fontSize: 10, color: "#6b7280" }}>
-                        <div>
-                          <span style={{ color: "#9ca3af" }}>Playbook: </span>
-                          {playbookLabel}
-                        </div>
-                        {crew.proposed_name ? (
-                          <div style={{ marginTop: 4 }}>
-                            <span style={{ color: "#9ca3af" }}>Proposed name: </span>
-                            {crew.proposed_name}
-                          </div>
-                        ) : null}
-                        {memberNames ? (
-                          <div style={{ marginTop: 4 }}>
-                            <span style={{ color: "#9ca3af" }}>Members: </span>
-                            {memberNames}
-                          </div>
-                        ) : null}
-                        {relRows.length > 0 ? (
-                          <div style={{ marginTop: 4 }}>
-                            <span style={{ color: "#9ca3af" }}>Faction rep: </span>
-                            {relRows.join(" · ")}
-                          </div>
-                        ) : null}
-                        {stashFilled != null ? (
-                          <div style={{ marginTop: 4 }}>
-                            <span style={{ color: "#9ca3af" }}>Stash grid: </span>
-                            {stashFilled}/40 filled
-                          </div>
-                        ) : null}
-                      </div>
-                    </>
-                  ) : null}
-                </div>
-              );
-            })}
-          </div>
-        )}
+            <RosterCrewInlineSection
+              campaign={campaign}
+              crews={crews || []}
+              S={S}
+              onRefresh={onRefresh}
+              onError={setError}
+              canManageCrew
+              emptyMessage="No crews linked to this campaign."
+              showCreateWhenEmpty={false}
+            />
         <div className="home-poc session-roster-tokens" style={{ marginTop: 10 }}>
           {(() => {
             const filterQ = pcRosterFilter.trim().toLowerCase();
@@ -6046,6 +5568,36 @@ export default function SessionGMManagementPanels({
                 </div>
                 <div className="home-card-grid">
                   {pcEntries.map(({ full, name }) => {
+                    const pcCollapseKey = `quick-${full.id}`;
+                    const pcExpanded = !!collapsedPcCards[pcCollapseKey];
+                    return (
+                      <div
+                        className="session-roster-cell"
+                        key={full.id}
+                        ref={(el) => {
+                          if (el) pcCardElsRef.current[full.id] = el;
+                          else delete pcCardElsRef.current[full.id];
+                        }}
+                      >
+                        <SessionPcToken
+                          character={full}
+                          name={name}
+                          isExpanded={pcExpanded}
+                          onToggleExpand={() =>
+                            toggleCollapsedCard(setCollapsedPcCards, pcCollapseKey)
+                          }
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+                {(() => {
+                  const entry = pcEntries.find(
+                    ({ full }) => !!collapsedPcCards[`quick-${full.id}`],
+                  );
+                  if (!entry) return null;
+                  const { full, name } = entry;
+
             const stand = full.stand || {};
             const grades = rawStandToGrades({
               power: stand.power,
@@ -6089,7 +5641,6 @@ export default function SessionGMManagementPanels({
               "Stand",
             );
             const pcCollapseKey = `quick-${full.id}`;
-            const pcExpanded = !!collapsedPcCards[pcCollapseKey];
             const pcNested = pcNestedTabById[full.id] || "actions";
             const setPcNested = (id) => {
               setPcNestedTabById((p) => ({ ...p, [full.id]: id }));
@@ -6108,39 +5659,17 @@ export default function SessionGMManagementPanels({
             };
             const pcStandBusy =
               saving || pcStandForceBusyId === full.id;
-            return (
-              <div
-                className="session-roster-cell"
-                key={full.id}
-                ref={(el) => {
-                  if (el) pcCardElsRef.current[full.id] = el;
-                  else delete pcCardElsRef.current[full.id];
-                }}
-              >
-                <SessionPcToken
-                  character={full}
-                  name={name}
-                  isExpanded={pcExpanded}
-                  onToggleExpand={() =>
-                    toggleCollapsedCard(setCollapsedPcCards, pcCollapseKey)
-                  }
-                />
-                {pcExpanded ? (
-                  <div
-                    className="session-pc-expand-panel"
-                    style={expandPanelChrome}
+
+                  return (
+                    <div className="session-roster-expand-slot">
+                  <RosterPcExpandPanel
+                    mode="session"
+                    character={full}
+                    S={S}
+                    onClose={() =>
+                      toggleCollapsedCard(setCollapsedPcCards, pcCollapseKey)
+                    }
                   >
-                    <button
-                      type="button"
-                      className="session-expand-close"
-                      aria-label="Close PC panel"
-                      title="Close"
-                      onClick={() =>
-                        toggleCollapsedCard(setCollapsedPcCards, pcCollapseKey)
-                      }
-                    >
-                      ×
-                    </button>
                     <NestedTabBar
                       tabs={PC_NESTED_TABS}
                       active={pcNested}
@@ -7241,12 +6770,10 @@ export default function SessionGMManagementPanels({
                       {renderPcLockedManualRollForm(full.id)}
                       {renderCharacterRecentRollsLog(full.id, { maxHeight: 160 })}
                     </div>
-                  </div>
-                ) : null}
-              </div>
-            );
-          })}
-                </div>
+                  </RosterPcExpandPanel>
+                    </div>
+                  );
+                })()}
                 {pcEntries.length === 0 ? (
                   <div style={{ fontSize: 12, color: "#6b7280", marginTop: 8 }}>
                     No player characters match this filter.
