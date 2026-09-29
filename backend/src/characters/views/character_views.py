@@ -2893,17 +2893,14 @@ class CharacterViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="train")
     def train(self, request, pk=None):
         """
-        Downtime Train: mark 1 XP (2 with crew Training upgrade) on
-        Insight / Prowess / Resolve / Heritage / Playbook. Repeatable on
-        the same track within a downtime phase. Heritage Train is house-rule
-        vs SRD. Reuses credit_xp fill → pending advance.
+        Train: mark 1 XP (2 with crew Training upgrade) on Insight / Prowess /
+        Resolve / Heritage / Playbook. Repeatable anytime on any track.
+        Heritage Train is house-rule vs SRD. Reuses credit_xp fill → pending advance.
         """
         from characters.services.advancement import AdvancementError, credit_xp
         from characters.services.downtime_train import (
             DowntimeTrainError,
             assert_can_train,
-            record_train_activity,
-            tracks_trained_this_phase,
             training_xp_amount,
         )
 
@@ -2979,13 +2976,12 @@ class CharacterViewSet(viewsets.ModelViewSet):
             finally:
                 reset_character_history_editor(token)
 
-            activity = record_train_activity(locked, track, amount=amount)
             tracker = ExperienceTracker.objects.create(
                 character=locked,
                 session=session_obj,
                 roll=None,
                 trigger="MANUAL",
-                description=f"[train:{track}] Downtime train (+{amount} XP)",
+                description=f"[train:{track}] Train (+{amount} XP)",
                 xp_gained=amount,
                 awarded_by=user,
                 award_source=(
@@ -2997,7 +2993,6 @@ class CharacterViewSet(viewsets.ModelViewSet):
             )
 
         locked.refresh_from_db()
-        trained = tracks_trained_this_phase(locked)
         return Response(
             {
                 "success": True,
@@ -3006,8 +3001,6 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 "new_total": credited["marks"],
                 "pendings_minted": credited["pendings_minted"],
                 "xp_clocks": locked.xp_clocks,
-                "downtime_trained_tracks": trained,
-                "downtime_activity_id": activity.id,
                 "experience_tracker_id": tracker.id,
                 "message": (
                     f"Trained {track}: +{amount} XP"

@@ -367,7 +367,7 @@ export const characterAPI = {
       body: JSON.stringify(xpData),
     }),
 
-  /** Downtime Train: mark 1–2 XP on insight/prowess/resolve/playbook. */
+  /** Train: mark 1–2 XP on an XP track (repeatable anytime). */
   train: (id, body) =>
     apiRequest(`/characters/${id}/train/`, {
       method: "POST",
@@ -1493,15 +1493,6 @@ export const transformBackendToFrontend = (backendCharacter) => {
       typeof backendCharacter.pending_advance_counts === "object"
         ? { ...backendCharacter.pending_advance_counts }
         : {},
-    downtimeTrainedTracks: Array.isArray(
-      backendCharacter.downtime_trained_tracks,
-    )
-      ? backendCharacter.downtime_trained_tracks.map((t) =>
-          String(t || "")
-            .trim()
-            .toLowerCase(),
-        )
-      : [],
     advancementPlan: Array.isArray(backendCharacter.advancement_plan)
       ? backendCharacter.advancement_plan.map((item) => ({
           id: item.id,
