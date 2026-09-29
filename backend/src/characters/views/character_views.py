@@ -2894,9 +2894,9 @@ class CharacterViewSet(viewsets.ModelViewSet):
     def train(self, request, pk=None):
         """
         Downtime Train: mark 1 XP (2 with crew Training upgrade) on
-        Insight / Prowess / Resolve / Heritage / Playbook. Once per track
-        per downtime phase. Heritage Train is house-rule vs SRD.
-        Reuses credit_xp fill → pending advance.
+        Insight / Prowess / Resolve / Heritage / Playbook. Repeatable on
+        the same track within a downtime phase. Heritage Train is house-rule
+        vs SRD. Reuses credit_xp fill → pending advance.
         """
         from characters.services.advancement import AdvancementError, credit_xp
         from characters.services.downtime_train import (

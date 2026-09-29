@@ -4,13 +4,55 @@
  */
 export const PATCH_NOTES = [
   {
+    "date": "2026-09-29",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Keep Train button label when track already trained.",
+          "Fix crew-linked stash disappearing on autosave.",
+          "Fix Train phase lock when no completed session exists.",
+          "Add change-password flow for logged-in users."
+        ]
+      },
+      {
+        "title": "Fixed",
+        "items": [
+          "allow training multiple tracks per downtime phase",
+          "crew stash hydrate, train lock, and member crew access",
+          "scale gunicorn pool and lighten SSE poll load"
+        ]
+      }
+    ]
+  },
+  {
     "date": "2026-09-28",
     "version": null,
     "sections": [
       {
+        "title": "Other",
+        "items": [
+          "Merge pull request #167 from zoobavitel/feature/session-npc-photo-cards"
+        ]
+      },
+      {
         "title": "Added",
         "items": [
+          "choose add-existing or create NPC from dashed tile",
           "NPC expand popover, XP/Scorecard unify, help tips"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-09-24",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #166 from zoobavitel/feature/session-npc-photo-cards"
         ]
       }
     ]
@@ -611,58 +653,6 @@ export const PATCH_NOTES = [
         "title": "Other",
         "items": [
           "Merge pull request #109 from zoobavitel/fix/remove-legacy-views-py"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-08-12",
-    "version": null,
-    "sections": [
-      {
-        "title": "Documentation",
-        "items": [
-          "sync SRD and SRD_DEV working rules text"
-        ]
-      },
-      {
-        "title": "Fixed",
-        "items": [
-          "remove dead characters/views.py monolith"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-08-11",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #108 from zoobavitel/fix/clock-visible-players-sync",
-          "Merge pull request #107 from zoobavitel/feature/sheet-history-undo-rebased"
-        ]
-      },
-      {
-        "title": "Fixed",
-        "items": [
-          "stop duplicating GM clocks as shared-party on sheet",
-          "sync GM clock player visibility and refresh list faster",
-          "satisfy trauma hydrate exhaustive-deps for CI",
-          "protect sheet ground truth from poll/autosave races"
-        ]
-      },
-      {
-        "title": "Tests",
-        "items": [
-          "align XP delete test with sheet AUTO guard"
-        ]
-      },
-      {
-        "title": "Documentation",
-        "items": [
-          "refresh patch notes for sheet/XP fixes"
         ]
       }
     ]

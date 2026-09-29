@@ -1869,15 +1869,6 @@ const CharacterSheetWrapper = ({
   const [trainBusyTrack, setTrainBusyTrack] = useState(null);
   const [trainError, setTrainError] = useState(null);
   const [xpHelpOpen, setXpHelpOpen] = useState(false);
-  const [downtimeTrainedTracks, setDowntimeTrainedTracks] = useState(() =>
-    Array.isArray(character?.downtimeTrainedTracks)
-      ? character.downtimeTrainedTracks.map((t) =>
-          String(t || "")
-            .trim()
-            .toLowerCase(),
-        )
-      : [],
-  );
 
   // XP card ? help: click outside or Escape closes
   useEffect(() => {
@@ -2096,24 +2087,6 @@ const CharacterSheetWrapper = ({
       setPendingAdvanceCounts({ ...counts });
     }
   }, [character?.id, character?.pendingAdvanceCounts, sheetDraftIsDirty]);
-
-  useEffect(() => {
-    if (sheetDraftIsDirty) return;
-    const trained = character?.downtimeTrainedTracks;
-    if (Array.isArray(trained)) {
-      setDowntimeTrainedTracks(
-        trained.map((t) =>
-          String(t || "")
-            .trim()
-            .toLowerCase(),
-        ),
-      );
-    }
-  }, [
-    character?.id,
-    character?.downtimeTrainedTracks,
-    sheetDraftIsDirty,
-  ]);
 
   useEffect(() => {
     const plan = character?.advancementPlan;
@@ -4731,12 +4704,6 @@ const CharacterSheetWrapper = ({
     ) {
       return;
     }
-    if (downtimeTrainedTracks.includes(track)) {
-      setTrainError(
-        `Already trained ${track} this downtime phase (once per track).`,
-      );
-      return;
-    }
     if (trainBusyTrack || poolAllocateBusy) return;
 
     setTrainBusyTrack(track);
@@ -4753,19 +4720,6 @@ const CharacterSheetWrapper = ({
           ...prev,
           xp: { ...(prev.xp || {}), ...res.xp_clocks },
         }));
-      }
-      if (Array.isArray(res?.downtime_trained_tracks)) {
-        const next = res.downtime_trained_tracks.map((t) =>
-          String(t || "")
-            .trim()
-            .toLowerCase(),
-        );
-        setDowntimeTrainedTracks(next);
-        setCharData((prev) => ({ ...prev, downtimeTrainedTracks: next }));
-      } else {
-        setDowntimeTrainedTracks((prev) =>
-          prev.includes(track) ? prev : [...prev, track],
-        );
       }
       if (
         typeof res?.pendings_minted === "number" &&
@@ -15083,7 +15037,7 @@ const CharacterSheetWrapper = ({
                             Range, Durability, or Dev). End-session toggles + Dev
                             bonus → free pool (bank onto tracks later). Downtime
                             Train buttons mark 1 XP (2 with crew Training upgrade)
-                            once per track per phase (Heritage Train is house-rule).
+                            on that track (Heritage Train is house-rule).
                             Activity budget not tracked yet. Crew XP: use crew
                             scorecard triggers.
                           </p>
@@ -15262,35 +15216,24 @@ const CharacterSheetWrapper = ({
                         <button
                           type="button"
                           disabled={
-                            trainBusyTrack === key ||
-                            poolAllocateBusy ||
-                            downtimeTrainedTracks.includes(key)
+                            trainBusyTrack === key || poolAllocateBusy
                           }
-                          title={
-                            downtimeTrainedTracks.includes(key)
-                              ? "Already trained this track this downtime phase"
-                              : `Downtime train: +${trainXpAmountForTrack(key)} XP${
-                                  trainXpAmountForTrack(key) > 1
-                                    ? " (crew Training upgrade)"
-                                    : ""
-                                }. Once per track per phase.`
-                          }
+                          title={`Downtime train: +${trainXpAmountForTrack(key)} XP${
+                            trainXpAmountForTrack(key) > 1
+                              ? " (crew Training upgrade)"
+                              : ""
+                          }.`}
                           onClick={() => handleTrainTrack(key)}
                           style={{
                             ...S.btn,
                             fontSize: "10px",
                             padding: "2px 8px",
-                            background: downtimeTrainedTracks.includes(key)
-                              ? "#374151"
-                              : "#1e3a5f",
-                            color: downtimeTrainedTracks.includes(key)
-                              ? "#9ca3af"
-                              : "#93c5fd",
+                            background: "#1e3a5f",
+                            color: "#93c5fd",
                             fontWeight: "bold",
                             opacity: trainBusyTrack === key ? 0.6 : 1,
-                            cursor: downtimeTrainedTracks.includes(key)
-                              ? "not-allowed"
-                              : "pointer",
+                            cursor:
+                              trainBusyTrack === key ? "wait" : "pointer",
                           }}
                         >
                           {trainBusyTrack === key
