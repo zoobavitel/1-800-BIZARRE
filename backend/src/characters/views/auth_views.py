@@ -123,15 +123,13 @@ class UserProfileViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['post'], url_path='change-password')
     def change_password(self, request):
         """Change the current user's password."""
-        serializer = ChangePasswordSerializer(data=request.data)
+        serializer = ChangePasswordSerializer(
+            data=request.data,
+            context={'user': request.user},
+        )
         if serializer.is_valid():
             user = request.user
-            if user.check_password(serializer.data.get('old_password')):
-                user.set_password(serializer.data.get('new_password'))
-                user.save()
-                return Response({'message': 'Password updated successfully'})
-            return Response(
-                {'error': 'Incorrect old password'}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            user.set_password(serializer.validated_data['new_password'])
+            user.save()
+            return Response({'message': 'Password updated successfully'})
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST) 
