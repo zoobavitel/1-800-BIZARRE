@@ -6,8 +6,9 @@ Trainable tracks: insight, prowess, resolve, playbook, heritage.
 Heritage Train is intentional homebrew (SRD train list excludes Heritage).
 
 Phase boundary: after the campaign's most recent COMPLETED Session
-(``session_date``). No completed session → any prior TRAIN for that track
-still blocks (phase never auto-resets until a session completes).
+(``session_date``). Before the first completed score, a live session (if any)
+bounds the phase to that session's start. With no completed score and no live
+session, Train does not require a downtime session mode — tracks stay available.
 
 Does not spend a downtime-activity budget — the app has no activity counter yet.
 """
@@ -16,7 +17,7 @@ from __future__ import annotations
 
 from django.utils import timezone
 
-from characters.models import DowntimeActivity, Session
+from characters.models import Campaign, DowntimeActivity, Session
 
 TRAINABLE_TRACKS = frozenset(
     {"insight", "prowess", "resolve", "playbook", "heritage"}
@@ -56,30 +57,63 @@ def parse_train_track(description: str) -> str | None:
     return None
 
 
-def downtime_phase_start(character):
-    """Timezone-aware datetime when current downtime phase began, or None."""
-    if not getattr(character, "campaign_id", None):
+def _aware_dt(dt):
+    if dt is None:
         return None
-    sess = (
-        Session.objects.filter(
-            campaign_id=character.campaign_id, status="COMPLETED"
-        )
-        .order_by("-session_date", "-id")
-        .first()
-    )
-    if sess is None or sess.session_date is None:
-        return None
-    dt = sess.session_date
     if timezone.is_naive(dt):
         return timezone.make_aware(dt, timezone.get_current_timezone())
     return dt
 
 
+def _live_session_for_campaign(campaign_id):
+    active_sid = (
+        Campaign.objects.filter(pk=campaign_id)
+        .values_list("active_session_id", flat=True)
+        .first()
+    )
+    if not active_sid:
+        return None
+    return Session.objects.filter(pk=active_sid, campaign_id=campaign_id).first()
+
+
+def downtime_phase_start(character):
+    """Timezone-aware datetime when current downtime phase began, or None."""
+    campaign_id = getattr(character, "campaign_id", None)
+    if not campaign_id:
+        return None
+
+    sess = (
+        Session.objects.filter(campaign_id=campaign_id, status="COMPLETED")
+        .order_by("-session_date", "-id")
+        .first()
+    )
+    if sess is not None and sess.session_date is not None:
+        return _aware_dt(sess.session_date)
+
+    # Before the first completed score, bound to the live session if one is running.
+    live = _live_session_for_campaign(campaign_id)
+    if live is not None and live.session_date is not None:
+        return _aware_dt(live.session_date)
+
+    return None
+
+
 def tracks_trained_this_phase(character) -> list[str]:
+    campaign_id = getattr(character, "campaign_id", None)
+    start = downtime_phase_start(character)
+    if (
+        start is None
+        and campaign_id is not None
+        and not Session.objects.filter(
+            campaign_id=campaign_id, status="COMPLETED"
+        ).exists()
+    ):
+        # Open table time before any score finishes — no downtime session UI needed.
+        return []
+
     qs = DowntimeActivity.objects.filter(
         character=character, activity_type="TRAIN"
     )
-    start = downtime_phase_start(character)
     if start is not None:
         qs = qs.filter(created_at__gte=start)
     found = []
