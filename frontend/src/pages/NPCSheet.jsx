@@ -31,6 +31,11 @@ import {
   compressImageForUpload,
   PORTRAIT_MAX_BYTES,
 } from "../utils/compressImageForUpload";
+import {
+  normalizeFactionStatusMap,
+  seedFactionStatusFromCampaign,
+  syncReverseFactionStatuses,
+} from "../utils/factionStatus";
 import "./NPCSheet.css";
 
 const STAND_FORM_PRESETS = ["Humanoid", "Non-Humanoid", "Phenomenon"];
@@ -85,6 +90,24 @@ function clampCrewStandingValue(n) {
   return clampStandingValue(n);
 }
 
+/** Legend labels for −3…+3 personal / crew standing. */
+function standingTierLabel(v) {
+  const n = clampStandingValue(v);
+  if (n <= -3) return "War";
+  if (n === -2) return "Hostile";
+  if (n === -1) return "Interfering";
+  if (n === 0) return "Neutral";
+  if (n === 1) return "Helpful";
+  if (n === 2) return "Friendly";
+  return "Allied";
+}
+
+function formatStandingBadge(v) {
+  const n = clampStandingValue(v);
+  const signed = n > 0 ? `+${n}` : String(n);
+  return `${signed} ${standingTierLabel(n)}`;
+}
+
 function normalizeStandingLocal(raw) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
   const out = {};
@@ -130,31 +153,6 @@ function newInventoryItemId() {
     return crypto.randomUUID();
   }
   return `item-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-}
-
-function seedFactionStatusFromCampaign(existing, campaignFactions, selfFactionId) {
-  const base =
-    existing && typeof existing === "object" && !Array.isArray(existing)
-      ? { ...existing }
-      : {};
-  let changed = false;
-  for (const f of campaignFactions || []) {
-    if (f == null || f.name == null) continue;
-    if (
-      selfFactionId != null &&
-      selfFactionId !== "" &&
-      Number(f.id) === Number(selfFactionId)
-    ) {
-      continue;
-    }
-    const name = String(f.name).trim();
-    if (!name) continue;
-    if (!(name in base)) {
-      base[name] = 0;
-      changed = true;
-    }
-  }
-  return { next: base, changed };
 }
 
 /** Resolve a freeform/manual contact to an openable NPC or PC sheet when possible. */
@@ -206,6 +204,42 @@ function resolveContactSheetLink(
     return { kind: "pc", id: pcHits[0].id, entity: pcHits[0] };
   }
   return null;
+}
+
+function contactMatchesNpcId(contact, npcId) {
+  const raw = contact?.npc_id ?? contact?.npcId;
+  if (raw == null || raw === "") return false;
+  return Number(raw) === Number(npcId);
+}
+
+function dispositionForNpcContact(list, npcId) {
+  const row = (Array.isArray(list) ? list : []).find((c) =>
+    contactMatchesNpcId(c, npcId),
+  );
+  return row?.disposition || "neutral";
+}
+
+/** Upsert disposition on a contact linked by npc_id; append if missing. */
+function upsertNpcContactDisposition(list, npc, disposition) {
+  const prev = Array.isArray(list) ? list : [];
+  const npcId = Number(npc?.id);
+  if (!Number.isFinite(npcId)) return prev;
+  const idx = prev.findIndex((c) => contactMatchesNpcId(c, npcId));
+  const label = npc.name || npc.stand_name || `NPC #${npcId}`;
+  if (idx >= 0) {
+    return prev.map((c, i) =>
+      i === idx ? { ...c, disposition } : c,
+    );
+  }
+  return [
+    ...prev,
+    {
+      name: label,
+      role: "Faction member",
+      disposition,
+      npc_id: npcId,
+    },
+  ];
 }
 
 function ContactOpenButton({ link, onOpenNpc, onOpenCharacter }) {
@@ -1271,6 +1305,8 @@ const NPCSheet = ({
   const [factionStatusData, setFactionStatusData] = useState({});
   const [factionCrewNotes, setFactionCrewNotes] = useState("");
   const [factionVisibleToPlayers, setFactionVisibleToPlayers] = useState(false);
+  /** Last persisted/loaded faction_status — used to reverse-sync only changed keys. */
+  const prevFactionStatusRef = useRef(null);
 
   // Load faction detail only when selected faction id changes (not on campaigns churn).
   useEffect(() => {
@@ -1309,6 +1345,7 @@ const NPCSheet = ({
             campaignFactionsRef.current,
             faction,
           );
+          prevFactionStatusRef.current = next;
           return next;
         });
         setFactionCrewNotes(f.crew_notes || "");
@@ -1366,6 +1403,7 @@ const NPCSheet = ({
       if (factionSavingRef.current) return;
       factionSavingRef.current = true;
       try {
+        const statusSnapshot = normalizeFactionStatusMap(factionStatusData);
         const updated = await factionAPI.patchFaction(faction, {
           name: factionName,
           faction_type: factionType,
@@ -1374,7 +1412,7 @@ const NPCSheet = ({
           reputation: factionReputation,
           contacts: factionContacts,
           inventory: factionInventory,
-          faction_status: factionStatusData,
+          faction_status: statusSnapshot,
           crew_notes: factionCrewNotes,
           visible_to_players: factionVisibleToPlayers,
         });
@@ -1388,6 +1426,35 @@ const NPCSheet = ({
           }
           return updated?.id != null ? [...prev, updated] : prev;
         });
+        const selfName = String(factionName || "").trim();
+        if (selfName) {
+          const reverseUpdated = await syncReverseFactionStatuses({
+            selfId: faction,
+            selfName,
+            statusMap: statusSnapshot,
+            previousStatusMap: prevFactionStatusRef.current,
+            campaignFactions: campaignFactionsRef.current,
+            getFaction: factionAPI.getFaction,
+            patchFaction: factionAPI.patchFaction,
+          });
+          if (reverseUpdated.length > 0) {
+            setLocalExtraFactions((prev) => {
+              let next = [...prev];
+              for (const patched of reverseUpdated) {
+                if (patched?.id == null) continue;
+                const id = Number(patched.id);
+                const idx = next.findIndex((f) => Number(f.id) === id);
+                if (idx >= 0) {
+                  next[idx] = { ...next[idx], ...patched };
+                } else {
+                  next = [...next, patched];
+                }
+              }
+              return next;
+            });
+          }
+        }
+        prevFactionStatusRef.current = statusSnapshot;
       } catch {
         // silently ignore faction save errors
       } finally {
@@ -1415,6 +1482,7 @@ const NPCSheet = ({
   // Reset faction-mounted flag when faction changes so first load doesn't trigger a spurious save
   useEffect(() => {
     factionMountedRef.current = false;
+    prevFactionStatusRef.current = null;
   }, [faction]);
 
   const handleCreateFaction = useCallback(async () => {
@@ -1450,8 +1518,8 @@ const NPCSheet = ({
 
   // Crew / faction management fields
   const [contacts, setContacts] = useState(npc?.contacts || []);
-  const [factionStatus, setFactionStatus] = useState(
-    npc?.faction_status || npc?.factionStatus || {},
+  const [factionStatus, setFactionStatus] = useState(() =>
+    normalizeFactionStatusMap(npc?.faction_status || npc?.factionStatus || {}),
   );
   const [inventory, setInventory] = useState(() =>
     normalizeCharacterInventory(npc?.inventory),
@@ -5964,8 +6032,9 @@ const NPCSheet = ({
                       lineHeight: 1.4,
                     }}
                   >
-                    Personal relationship with campaign PCs (−3 to +3). Distinct
-                    from crew/faction standing.
+                    This NPC&apos;s standing toward each campaign PC (−3 to +3).
+                    Shown on each PC&apos;s NPC STANDING. Not contact disposition.
+                    Distinct from crew/faction standing.
                   </div>
                   {campaignId && campaignPlayerCharacters.length > 0 ? (
                     <>
@@ -6450,6 +6519,20 @@ const NPCSheet = ({
               {/* Contacts */}
               <div style={S.card}>
                 <span style={S.lbl}>CONTACTS / ASSOCIATES</span>
+                <div
+                  style={{
+                    fontSize: "10px",
+                    color: "#6b7280",
+                    marginTop: "4px",
+                    marginBottom: "8px",
+                    lineHeight: 1.4,
+                  }}
+                >
+                  Disposition (Allied…Hostile) on faction members and contact
+                  rows is card flavor only. Campaign PC relationships use{" "}
+                  <strong>PC STANDING</strong> (NPC → PC), also shown on each
+                  PC&apos;s NPC STANDING.
+                </div>
                 {(factionNpcPeers.length > 0 ||
                   crewAssociatePcs.length > 0) && (
                   <div style={{ marginBottom: "10px" }}>
@@ -6462,7 +6545,13 @@ const NPCSheet = ({
                     >
                       Auto from faction membership / player crew
                     </div>
-                    {factionNpcPeers.map((n) => (
+                    {factionNpcPeers.map((n) => {
+                      const contactList = faction ? factionContacts : contacts;
+                      const peerDisposition = dispositionForNpcContact(
+                        contactList,
+                        n.id,
+                      );
+                      return (
                       <div
                         key={`peer-${n.id}`}
                         style={{
@@ -6486,23 +6575,47 @@ const NPCSheet = ({
                         >
                           Faction member
                         </span>
-                        <span
+                        <select
+                          value={peerDisposition}
+                          onChange={(e) => {
+                            const nextDisp = e.target.value;
+                            if (faction) {
+                              setFactionContacts((p) =>
+                                upsertNpcContactDisposition(p, n, nextDisp),
+                              );
+                            } else {
+                              setContacts((p) =>
+                                upsertNpcContactDisposition(p, n, nextDisp),
+                              );
+                            }
+                          }}
                           style={{
-                            fontSize: "10px",
-                            color: "#86efac",
+                            ...S.sel,
+                            fontSize: "11px",
+                            padding: "2px 4px",
                             flexShrink: 0,
                           }}
+                          title="Contact disposition (flavor)"
                         >
-                          Allied
-                        </span>
+                          <option value="allied">Allied</option>
+                          <option value="friendly">Friendly</option>
+                          <option value="neutral">Neutral</option>
+                          <option value="suspicious">Suspicious</option>
+                          <option value="hostile">Hostile</option>
+                        </select>
                         <ContactOpenButton
                           link={{ kind: "npc", id: n.id, entity: n }}
                           onOpenNpc={onOpenNpc}
                           onOpenCharacter={onOpenCharacter}
                         />
                       </div>
-                    ))}
-                    {crewAssociatePcs.map((ch) => (
+                      );
+                    })}
+                    {crewAssociatePcs.map((ch) => {
+                      const standVal = clampStandingValue(
+                        pcStanding[String(ch.id)] ?? 0,
+                      );
+                      return (
                       <div
                         key={`crew-pc-${ch.id}`}
                         style={{
@@ -6532,11 +6645,17 @@ const NPCSheet = ({
                         <span
                           style={{
                             fontSize: "10px",
-                            color: "#86efac",
+                            color:
+                              standVal > 0
+                                ? "#86efac"
+                                : standVal < 0
+                                  ? "#fca5a5"
+                                  : "#9ca3af",
                             flexShrink: 0,
                           }}
+                          title="From PC STANDING (this NPC toward the PC)"
                         >
-                          Allied
+                          {formatStandingBadge(standVal)}
                         </span>
                         <ContactOpenButton
                           link={{ kind: "pc", id: ch.id, entity: ch }}
@@ -6544,7 +6663,8 @@ const NPCSheet = ({
                           onOpenCharacter={onOpenCharacter}
                         />
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
                 <div style={{ marginBottom: "8px" }}>
@@ -6798,8 +6918,29 @@ const NPCSheet = ({
               <div>
               <div style={S.card}>
                 <span style={S.lbl}>Faction reputation</span>
+                <div
+                  style={{
+                    fontSize: "10px",
+                    color: "#6b7280",
+                    marginTop: "2px",
+                    marginBottom: "8px",
+                    lineHeight: 1.4,
+                  }}
+                >
+                  This faction&apos;s standing toward other factions (−3 to +3).
+                  Edits sync both directions.
+                </div>
                 <div style={{ marginBottom: "8px" }}>
-                  {Object.entries(faction ? factionStatusData : factionStatus).map(([fName, value]) => (
+                  {Object.entries(faction ? factionStatusData : factionStatus)
+                    .filter(
+                      ([fName, value]) =>
+                        fName !== "next" &&
+                        fName !== "changed" &&
+                        (typeof value === "number" ||
+                          (typeof value === "string" &&
+                            Number.isFinite(Number(value)))),
+                    )
+                    .map(([fName, value]) => (
                     <div
                       key={fName}
                       style={{
@@ -6951,6 +7092,19 @@ const NPCSheet = ({
               campaignCrews.length > 0 ? (
                 <div style={S.card}>
                   <span style={S.lbl}>Player Crew Standing</span>
+                  <div
+                    style={{
+                      fontSize: "10px",
+                      color: "#6b7280",
+                      marginTop: "4px",
+                      marginBottom: "8px",
+                      lineHeight: 1.4,
+                    }}
+                  >
+                    This NPC&apos;s personal standing with each crew (−3 to +3).
+                    May differ from their faction&apos;s crew reputation (e.g.
+                    double agent).
+                  </div>
                   <div style={{ marginBottom: "8px" }}>
                     {campaignCrews.map((c) => {
                       const key = String(c.id);
@@ -6958,16 +7112,37 @@ const NPCSheet = ({
                         crewStanding[key] ?? 0,
                       );
                       const isMember = Number(currentCrewId) === Number(c.id);
+                      const facRels = Array.isArray(c.faction_relationships)
+                        ? c.faction_relationships
+                        : [];
+                      const facRel =
+                        currentFactionId != null
+                          ? facRels.find(
+                              (r) =>
+                                Number(r.faction_id) === Number(currentFactionId),
+                            )
+                          : null;
+                      const facRep =
+                        facRel != null && facRel.reputation_value != null
+                          ? clampCrewStandingValue(facRel.reputation_value)
+                          : null;
                       return (
                         <div
                           key={c.id}
                           style={{
                             display: "flex",
-                            gap: "6px",
-                            marginBottom: "6px",
-                            alignItems: "center",
+                            flexDirection: "column",
+                            gap: "2px",
+                            marginBottom: "8px",
                           }}
                         >
+                          <div
+                            style={{
+                              display: "flex",
+                              gap: "6px",
+                              alignItems: "center",
+                            }}
+                          >
                           <span
                             style={{
                               flex: 1,
@@ -7048,6 +7223,30 @@ const NPCSheet = ({
                           >
                             +
                           </button>
+                          </div>
+                          {facRep != null ? (
+                            <div
+                              style={{
+                                fontSize: "10px",
+                                color: "#6b7280",
+                                paddingLeft: 2,
+                              }}
+                            >
+                              Faction:{" "}
+                              <span
+                                style={{
+                                  color:
+                                    facRep > 0
+                                      ? "#86efac"
+                                      : facRep < 0
+                                        ? "#fca5a5"
+                                        : "#9ca3af",
+                                }}
+                              >
+                                {formatStandingBadge(facRep)}
+                              </span>
+                            </div>
+                          ) : null}
                         </div>
                       );
                     })}
