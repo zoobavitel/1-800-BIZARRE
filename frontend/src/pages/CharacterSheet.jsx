@@ -285,6 +285,25 @@ function reputationTierLabel(v) {
   return "Neutral";
 }
 
+/** −3…+3 personal standing badge (NPC crew_standing toward this crew). */
+function formatNpcCrewStandingBadge(v) {
+  const n = Number(v);
+  const clamped = Number.isFinite(n)
+    ? Math.max(-3, Math.min(3, Math.trunc(n)))
+    : 0;
+  const labels = {
+    [-3]: "War",
+    [-2]: "Hostile",
+    [-1]: "Interfering",
+    0: "Neutral",
+    1: "Helpful",
+    2: "Friendly",
+    3: "Allied",
+  };
+  const signed = clamped > 0 ? `+${clamped}` : String(clamped);
+  return { signed, label: labels[clamped] ?? "Neutral", value: clamped };
+}
+
 function computeResistanceSummary(diceResults, { zeroDice = false } = {}) {
   const sorted = (Array.isArray(diceResults) ? diceResults : [])
     .map((n) => Number(n))
@@ -3067,6 +3086,9 @@ const CharacterSheetWrapper = ({
   /** Optimistic NPC.visible_to_players overlays until server catches up. */
   const [npcPlayerVisOverrides, setNpcPlayerVisOverrides] = useState({});
   const [factionNpcVisErr, setFactionNpcVisErr] = useState(null);
+  /** Optimistic NPC.pc_standing[this PC] overlays for NPC STANDING panel. */
+  const [npcTowardMeOverrides, setNpcTowardMeOverrides] = useState({});
+  const [npcTowardMeErr, setNpcTowardMeErr] = useState(null);
   const [crewHistoryEntries, setCrewHistoryEntries] = useState([]);
   const [crewHistoryOpen, setCrewHistoryOpen] = useState(() =>
     readCharSheetBool(characterId, "crew-history", false),
@@ -3076,7 +3098,9 @@ const CharacterSheetWrapper = ({
   useEffect(() => {
     setNpcPlayerVisOverrides({});
     setFactionNpcVisErr(null);
-  }, [charCampaign?.id]);
+    setNpcTowardMeOverrides({});
+    setNpcTowardMeErr(null);
+  }, [charCampaign?.id, characterId]);
 
   /** Drop overrides once campaign payload matches (keep them through stale SSE/poll). */
   useEffect(() => {
@@ -3107,6 +3131,42 @@ const CharacterSheetWrapper = ({
       return changed ? next : prev;
     });
   }, [charCampaign?.campaign_npcs, charCampaign?.factions]);
+
+  useEffect(() => {
+    const meKey =
+      characterId != null && characterId !== "" ? String(characterId) : null;
+    if (!meKey) return;
+    setNpcTowardMeOverrides((prev) => {
+      const keys = Object.keys(prev);
+      if (!keys.length) return prev;
+      const byId = new Map();
+      for (const n of charCampaign?.campaign_npcs || []) {
+        if (n?.id != null) byId.set(Number(n.id), n);
+      }
+      for (const f of charCampaign?.factions || []) {
+        for (const n of f?.npcs || []) {
+          if (n?.id != null) byId.set(Number(n.id), n);
+        }
+      }
+      const next = { ...prev };
+      let changed = false;
+      for (const k of keys) {
+        const id = Number(k);
+        const npc = byId.get(id);
+        if (!npc) continue;
+        const map =
+          npc.pc_standing && typeof npc.pc_standing === "object"
+            ? npc.pc_standing
+            : {};
+        const serverVal = clampNpcStandingValue(map[meKey] ?? 0);
+        if (serverVal === clampNpcStandingValue(prev[id])) {
+          delete next[id];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [charCampaign?.campaign_npcs, charCampaign?.factions, characterId]);
 
   const resolveNpcPlayerVisible = useCallback(
     (npc) => {
@@ -3151,6 +3211,58 @@ const CharacterSheetWrapper = ({
       }
     },
     [onCampaignRefresh],
+  );
+
+  const resolveNpcStandingTowardMe = useCallback(
+    (npc) => {
+      const npcId = Number(npc?.id);
+      if (!Number.isFinite(npcId)) return 0;
+      if (Object.prototype.hasOwnProperty.call(npcTowardMeOverrides, npcId)) {
+        return clampNpcStandingValue(npcTowardMeOverrides[npcId]);
+      }
+      const meKey =
+        characterId != null && characterId !== "" ? String(characterId) : null;
+      if (!meKey) return 0;
+      const map =
+        npc?.pc_standing && typeof npc.pc_standing === "object"
+          ? npc.pc_standing
+          : {};
+      return clampNpcStandingValue(map[meKey] ?? 0);
+    },
+    [npcTowardMeOverrides, characterId],
+  );
+
+  const patchNpcStandingTowardMe = useCallback(
+    async (npc, nextValue) => {
+      if (!(isGM || isCampaignGm)) return;
+      const npcId = Number(npc?.id);
+      const meKey =
+        characterId != null && characterId !== "" ? String(characterId) : null;
+      if (!Number.isFinite(npcId) || !meKey) return;
+      const clamped = clampNpcStandingValue(nextValue);
+      setNpcTowardMeErr(null);
+      setNpcTowardMeOverrides((prev) => ({ ...prev, [npcId]: clamped }));
+      const prevMap =
+        npc?.pc_standing && typeof npc.pc_standing === "object"
+          ? { ...npc.pc_standing }
+          : {};
+      try {
+        await npcAPI.patchNPC(npcId, {
+          pc_standing: { ...prevMap, [meKey]: clamped },
+        });
+        await onCampaignRefresh?.();
+      } catch (e) {
+        setNpcTowardMeOverrides((prev) => {
+          const next = { ...prev };
+          delete next[npcId];
+          return next;
+        });
+        setNpcTowardMeErr(
+          e?.message || "Could not update how this NPC feels about you.",
+        );
+      }
+    },
+    [isGM, isCampaignGm, characterId, onCampaignRefresh],
   );
 
   /** NPC STANDING: GM sees all; players only See-on NPCs (faction optional). */
@@ -22792,9 +22904,21 @@ const CharacterSheetWrapper = ({
                         lineHeight: 1.4,
                       }}
                     >
-                      Personal relationship with campaign NPCs (−3 to +3). Distinct
-                      from crew/faction reputation.
+                      How each campaign NPC feels about you (−3 to +3). Same
+                      values as that NPC&apos;s PC STANDING. Distinct from
+                      crew/faction reputation.
                     </div>
+                    {npcTowardMeErr ? (
+                      <div
+                        style={{
+                          fontSize: "11px",
+                          color: "#fca5a5",
+                          marginBottom: "6px",
+                        }}
+                      >
+                        {npcTowardMeErr}
+                      </div>
+                    ) : null}
                     {campaignId && campaignNpcsForStanding.length > 0 ? (
                       <>
                         <div
@@ -22802,13 +22926,12 @@ const CharacterSheetWrapper = ({
                             marginBottom: "8px",
                             maxHeight: 260,
                             overflowY: "auto",
+                            paddingRight: 10,
                           }}
                         >
                           {campaignNpcsForStanding.map((npc) => {
-                            const key = String(npc.id);
-                            const value = clampNpcStandingValue(
-                              charData.npcStanding?.[key] ?? 0,
-                            );
+                            const value = resolveNpcStandingTowardMe(npc);
+                            const canEditStanding = isGM || isCampaignGm;
                             const label =
                               npc.name ||
                               npc.stand_name ||
@@ -22905,19 +23028,13 @@ const CharacterSheetWrapper = ({
                                 ) : null}
                                 <button
                                   type="button"
-                                  disabled={!canEditSheet}
+                                  disabled={!canEditStanding}
                                   onClick={() => {
-                                    if (!canEditSheet) return;
-                                    markDirtyIntent();
-                                    setCharData((p) => ({
-                                      ...p,
-                                      npcStanding: {
-                                        ...(p.npcStanding || {}),
-                                        [key]: clampNpcStandingValue(
-                                          (p.npcStanding?.[key] ?? 0) - 1,
-                                        ),
-                                      },
-                                    }));
+                                    if (!canEditStanding) return;
+                                    void patchNpcStandingTowardMe(
+                                      npc,
+                                      value - 1,
+                                    );
                                   }}
                                   style={{
                                     ...S.btn,
@@ -22925,8 +23042,8 @@ const CharacterSheetWrapper = ({
                                     background: "#7f1d1d",
                                     color: "#fca5a5",
                                     fontSize: "11px",
-                                    opacity: canEditSheet ? 1 : 0.5,
-                                    cursor: canEditSheet
+                                    opacity: canEditStanding ? 1 : 0.5,
+                                    cursor: canEditStanding
                                       ? "pointer"
                                       : "not-allowed",
                                   }}
@@ -22952,19 +23069,13 @@ const CharacterSheetWrapper = ({
                                 </span>
                                 <button
                                   type="button"
-                                  disabled={!canEditSheet}
+                                  disabled={!canEditStanding}
                                   onClick={() => {
-                                    if (!canEditSheet) return;
-                                    markDirtyIntent();
-                                    setCharData((p) => ({
-                                      ...p,
-                                      npcStanding: {
-                                        ...(p.npcStanding || {}),
-                                        [key]: clampNpcStandingValue(
-                                          (p.npcStanding?.[key] ?? 0) + 1,
-                                        ),
-                                      },
-                                    }));
+                                    if (!canEditStanding) return;
+                                    void patchNpcStandingTowardMe(
+                                      npc,
+                                      value + 1,
+                                    );
                                   }}
                                   style={{
                                     ...S.btn,
@@ -22972,8 +23083,8 @@ const CharacterSheetWrapper = ({
                                     background: "#14532d",
                                     color: "#86efac",
                                     fontSize: "11px",
-                                    opacity: canEditSheet ? 1 : 0.5,
-                                    cursor: canEditSheet
+                                    opacity: canEditStanding ? 1 : 0.5,
+                                    cursor: canEditStanding
                                       ? "pointer"
                                       : "not-allowed",
                                   }}
@@ -23788,12 +23899,44 @@ const CharacterSheetWrapper = ({
                             </span>
                           </div>
                           {isGM || row.players_see_reputation !== false ? (
-                            <span style={{ color: "#9ca3af" }}>
-                              {row.reputation_value}{" "}
-                              <span style={{ color: "#6b7280" }}>
-                                ({reputationTierLabel(row.reputation_value)})
+                            isGM && charData.crewId ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const el = document.getElementById(
+                                    `crew-faction-rep-${row.faction_id}`,
+                                  );
+                                  if (el) {
+                                    el.focus();
+                                    if (typeof el.select === "function") {
+                                      el.select();
+                                    }
+                                  }
+                                }}
+                                style={{
+                                  color: "#9ca3af",
+                                  background: "none",
+                                  border: "none",
+                                  padding: 0,
+                                  cursor: "pointer",
+                                  textAlign: "left",
+                                  font: "inherit",
+                                }}
+                                title="Edit crew↔faction reputation"
+                              >
+                                {row.reputation_value}{" "}
+                                <span style={{ color: "#6b7280" }}>
+                                  ({reputationTierLabel(row.reputation_value)})
+                                </span>
+                              </button>
+                            ) : (
+                              <span style={{ color: "#9ca3af" }}>
+                                {row.reputation_value}{" "}
+                                <span style={{ color: "#6b7280" }}>
+                                  ({reputationTierLabel(row.reputation_value)})
+                                </span>
                               </span>
-                            </span>
+                            )
                           ) : null}
                           {!isGM &&
                           row.players_see_tier !== false &&
@@ -23852,6 +23995,20 @@ const CharacterSheetWrapper = ({
                                   const playerSees =
                                     resolveNpcPlayerVisible(npc);
                                   const hidden = isGM && !playerSees;
+                                  const crewKey =
+                                    charData.crewId != null
+                                      ? String(charData.crewId)
+                                      : null;
+                                  const rawStand =
+                                    crewKey &&
+                                    npc?.crew_standing &&
+                                    typeof npc.crew_standing === "object"
+                                      ? npc.crew_standing[crewKey]
+                                      : null;
+                                  const personalStand =
+                                    rawStand != null && rawStand !== ""
+                                      ? formatNpcCrewStandingBadge(rawStand)
+                                      : null;
                                   return (
                                     <div
                                       key={`stand-npc-${npc.id}`}
@@ -23867,6 +24024,24 @@ const CharacterSheetWrapper = ({
                                         npc={npc}
                                         compact
                                       />
+                                      {personalStand ? (
+                                        <span
+                                          style={{
+                                            fontSize: 9,
+                                            fontWeight: 600,
+                                            color:
+                                              personalStand.value > 0
+                                                ? "#86efac"
+                                                : personalStand.value < 0
+                                                  ? "#fca5a5"
+                                                  : "#9ca3af",
+                                            lineHeight: 1.1,
+                                          }}
+                                          title={`Personal standing with this crew: ${personalStand.signed} ${personalStand.label}`}
+                                        >
+                                          {personalStand.signed}
+                                        </span>
+                                      ) : null}
                                       {isGM ? (
                                         <label
                                           style={{
@@ -23983,6 +24158,7 @@ const CharacterSheetWrapper = ({
                                 >
                                   Rep
                                   <input
+                                    id={`crew-faction-rep-${row.faction_id}`}
                                     type="number"
                                     min={-3}
                                     max={3}
