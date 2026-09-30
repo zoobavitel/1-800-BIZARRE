@@ -1,5 +1,6 @@
 /**
  * Stress marked on a resistance roll (user attributes or Durability).
+ * Mirrors `characters.roll_helpers.resistance_stress_cost` (Python).
  * Highest 6 costs 0. Two 6s: pay 0 and clear 1 (return -1).
  * 0-dice (2d take lower) cannot crit.
  *
