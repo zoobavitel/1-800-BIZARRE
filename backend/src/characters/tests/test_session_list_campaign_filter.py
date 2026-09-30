@@ -33,6 +33,11 @@ class SessionListCampaignFilterTests(TestCase):
         results = data["results"] if isinstance(data, dict) and "results" in data else data
         return sorted(item["id"] for item in results)
 
+    def _ids_in_order(self, response):
+        data = response.data
+        results = data["results"] if isinstance(data, dict) and "results" in data else data
+        return [item["id"] for item in results]
+
     def test_list_filters_by_campaign(self):
         self.client.force_authenticate(user=self.gm)
 
@@ -56,4 +61,16 @@ class SessionListCampaignFilterTests(TestCase):
             sorted(
                 [self.session_a1.id, self.session_a2.id, self.session_b1.id]
             ),
+        )
+
+    def test_list_returns_newest_first(self):
+        """Campaign sessions list must be newest-first (session_date desc, id desc)."""
+        self.client.force_authenticate(user=self.gm)
+        # session_a2 created after session_a1 → higher id; same default session_date
+        # ordering falls through to -id so a2 precedes a1.
+        res = self.client.get(f"/api/sessions/?campaign={self.campaign_a.id}")
+        self.assertEqual(res.status_code, 200, res.data)
+        self.assertEqual(
+            self._ids_in_order(res),
+            [self.session_a2.id, self.session_a1.id],
         )
