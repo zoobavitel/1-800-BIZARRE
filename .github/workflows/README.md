@@ -6,7 +6,7 @@ GitHub Actions definitions for the 1-800-BIZARRE repo. The high-level overview, 
 
 | Workflow | Trigger | What it does |
 |----------|---------|--------------|
-| [`ci.yml`](ci.yml) | Push + PR to `master` / `main` | Frontend job (`npm ci`, `jest --coverage`, `eslint`, `npm run build`), backend job (`pip install`, `manage.py test`, `makemigrations --check`), integration job (boots Django, runs `RUN_BACKEND_INTEGRATION=1` Jest suite). On `master` / `main` pushes also runs `deploy-github-pages` and the optional `deploy-lxc` (manual `workflow_dispatch`). |
+| [`ci.yml`](ci.yml) | Push + PR to `master` / `main` | Frontend job (`npm ci`, `jest --coverage`, `eslint`, `npm run build`), backend job (`pip install`, `manage.py test`, `makemigrations --check`), integration job (boots Django, runs `RUN_BACKEND_INTEGRATION=1` Jest suite). On `master` / `main` pushes also runs `deploy-github-pages`. Optional manual `workflow_dispatch` → `deploy-lxc` updates **`/opt/bizarre-prod`** (detached `origin/master`) only — never the agent workspace `/opt/bizarre`. |
 | [`secret-scan.yml`](secret-scan.yml) | Push + PR | Runs `gitleaks` with the repo-root [`.gitleaks.toml`](../../.gitleaks.toml) rule set. |
 | [`black-autofix-pr.yml`](black-autofix-pr.yml) | PR | Auto-formats Python with `black` and pushes the fix back to the PR branch. |
 | [`daily-critical-bug-review.yml`](daily-critical-bug-review.yml) | Scheduled (daily) | Runs [`scripts/daily_critical_bug_review.py`](../../scripts/daily_critical_bug_review.py) to surface high-risk diffs from the last day. |
