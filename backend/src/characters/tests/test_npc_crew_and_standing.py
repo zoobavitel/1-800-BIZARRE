@@ -1,16 +1,12 @@
-"""NPC.crew FK, crew_standing prune, campaign npc_members visibility."""
+"""NPC.crew FK, crew_standing / pc_standing prune, campaign npc_members visibility."""
 from django.contrib.auth.models import User
-from django.test import RequestFactory, TestCase
-from rest_framework import status
-from rest_framework.test import APIClient, APIRequestFactory
+from django.test import TestCase
+from rest_framework.test import APIRequestFactory
 
-from characters.models import Campaign, Character, Crew, Faction, Heritage, NPC
-from characters.serializers import (
-    CharacterSerializer,
-    CrewCampaignSerializer,
-    NPCSerializer,
-)
+from characters.models import Campaign, Character, Crew, Faction, NPC
+from characters.serializers import NPCSerializer
 from characters.services.crew_standing import normalize_crew_standing
+from characters.services.pc_standing import normalize_pc_standing
 
 
 class NormalizeCrewStandingTest(TestCase):
@@ -25,6 +21,18 @@ class NormalizeCrewStandingTest(TestCase):
         self.assertEqual(normalize_crew_standing([1, 2]), {})
 
 
+class NormalizePcStandingTest(TestCase):
+    def test_clamps_and_drops_bad_keys(self):
+        out = normalize_pc_standing(
+            {"1": 9, "2": -9, "x": 1, "3": "nope"},
+            valid_character_ids=[1, 2],
+        )
+        self.assertEqual(out, {"1": 3, "2": -3})
+
+    def test_empty_on_non_dict(self):
+        self.assertEqual(normalize_pc_standing([1, 2]), {})
+
+
 class NPCCrewStandingSerializerTest(TestCase):
     def setUp(self):
         self.gm = User.objects.create_user("npcgm", "npcgm@test.com", "pw")
@@ -33,6 +41,11 @@ class NPCCrewStandingSerializerTest(TestCase):
         self.crew = Crew.objects.create(name="PCs", campaign=self.campaign)
         self.crew_b = Crew.objects.create(name="OtherCrew", campaign=self.other)
         self.faction = Faction.objects.create(name="F", campaign=self.campaign)
+        self.pc = Character.objects.create(
+            true_name="Hero",
+            user=self.gm,
+            campaign=self.campaign,
+        )
         self.npc = NPC.objects.create(
             name="Mole",
             creator=self.gm,
@@ -40,6 +53,7 @@ class NPCCrewStandingSerializerTest(TestCase):
             faction=self.faction,
             crew=self.crew,
             crew_standing={str(self.crew.id): 2, "999": 1},
+            pc_standing={str(self.pc.id): 1, "999": 2},
             stand_coin_stats={},
         )
         self.factory = APIRequestFactory()
@@ -66,6 +80,19 @@ class NPCCrewStandingSerializerTest(TestCase):
             {str(self.crew.id): 2},
         )
 
+    def test_validate_prunes_stale_pc_standing_keys(self):
+        ser = NPCSerializer(
+            self.npc,
+            data={"pc_standing": {str(self.pc.id): 2, "999": 1}},
+            partial=True,
+            context={"request": self._request(self.gm)},
+        )
+        self.assertTrue(ser.is_valid(), ser.errors)
+        self.assertEqual(
+            ser.validated_data["pc_standing"],
+            {str(self.pc.id): 2},
+        )
+
     def test_crew_must_match_campaign(self):
         ser = NPCSerializer(
             self.npc,
@@ -86,6 +113,16 @@ class NPCCrewStandingSerializerTest(TestCase):
         self.assertTrue(ser.is_valid(), ser.errors)
         self.assertIsNone(ser.validated_data.get("crew"))
 
+    def test_campaign_change_prunes_pc_standing(self):
+        ser = NPCSerializer(
+            self.npc,
+            data={"campaign": self.other.id},
+            partial=True,
+            context={"request": self._request(self.gm)},
+        )
+        self.assertTrue(ser.is_valid(), ser.errors)
+        self.assertEqual(ser.validated_data.get("pc_standing"), {})
+
     def test_post_delete_crew_prunes_standing(self):
         crew_id = self.crew.id
         self.crew.delete()
@@ -94,4 +131,9 @@ class NPCCrewStandingSerializerTest(TestCase):
         standing = self.npc.crew_standing or {}
         self.assertNotIn(str(crew_id), standing)
 
-
+    def test_post_delete_character_prunes_pc_standing(self):
+        pc_id = self.pc.id
+        self.pc.delete()
+        self.npc.refresh_from_db()
+        standing = self.npc.pc_standing or {}
+        self.assertNotIn(str(pc_id), standing)
