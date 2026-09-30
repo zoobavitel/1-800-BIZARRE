@@ -869,6 +869,7 @@ const NPCSheet = ({
   campaigns = [],
   allNpcs = [],
   isGM = false,
+  readOnly = false,
   onFactionChange,
   onCampaignRefresh,
   onOpenNpc,
@@ -1841,6 +1842,7 @@ const NPCSheet = ({
   const buildPayloadRef = useRef(null);
   const nameRef = useRef(name);
   const onSaveRef = useRef(onSave);
+  const readOnlyRef = useRef(readOnly);
 
   const [showNpcTrackingPanel, setShowNpcTrackingPanel] = useState(false);
   const [npcTrackingTab, setNpcTrackingTab] = useState("sheet");
@@ -2284,8 +2286,10 @@ const NPCSheet = ({
   buildPayloadRef.current = buildPayload;
   nameRef.current = name;
   onSaveRef.current = onSave;
+  readOnlyRef.current = readOnly;
 
   const runNpcAutosave = useCallback(async () => {
+    if (readOnlyRef.current) return;
     const saveFn = onSaveRef.current;
     if (!saveFn) return;
     if (markNpcAutosaveBusyCollision(savingRef.current, pendingSaveRef)) {
@@ -2376,6 +2380,7 @@ const NPCSheet = ({
 
   // Debounced auto-save
   useEffect(() => {
+    if (readOnly) return undefined;
     if (!mountedRef.current) {
       mountedRef.current = true;
       return;
@@ -2389,6 +2394,7 @@ const NPCSheet = ({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
+    readOnly,
     name,
     standName,
     role,
@@ -2557,7 +2563,7 @@ const NPCSheet = ({
           <span
             style={{ fontSize: "14px", color: "#9ca3af", fontWeight: "bold" }}
           >
-            GM — NPC SHEET
+            {readOnly ? "VIEW — NPC SHEET" : "GM — NPC SHEET"}
           </span>
           {name && (
             <span style={{ color: "#fff", fontWeight: "bold" }}>{name}</span>
@@ -2938,6 +2944,18 @@ const NPCSheet = ({
       )}
 
       {/* ── Mode Toggle ── */}
+      <fieldset
+        disabled={readOnly}
+        style={{
+          border: "none",
+          margin: 0,
+          padding: 0,
+          minWidth: 0,
+          ...(readOnly
+            ? { pointerEvents: "none", opacity: 0.92, cursor: "default" }
+            : {}),
+        }}
+      >
       <div
         style={{
           display: "flex",
@@ -3981,7 +3999,7 @@ const NPCSheet = ({
                     <CharacterSheetInventoryList
                       panelId="npc-sheet-inventory-panel"
                       inventory={inventory}
-                      readOnly={false}
+                      readOnly={readOnly}
                       allowArmor={false}
                       campaignId={campaignId}
                       isGM={isGM}
@@ -7274,7 +7292,7 @@ const NPCSheet = ({
                   <CharacterSheetInventoryList
                     panelId="npc-sheet-crew-mode-inventory-panel"
                     inventory={inventory}
-                    readOnly={false}
+                    readOnly={readOnly}
                     allowArmor={false}
                     campaignId={campaignId}
                     isGM={isGM}
@@ -7292,7 +7310,7 @@ const NPCSheet = ({
                   <CharacterSheetInventoryList
                     panelId="npc-sheet-faction-inventory-panel"
                     inventory={factionInventory}
-                    readOnly={false}
+                    readOnly={readOnly}
                     allowArmor={false}
                     campaignId={campaignId}
                     isGM={isGM}
@@ -7348,6 +7366,7 @@ const NPCSheet = ({
           </div>
         )}
       </div>
+      </fieldset>
     </div>
   );
 };

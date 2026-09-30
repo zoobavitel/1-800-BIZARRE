@@ -34,6 +34,7 @@ import { SessionHelpTip } from "../components/session/sessionShellUi";
 import { SessionNpcToken } from "../components/session/SessionTokenFaces";
 import AdvancementPlanStrip from "../features/character-sheet/components/AdvancementPlanStrip";
 import AdvancementPlanPanel from "../features/character-sheet/components/AdvancementPlanPanel";
+import { buildRouteHref, handleSpaNavClick } from "../utils/spaNavigation";
 import "../styles/SessionTokenCards.css";
 import {
   characterAPI,
@@ -22961,6 +22962,59 @@ const CharacterSheetWrapper = ({
                             const playerSees = resolveNpcPlayerVisible(npc);
                             const gmHidden =
                               (isGM || isCampaignGm) && !playerSees;
+                            const openNpcHref = playerSees
+                              ? buildRouteHref("npcs", { npcId: npc.id })
+                              : null;
+                            const portraitEl = (
+                              <div
+                                style={{
+                                  width: 24,
+                                  height: 24,
+                                  borderRadius: 4,
+                                  border: "1px solid #374151",
+                                  background: "#111827",
+                                  overflow: "hidden",
+                                  flexShrink: 0,
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                }}
+                              >
+                                {portraitSrc ? (
+                                  <img
+                                    src={portraitSrc}
+                                    alt=""
+                                    style={{
+                                      width: "100%",
+                                      height: "100%",
+                                      objectFit: "cover",
+                                    }}
+                                  />
+                                ) : (
+                                  <span
+                                    style={{
+                                      fontSize: 10,
+                                      color: "#6b7280",
+                                      lineHeight: 1,
+                                    }}
+                                  >
+                                    ?
+                                  </span>
+                                )}
+                              </div>
+                            );
+                            const nameEl = (
+                              <span
+                                style={{
+                                  flex: 1,
+                                  fontSize: "12px",
+                                  color: "#d1d5db",
+                                  minWidth: 0,
+                                }}
+                              >
+                                {label}
+                              </span>
+                            );
                             return (
                               <div
                                 key={npc.id}
@@ -22972,52 +23026,37 @@ const CharacterSheetWrapper = ({
                                   opacity: gmHidden ? 0.45 : 1,
                                 }}
                               >
-                                <div
-                                  style={{
-                                    width: 24,
-                                    height: 24,
-                                    borderRadius: 4,
-                                    border: "1px solid #374151",
-                                    background: "#111827",
-                                    overflow: "hidden",
-                                    flexShrink: 0,
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                  }}
-                                >
-                                  {portraitSrc ? (
-                                    <img
-                                      src={portraitSrc}
-                                      alt=""
-                                      style={{
-                                        width: "100%",
-                                        height: "100%",
-                                        objectFit: "cover",
-                                      }}
-                                    />
-                                  ) : (
-                                    <span
-                                      style={{
-                                        fontSize: 10,
-                                        color: "#6b7280",
-                                        lineHeight: 1,
-                                      }}
-                                    >
-                                      ?
-                                    </span>
-                                  )}
-                                </div>
-                                <span
-                                  style={{
-                                    flex: 1,
-                                    fontSize: "12px",
-                                    color: "#d1d5db",
-                                    minWidth: 0,
-                                  }}
-                                >
-                                  {label}
-                                </span>
+                                {openNpcHref ? (
+                                  <a
+                                    href={openNpcHref}
+                                    onClick={(e) =>
+                                      handleSpaNavClick(e, () => {
+                                        if (typeof window !== "undefined") {
+                                          window.location.hash = `npcs/${npc.id}`;
+                                        }
+                                      })
+                                    }
+                                    title={`Open ${label}`}
+                                    style={{
+                                      display: "flex",
+                                      gap: "6px",
+                                      alignItems: "center",
+                                      flex: 1,
+                                      minWidth: 0,
+                                      textDecoration: "none",
+                                      cursor: "pointer",
+                                      color: "inherit",
+                                    }}
+                                  >
+                                    {portraitEl}
+                                    {nameEl}
+                                  </a>
+                                ) : (
+                                  <>
+                                    {portraitEl}
+                                    {nameEl}
+                                  </>
+                                )}
                                 {isGM || isCampaignGm ? (
                                   <label
                                     style={{
@@ -24042,6 +24081,19 @@ const CharacterSheetWrapper = ({
                                       <SessionNpcToken
                                         npc={npc}
                                         compact
+                                        onOpen={
+                                          playerSees
+                                            ? (n) => {
+                                                if (
+                                                  typeof window !==
+                                                    "undefined" &&
+                                                  n?.id != null
+                                                ) {
+                                                  window.location.hash = `npcs/${n.id}`;
+                                                }
+                                              }
+                                            : undefined
+                                        }
                                       />
                                       {personalStand ? (
                                         <span
