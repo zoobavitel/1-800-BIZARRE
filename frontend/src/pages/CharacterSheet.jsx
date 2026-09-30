@@ -22802,6 +22802,7 @@ const CharacterSheetWrapper = ({
                             marginBottom: "8px",
                             maxHeight: 260,
                             overflowY: "auto",
+                            paddingRight: 10,
                           }}
                         >
                           {campaignNpcsForStanding.map((npc) => {
