@@ -1,8 +1,19 @@
-# Production Django settings — loads /opt/bizarre/backend/src/.env via python-decouple
+# Production Django settings.
+#
+# Canonical config: /etc/bizarre/prod.env (override with BIZARRE_ENV_FILE).
+# Decouple reads that file directly so systemd EnvironmentFile $ expansion
+# cannot mangle SECRET_KEY / passwords into Django settings.
 import os
 from pathlib import Path
 
-from decouple import Csv, config
+from decouple import Config, Csv, RepositoryEnv
+
+_ENV_FILE = os.environ.get("BIZARRE_ENV_FILE", "/etc/bizarre/prod.env")
+if os.path.isfile(_ENV_FILE):
+    config = Config(RepositoryEnv(_ENV_FILE))
+else:
+    # Emergency fallback (tests / pre-bootstrap). Prefer installing prod.env.
+    from decouple import config  # noqa: F811
 
 from .settings import *
 
@@ -58,7 +69,8 @@ STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 STATICFILES_STORAGE = "whitenoise.storage.CompressedStaticFilesStorage"
 
 MEDIA_URL = "/media/"
-MEDIA_ROOT = os.path.join(BASE_DIR, "media")
+# Outside the git tree — never store uploads under /opt/bizarre-prod.
+MEDIA_ROOT = config("MEDIA_ROOT", default="/var/lib/bizarre/media")
 
 CELERY_BROKER_URL = config("REDIS_URL", default="redis://127.0.0.1:6379/0")
 CELERY_RESULT_BACKEND = config("CELERY_RESULT_BACKEND", default=CELERY_BROKER_URL)
