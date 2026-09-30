@@ -839,6 +839,7 @@ const NPCSheet = ({
   onCampaignRefresh,
   onOpenNpc,
   onOpenCharacter,
+  onCreateCharacter,
 }) => {
   const [activeMode, setActiveMode] = useState("NPC");
 
@@ -6655,29 +6656,142 @@ const NPCSheet = ({
                     );
                   })}
                 </div>
-                <button
-                  onClick={() =>
-                    faction
-                      ? setFactionContacts((p) => [
-                          ...p,
-                          { name: "", role: "", disposition: "neutral" },
-                        ])
-                      : setContacts((p) => [
-                          ...p,
-                          { name: "", role: "", disposition: "neutral" },
-                        ])
-                  }
+                <div
                   style={{
-                    ...S.btn,
-                    border: "2px dashed #374151",
-                    background: "transparent",
-                    color: "#6b7280",
-                    width: "100%",
-                    padding: "6px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "6px",
                   }}
                 >
-                  + Add Contact
-                </button>
+                  <select
+                    aria-label="Add existing contact"
+                    value=""
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      e.target.value = "";
+                      if (!raw) return;
+                      const [kind, idStr] = raw.split(":");
+                      const id = Number(idStr);
+                      if (!Number.isFinite(id)) return;
+                      if (kind === "pc") {
+                        const ch = campaignPlayerCharacters.find(
+                          (c) => Number(c.id) === id,
+                        );
+                        const label =
+                          ch?.true_name ||
+                          ch?.name ||
+                          ch?.alias ||
+                          `PC #${id}`;
+                        const row = {
+                          name: label,
+                          role: "Player character",
+                          disposition: "neutral",
+                          character_id: id,
+                        };
+                        if (faction) setFactionContacts((p) => [...p, row]);
+                        else setContacts((p) => [...p, row]);
+                        return;
+                      }
+                      if (kind === "npc") {
+                        const n = (allNpcs || []).find(
+                          (x) => Number(x.id) === id,
+                        );
+                        const label =
+                          n?.name || n?.stand_name || `NPC #${id}`;
+                        const row = {
+                          name: label,
+                          role: "NPC",
+                          disposition: "neutral",
+                          npc_id: id,
+                        };
+                        if (faction) setFactionContacts((p) => [...p, row]);
+                        else setContacts((p) => [...p, row]);
+                      }
+                    }}
+                    style={{
+                      ...S.sel,
+                      width: "100%",
+                      fontSize: "11px",
+                      color: "#9ca3af",
+                    }}
+                  >
+                    <option value="">+ Add existing character or NPC…</option>
+                    {campaignPlayerCharacters.length > 0 ? (
+                      <optgroup label="Player characters">
+                        {campaignPlayerCharacters.map((ch) => (
+                          <option key={`pc-${ch.id}`} value={`pc:${ch.id}`}>
+                            {ch.true_name ||
+                              ch.name ||
+                              ch.alias ||
+                              `PC #${ch.id}`}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ) : null}
+                    {(allNpcs || []).filter(
+                      (n) => Number(n.id) !== Number(npc?.id),
+                    ).length > 0 ? (
+                      <optgroup label="NPCs">
+                        {(allNpcs || [])
+                          .filter((n) => Number(n.id) !== Number(npc?.id))
+                          .map((n) => (
+                            <option key={`npc-${n.id}`} value={`npc:${n.id}`}>
+                              {n.name || n.stand_name || `NPC #${n.id}`}
+                            </option>
+                          ))}
+                      </optgroup>
+                    ) : null}
+                  </select>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "6px",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() =>
+                        faction
+                          ? setFactionContacts((p) => [
+                              ...p,
+                              { name: "", role: "", disposition: "neutral" },
+                            ])
+                          : setContacts((p) => [
+                              ...p,
+                              { name: "", role: "", disposition: "neutral" },
+                            ])
+                      }
+                      style={{
+                        ...S.btn,
+                        border: "2px dashed #374151",
+                        background: "transparent",
+                        color: "#6b7280",
+                        flex: "1 1 140px",
+                        padding: "6px",
+                      }}
+                    >
+                      + Blank contact
+                    </button>
+                    {typeof onCreateCharacter === "function" ? (
+                      <button
+                        type="button"
+                        onClick={() => onCreateCharacter()}
+                        style={{
+                          ...S.btn,
+                          border: "2px dashed #1d4ed8",
+                          background: "transparent",
+                          color: "#93c5fd",
+                          flex: "1 1 140px",
+                          padding: "6px",
+                        }}
+                        title="Open a new player character sheet, then add them here from the list"
+                      >
+                        + New character…
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
               </div>
 
               {/* Faction Status */}
