@@ -9,7 +9,7 @@ Django 4 + Django REST Framework API for the 1-800-BIZARRE platform. Serves all 
 | [`src/`](src/) | Django project root. Contains `manage.py` and all installed apps: `app/` (settings, URLs, WSGI/ASGI, Celery), `characters/`, `authentication/`, `campaigns/`, `crews/`, `factions/`. |
 | [`requirements.txt`](requirements.txt) | Runtime + dev Python dependencies. |
 | [`requirements-prod.txt`](requirements-prod.txt) | Additional production dependencies (gunicorn, psycopg, etc.). |
-| [`.env.example`](.env.example) | Template for the `.env` file consumed by `python-decouple`. Copy to `backend/src/.env` for local dev and to `/opt/bizarre/backend/src/.env` on prod. |
+| [`.env.example`](.env.example) | Template for local/agent env. **Prod** secrets live at `/etc/bizarre/prod.env` (see [`deploy/bizarre-api/env.example`](../deploy/bizarre-api/env.example)); agents use [`agent.env.example`](../deploy/bizarre-api/agent.env.example) → `backend/src/.env` with `bizarre_db_dev`. |
 | `package.json`, `package-lock.json`, `node_modules/` | **Vestigial** — leftover Tailwind 4 / react-router-dom deps not used by Django. Safe to ignore; do not add backend-side Node code here. |
 
 ## Quick start
