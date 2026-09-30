@@ -522,8 +522,9 @@ class NPC(models.Model):
     visible_to_players = models.BooleanField(
         default=True,
         help_text=(
-            "When True and the faction allows players_see_npcs, players may see "
-            "this NPC on standing/roster views."
+            "When True, players may see this NPC on standing/roster views even "
+            "if its faction is hidden. Faction membership nesting still requires "
+            "the faction to be revealed with players_see_npcs."
         ),
     )
 

@@ -5,7 +5,7 @@ from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from characters.models import Campaign, Character, Faction, NPC
+from characters.models import Campaign, Character, Crew, CrewFactionRelationship, Faction, NPC
 
 
 class NpcVisibleToPlayersTests(TestCase):
@@ -19,6 +19,7 @@ class NpcVisibleToPlayersTests(TestCase):
             user=self.player,
             campaign=self.campaign,
         )
+        self.crew = Crew.objects.create(name="Crew A", campaign=self.campaign)
         self.faction = Faction.objects.create(
             name="Revealed Faction",
             campaign=self.campaign,
@@ -30,6 +31,16 @@ class NpcVisibleToPlayersTests(TestCase):
             campaign=self.campaign,
             visible_to_players=False,
             players_see_npcs=True,
+        )
+        CrewFactionRelationship.objects.create(
+            crew=self.crew,
+            faction=self.faction,
+            reputation_value=1,
+        )
+        CrewFactionRelationship.objects.create(
+            crew=self.crew,
+            faction=self.hidden_faction,
+            reputation_value=-2,
         )
         self.seen_npc = NPC.objects.create(
             name="Seen NPC",
@@ -61,6 +72,8 @@ class NpcVisibleToPlayersTests(TestCase):
         )
         self.campaign_url = f"/api/campaigns/{self.campaign.id}/"
         self.faction_url = f"/api/factions/{self.faction.id}/"
+        self.hidden_faction_url = f"/api/factions/{self.hidden_faction.id}/"
+        self.crew_url = f"/api/crews/{self.crew.id}/"
 
     def test_gm_sees_all_campaign_npcs_and_can_patch(self):
         client = APIClient()
@@ -81,13 +94,18 @@ class NpcVisibleToPlayersTests(TestCase):
         self.seen_npc.refresh_from_db()
         self.assertFalse(self.seen_npc.visible_to_players)
 
-    def test_player_campaign_npcs_filtered(self):
+    def test_player_campaign_npcs_see_on_including_hidden_faction_and_orphan(self):
+        """See-on NPCs appear even when faction is hidden or unaffiliated."""
         client = APIClient()
         client.force_authenticate(self.player)
         r = client.get(self.campaign_url)
         self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
         names = {n["name"] for n in (r.data.get("campaign_npcs") or [])}
-        self.assertEqual(names, {"Seen NPC"})
+        self.assertEqual(
+            names,
+            {"Seen NPC", "In Hidden Faction", "Unaffiliated"},
+        )
+        self.assertNotIn("Hidden Member", names)
 
     def test_player_faction_npcs_omit_hidden_members(self):
         client = APIClient()
@@ -97,10 +115,71 @@ class NpcVisibleToPlayersTests(TestCase):
         names = {n["name"] for n in (r.data.get("npcs") or [])}
         self.assertEqual(names, {"Seen NPC"})
 
+    def test_hide_entire_faction_keeps_see_on_member_in_campaign_npcs(self):
+        client = APIClient()
+        client.force_authenticate(self.player)
+        r = client.get(self.crew_url)
+        self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
+        rel_names = {
+            row.get("faction_name")
+            for row in (r.data.get("faction_relationships") or [])
+        }
+        self.assertIn("Revealed Faction", rel_names)
+        self.assertNotIn("Hidden Faction", rel_names)
+
+        r = client.get(self.hidden_faction_url)
+        self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
+        self.assertEqual(r.data.get("npcs") or [], [])
+
+        r = client.get(self.campaign_url)
+        self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
+        names = {n["name"] for n in (r.data.get("campaign_npcs") or [])}
+        self.assertIn("In Hidden Faction", names)
+
+    def test_players_see_npcs_false_empties_nested_keeps_campaign_npcs(self):
+        client = APIClient()
+        client.force_authenticate(self.gm)
+        r = client.patch(
+            self.faction_url,
+            {"players_see_npcs": False},
+            format="json",
+        )
+        self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
+
+        client.force_authenticate(self.player)
+        r = client.get(self.faction_url)
+        self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
+        self.assertEqual(r.data.get("npcs") or [], [])
+
+        r = client.get(self.campaign_url)
+        self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
+        names = {n["name"] for n in (r.data.get("campaign_npcs") or [])}
+        self.assertIn("Seen NPC", names)
+        self.assertNotIn("Hidden Member", names)
+
+    def test_hide_individual_member(self):
+        client = APIClient()
+        client.force_authenticate(self.player)
+        r = client.get(self.faction_url)
+        self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
+        self.assertEqual(
+            {n["name"] for n in (r.data.get("npcs") or [])},
+            {"Seen NPC"},
+        )
+        r = client.get(self.campaign_url)
+        names = {n["name"] for n in (r.data.get("campaign_npcs") or [])}
+        self.assertNotIn("Hidden Member", names)
+        self.assertIn("Seen NPC", names)
+
     def test_hide_all_members_via_patches(self):
         client = APIClient()
         client.force_authenticate(self.gm)
-        for npc_id in (self.seen_npc.id, self.hidden_npc.id):
+        for npc_id in (
+            self.seen_npc.id,
+            self.hidden_npc.id,
+            self.hidden_fac_npc.id,
+            self.orphan.id,
+        ):
             r = client.patch(
                 f"/api/npcs/{npc_id}/",
                 {"visible_to_players": False},
@@ -114,3 +193,24 @@ class NpcVisibleToPlayersTests(TestCase):
         r = client.get(self.campaign_url)
         self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
         self.assertEqual(r.data.get("campaign_npcs") or [], [])
+
+    def test_gm_can_toggle_faction_reveal_and_players_see_npcs(self):
+        client = APIClient()
+        client.force_authenticate(self.gm)
+        r = client.patch(
+            self.hidden_faction_url,
+            {"visible_to_players": True, "players_see_npcs": False},
+            format="json",
+        )
+        self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
+        self.hidden_faction.refresh_from_db()
+        self.assertTrue(self.hidden_faction.visible_to_players)
+        self.assertFalse(self.hidden_faction.players_see_npcs)
+
+        client.force_authenticate(self.player)
+        r = client.get(self.hidden_faction_url)
+        self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
+        self.assertEqual(r.data.get("npcs") or [], [])
+        r = client.get(self.campaign_url)
+        names = {n["name"] for n in (r.data.get("campaign_npcs") or [])}
+        self.assertIn("In Hidden Faction", names)
