@@ -214,3 +214,28 @@ class NpcVisibleToPlayersTests(TestCase):
         r = client.get(self.campaign_url)
         names = {n["name"] for n in (r.data.get("campaign_npcs") or [])}
         self.assertIn("In Hidden Faction", names)
+
+    def test_player_can_get_see_on_npc_detail(self):
+        client = APIClient()
+        client.force_authenticate(self.player)
+        r = client.get(f"/api/npcs/{self.seen_npc.id}/")
+        self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
+        self.assertEqual(r.data.get("name"), "Seen NPC")
+
+    def test_player_cannot_get_see_off_npc_detail(self):
+        client = APIClient()
+        client.force_authenticate(self.player)
+        r = client.get(f"/api/npcs/{self.hidden_npc.id}/")
+        self.assertEqual(r.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_player_cannot_patch_see_on_npc(self):
+        client = APIClient()
+        client.force_authenticate(self.player)
+        r = client.patch(
+            f"/api/npcs/{self.seen_npc.id}/",
+            {"notes": "player should not write"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, status.HTTP_403_FORBIDDEN)
+        self.seen_npc.refresh_from_db()
+        self.assertNotEqual(self.seen_npc.notes, "player should not write")

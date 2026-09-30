@@ -29,15 +29,28 @@ class NPCViewSet(viewsets.ModelViewSet):
         elif user.is_staff:
             qs = NPC.objects.all()
         else:
-            qs = NPC.objects.filter(Q(creator=user) | Q(campaign__gm=user)).distinct()
+            # Creator / campaign GM: full access.
+            # Campaign players: See-on NPCs only (visible_to_players=True).
+            qs = NPC.objects.filter(
+                Q(creator=user)
+                | Q(campaign__gm=user)
+                | Q(
+                    visible_to_players=True,
+                    campaign__players=user,
+                )
+                | Q(
+                    visible_to_players=True,
+                    campaign__characters__user=user,
+                )
+            ).distinct()
 
         campaign_id = self.request.query_params.get('campaign')
         if campaign_id:
             qs = qs.filter(campaign_id=campaign_id)
         return qs.prefetch_related("selected_benefits", "selected_detriments")
 
-    def _user_can_edit_npc_clocks(self, request, npc):
-        """Only GM (campaign GM or NPC creator) can tick NPC clocks. Players cannot deal harm to NPCs."""
+    def _user_can_edit_npc(self, request, npc):
+        """Staff, NPC creator, or campaign GM may mutate an NPC."""
         user = request.user
         if user.is_staff:
             return True
@@ -46,6 +59,37 @@ class NPCViewSet(viewsets.ModelViewSet):
         if npc.campaign_id and getattr(npc.campaign, 'gm_id', None) == user.id:
             return True
         return False
+
+    def _user_can_edit_npc_clocks(self, request, npc):
+        """Only GM (campaign GM or NPC creator) can tick NPC clocks. Players cannot deal harm to NPCs."""
+        return self._user_can_edit_npc(request, npc)
+
+    def update(self, request, *args, **kwargs):
+        npc = self.get_object()
+        if not self._user_can_edit_npc(request, npc):
+            return Response(
+                {"error": "Only the GM (or NPC creator) can edit this NPC."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        npc = self.get_object()
+        if not self._user_can_edit_npc(request, npc):
+            return Response(
+                {"error": "Only the GM (or NPC creator) can edit this NPC."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return super().partial_update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        npc = self.get_object()
+        if not self._user_can_edit_npc(request, npc):
+            return Response(
+                {"error": "Only the GM (or NPC creator) can delete this NPC."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return super().destroy(request, *args, **kwargs)
 
     @action(detail=True, methods=['post'], url_path='apply-effect')
     def apply_effect(self, request, pk=None):
