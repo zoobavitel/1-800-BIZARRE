@@ -3064,7 +3064,7 @@ const CharacterSheetWrapper = ({
   const [crewFactionAddRep, setCrewFactionAddRep] = useState(0);
   const [crewFactionAddBusy, setCrewFactionAddBusy] = useState(false);
   const [crewFactionAddErr, setCrewFactionAddErr] = useState(null);
-  /** Optimistic NPC.visible_to_players overlays until campaign refresh lands. */
+  /** Optimistic NPC.visible_to_players overlays until server catches up. */
   const [npcPlayerVisOverrides, setNpcPlayerVisOverrides] = useState({});
   const [factionNpcVisErr, setFactionNpcVisErr] = useState(null);
   const [crewHistoryEntries, setCrewHistoryEntries] = useState([]);
@@ -3075,7 +3075,38 @@ const CharacterSheetWrapper = ({
 
   useEffect(() => {
     setNpcPlayerVisOverrides({});
-  }, [charCampaign?.id, charCampaign?.campaign_npcs, charCampaign?.factions]);
+    setFactionNpcVisErr(null);
+  }, [charCampaign?.id]);
+
+  /** Drop overrides once campaign payload matches (keep them through stale SSE/poll). */
+  useEffect(() => {
+    setNpcPlayerVisOverrides((prev) => {
+      const keys = Object.keys(prev);
+      if (!keys.length) return prev;
+      const byId = new Map();
+      for (const n of charCampaign?.campaign_npcs || []) {
+        if (n?.id != null) byId.set(Number(n.id), n);
+      }
+      for (const f of charCampaign?.factions || []) {
+        for (const n of f?.npcs || []) {
+          if (n?.id != null) byId.set(Number(n.id), n);
+        }
+      }
+      const next = { ...prev };
+      let changed = false;
+      for (const k of keys) {
+        const id = Number(k);
+        const npc = byId.get(id);
+        if (!npc) continue;
+        const serverSees = npc.visible_to_players !== false;
+        if (serverSees === !!prev[id]) {
+          delete next[id];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [charCampaign?.campaign_npcs, charCampaign?.factions]);
 
   const resolveNpcPlayerVisible = useCallback(
     (npc) => {
@@ -23838,14 +23869,25 @@ const CharacterSheetWrapper = ({
                                             fontSize: 9,
                                             color: "#9ca3af",
                                             cursor: "pointer",
+                                            position: "relative",
+                                            zIndex: 2,
+                                            userSelect: "none",
                                           }}
                                           title="Players see this NPC"
+                                          onMouseDown={(e) => e.stopPropagation()}
                                           onClick={(e) => e.stopPropagation()}
                                         >
                                           <input
                                             type="checkbox"
                                             checked={playerSees}
+                                            onMouseDown={(e) =>
+                                              e.stopPropagation()
+                                            }
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                            }}
                                             onChange={(e) => {
+                                              e.stopPropagation();
                                               void patchFactionNpcVisibility(
                                                 [npc.id],
                                                 e.target.checked,
