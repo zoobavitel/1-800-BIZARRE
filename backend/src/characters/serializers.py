@@ -3250,7 +3250,7 @@ class CampaignSerializer(serializers.ModelSerializer):
     factions = FactionSerializer(many=True, read_only=True)
     crews = CrewCampaignSerializer(many=True, read_only=True)
     campaign_characters = serializers.SerializerMethodField()
-    campaign_npcs = NPCSummarySerializer(source="npcs", many=True, read_only=True)
+    campaign_npcs = serializers.SerializerMethodField()
     pending_invitations = serializers.SerializerMethodField()
     is_active = serializers.BooleanField(required=False, default=True)
     allow_character_assignment = serializers.BooleanField(
@@ -3321,6 +3321,38 @@ class CampaignSerializer(serializers.ModelSerializer):
     def get_pending_invitations(self, obj):
         invitations = obj.invitations.filter(status="pending")
         return CampaignInvitationSerializer(invitations, many=True).data
+
+    def _campaign_viewer_is_gm_or_staff(self, obj):
+        request = self.context.get("request")
+        user = getattr(request, "user", None) if request else None
+        if not user or not getattr(user, "is_authenticated", False):
+            return False
+        if getattr(user, "is_staff", False):
+            return True
+        return bool(obj.gm_id == user.id)
+
+    def get_campaign_npcs(self, obj):
+        """
+        Roster NPC summaries. GMs see all; players only see NPCs that are
+        visible_to_players and whose faction is revealed with players_see_npcs.
+        Unaffiliated NPCs are omitted for players (no roster visibility toggle).
+        """
+        qs = obj.npcs.all().select_related("faction")
+        if not self._campaign_viewer_is_gm_or_staff(obj):
+            visible = []
+            for npc in qs:
+                if not getattr(npc, "visible_to_players", True):
+                    continue
+                fac = getattr(npc, "faction", None)
+                if fac is None:
+                    continue
+                if not getattr(fac, "visible_to_players", False):
+                    continue
+                if not getattr(fac, "players_see_npcs", True):
+                    continue
+                visible.append(npc)
+            qs = visible
+        return NPCSummarySerializer(qs, many=True, context=self.context).data
 
     def get_campaign_characters(self, obj):
         qs = obj.characters.all().select_related(

@@ -90,6 +90,7 @@ export default function CampaignRosterPanels({
   handleAddNpcToFaction,
   handleRemoveNpcFromFaction,
   handleToggleNpcVisibleToPlayers,
+  handleBulkSetFactionNpcsVisibleToPlayers,
   factionAddNpcId,
   setFactionAddNpcId,
   campaignNPCs,
@@ -377,6 +378,9 @@ export default function CampaignRosterPanels({
               handleRemoveNpcFromFaction={handleRemoveNpcFromFaction}
               handleToggleNpcVisibleToPlayers={
                 handleToggleNpcVisibleToPlayers
+              }
+              handleBulkSetFactionNpcsVisibleToPlayers={
+                handleBulkSetFactionNpcsVisibleToPlayers
               }
               factionForm={factionForm}
               setFactionForm={setFactionForm}
