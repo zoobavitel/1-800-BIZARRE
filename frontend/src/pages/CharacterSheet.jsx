@@ -143,6 +143,7 @@ import {
   OUTCOME_BAND_SHORT_LABEL,
   outcomeApiToSheetDisplay,
 } from "../features/character-sheet/utils/actionRollOutcome";
+import { resistanceStressCost } from "../features/character-sheet/utils/resistanceStressCost";
 import {
   bumpEffectTier,
   normalizeEffectTier,
@@ -284,14 +285,17 @@ function reputationTierLabel(v) {
   return "Neutral";
 }
 
-function computeResistanceSummary(diceResults) {
+function computeResistanceSummary(diceResults, { zeroDice = false } = {}) {
   const sorted = (Array.isArray(diceResults) ? diceResults : [])
     .map((n) => Number(n))
     .filter((n) => Number.isFinite(n) && n >= 1 && n <= 6);
-  const highest = sorted.length ? Math.max(...sorted) : 0;
-  const sixes = sorted.filter((d) => d === 6).length;
-  const isCritical = sixes >= 2;
-  const stressCost = isCritical ? -1 : Math.max(0, 6 - highest);
+  const highest = sorted.length
+    ? zeroDice
+      ? Math.min(...sorted)
+      : Math.max(...sorted)
+    : 0;
+  const stressCost = resistanceStressCost(sorted, { zeroDice });
+  const isCritical = stressCost === -1;
   const outcome = isCritical
     ? "CRITICAL_SUCCESS"
     : highest >= 6
@@ -8979,7 +8983,10 @@ const CharacterSheetWrapper = ({
         highest = Math.max(...dice);
       }
       sixes = dice.filter((d) => d === 6).length;
-      isCritical = sixes >= 2;
+      const resistStressCost = resistanceStressCost(dice, {
+        zeroDice: diceCount === 0,
+      });
+      isCritical = resistStressCost === -1;
       outcome =
         highest >= 6
           ? isCritical
@@ -9015,9 +9022,7 @@ const CharacterSheetWrapper = ({
 
     /** Resistance: 6 − highest (a 6 costs 0). Two 6s: pay 0 and clear 1 (−1 sentinel). */
     const stressCost = isResistance
-      ? isCritical
-        ? -1
-        : Math.max(0, 6 - highest)
+      ? resistanceStressCost(dice, { zeroDice: diceCount === 0 })
       : null;
     const resistanceExtraStress =
       isResistance &&
