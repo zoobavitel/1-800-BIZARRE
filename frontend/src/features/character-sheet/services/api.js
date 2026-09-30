@@ -1625,6 +1625,12 @@ export const transformBackendToFrontend = (backendCharacter) => {
     loadout: backendCharacter.loadout,
     inventory: normalizeCharacterInventory(backendCharacter.inventory),
     reputation_status: backendCharacter.reputation_status || {},
+    npcStanding:
+      backendCharacter.npc_standing &&
+      typeof backendCharacter.npc_standing === "object" &&
+      !Array.isArray(backendCharacter.npc_standing)
+        ? { ...backendCharacter.npc_standing }
+        : {},
 
     // Heritage benefits and detriments (arrays of IDs)
     selected_benefits: Array.isArray(backendCharacter.selected_benefits)
@@ -1940,6 +1946,20 @@ export const transformFrontendToBackend = (frontendCharacter) => {
         : null,
     inventory: normalizeCharacterInventory(frontendCharacter.inventory),
     reputation_status: frontendCharacter.reputation_status ?? {},
+    npc_standing: (() => {
+      const raw =
+        frontendCharacter.npcStanding ?? frontendCharacter.npc_standing ?? {};
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+      const out = {};
+      for (const [k, v] of Object.entries(raw)) {
+        const sk = String(k).trim();
+        if (!sk || !/^\d+$/.test(sk)) continue;
+        const n = Number(v);
+        if (!Number.isFinite(n)) continue;
+        out[sk] = Math.max(-3, Math.min(3, Math.trunc(n)));
+      }
+      return out;
+    })(),
 
     // Standard abilities (array of Ability IDs)
     standard_abilities: abilityIdsByType(abilitiesList, "standard"),

@@ -914,6 +914,23 @@ function writeCharSheetNotesInventory(characterId, value) {
   }
 }
 
+function clampNpcStandingValue(n) {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return 0;
+  return Math.max(-3, Math.min(3, Math.trunc(v)));
+}
+
+function normalizeNpcStandingLocal(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out = {};
+  for (const [k, v] of Object.entries(raw)) {
+    const sk = String(k).trim();
+    if (!sk || !/^\d+$/.test(sk)) continue;
+    out[sk] = clampNpcStandingValue(v);
+  }
+  return out;
+}
+
 const CharacterSheetWrapper = ({
   character,
   onClose,
@@ -1080,6 +1097,13 @@ const CharacterSheetWrapper = ({
       }),
     [user, isGM, charCampaign, campaignIdFromCharacter],
   );
+  const campaignNpcsForStanding = useMemo(() => {
+    const raw = Array.isArray(charCampaign?.campaign_npcs)
+      ? charCampaign.campaign_npcs
+      : [];
+    if (isGM || isCampaignGm) return raw;
+    return raw.filter((n) => n?.visible_to_players !== false);
+  }, [charCampaign?.campaign_npcs, isGM, isCampaignGm]);
   const isGmViewingPc = useMemo(
     () =>
       isGmViewingPlayerCharacterSheet(user, character, {
@@ -1207,6 +1231,9 @@ const CharacterSheetWrapper = ({
       typeof character?.disguised_as_human === "boolean"
         ? character.disguised_as_human
         : null,
+    npcStanding: normalizeNpcStandingLocal(
+      character?.npcStanding ?? character?.npc_standing,
+    ),
   });
 
   const handlePromoteItemToCampaign = useCallback(
@@ -1408,6 +1435,9 @@ const CharacterSheetWrapper = ({
     if (sheetDraftIsDirty) return;
     const sn = character?.sheetNotes ?? "";
     const inv = normalizeCharacterInventory(character?.inventory);
+    const standing = normalizeNpcStandingLocal(
+      character?.npcStanding ?? character?.npc_standing,
+    );
     setCharData((prev) => {
       // After inventory autosave (incl. Del), dirty/saving can clear before the
       // parent character prop catches up. Keep local kit until server matches
@@ -1422,18 +1452,28 @@ const CharacterSheetWrapper = ({
           fieldTouchRef.current.inventory = false;
         }
       }
+      const standingSame =
+        JSON.stringify(prev.npcStanding ?? {}) === JSON.stringify(standing);
       if (
         (prev.sheetNotes ?? "") === sn &&
-        JSON.stringify(prev.inventory ?? []) === JSON.stringify(nextInv ?? [])
+        JSON.stringify(prev.inventory ?? []) === JSON.stringify(nextInv ?? []) &&
+        standingSame
       ) {
         return prev;
       }
-      return { ...prev, sheetNotes: sn, inventory: nextInv };
+      return {
+        ...prev,
+        sheetNotes: sn,
+        inventory: nextInv,
+        npcStanding: standing,
+      };
     });
   }, [
     character?.id,
     character?.sheetNotes,
     character?.inventory,
+    character?.npcStanding,
+    character?.npc_standing,
     sheetDraftIsDirty,
   ]);
 
@@ -2908,6 +2948,9 @@ const CharacterSheetWrapper = ({
   );
   const [clocksSectionExpanded, setClocksSectionExpanded] = useState(() =>
     readCharSheetBool(characterId, "clocks", true),
+  );
+  const [xpRequirementsExpanded, setXpRequirementsExpanded] = useState(() =>
+    readCharSheetBool(characterId, "xp-requirements", true),
   );
   const [notesInventoryExpanded, setNotesInventoryExpanded] = useState(() =>
     readCharSheetNotesInventory(characterId, {
@@ -5491,6 +5534,9 @@ const CharacterSheetWrapper = ({
       readCharSheetBool(characterId, "abilities", true),
     );
     setClocksSectionExpanded(readCharSheetBool(characterId, "clocks", true));
+    setXpRequirementsExpanded(
+      readCharSheetBool(characterId, "xp-requirements", true),
+    );
     setNotesInventoryExpanded(
       readCharSheetNotesInventory(characterId, {
         notes: true,
@@ -5524,6 +5570,14 @@ const CharacterSheetWrapper = ({
     setClocksSectionExpanded((prev) => {
       const next = typeof updater === "function" ? updater(prev) : updater;
       writeCharSheetBool(characterId, "clocks", next);
+      return next;
+    });
+  }, [characterId]);
+
+  const setXpRequirementsExpandedPersist = useCallback((updater) => {
+    setXpRequirementsExpanded((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      writeCharSheetBool(characterId, "xp-requirements", next);
       return next;
     });
   }, [characterId]);
@@ -15339,9 +15393,81 @@ const CharacterSheetWrapper = ({
                       lineHeight: "1.6",
                     }}
                   >
-                    <div style={{ marginBottom: "8px" }}>
-                      <span style={S.lbl}>XP REQUIREMENTS (SRD)</span>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: "8px",
+                        marginBottom: xpRequirementsExpanded ? "8px" : 0,
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setXpRequirementsExpandedPersist((prev) => !prev)
+                        }
+                        aria-expanded={xpRequirementsExpanded}
+                        aria-controls="character-sheet-xp-requirements-panel"
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "8px",
+                          flex: 1,
+                          minWidth: 0,
+                          background: "none",
+                          border: "none",
+                          cursor: "pointer",
+                          padding: 0,
+                          textAlign: "left",
+                        }}
+                      >
+                        <span
+                          aria-hidden
+                          style={{
+                            color: "#9ca3af",
+                            fontSize: "10px",
+                            lineHeight: 1,
+                            width: "12px",
+                            flexShrink: 0,
+                            userSelect: "none",
+                          }}
+                        >
+                          {xpRequirementsExpanded ? "\u25bc" : "\u25ba"}
+                        </span>
+                        <span style={S.lbl}>XP REQUIREMENTS (SRD)</span>
+                      </button>
+                      <SessionHelpTip
+                        label="When to mark XP"
+                        panelId="char-sheet-xp-mark-when-help"
+                      >
+                        <div style={{ color: "#d1d5db", lineHeight: 1.5 }}>
+                          <div
+                            style={{
+                              ...S.lbl,
+                              marginBottom: "6px",
+                              display: "block",
+                            }}
+                          >
+                            MARK XP WHEN YOU…
+                          </div>
+                          (same SRD) — make a{" "}
+                          <strong style={{ color: "#e5e7eb" }}>desperate</strong>{" "}
+                          action roll; express{" "}
+                          <strong style={{ color: "#e5e7eb" }}>
+                            beliefs, drives, heritage, or background
+                          </strong>
+                          ; struggle with your{" "}
+                          <strong style={{ color: "#e5e7eb" }}>
+                            vice, trauma, or crew
+                          </strong>{" "}
+                          entanglements; plus playbook-specific marks at end of
+                          session.
+                        </div>
+                      </SessionHelpTip>
                     </div>
+                    {xpRequirementsExpanded ? (
+                    <div id="character-sheet-xp-requirements-panel">
                     {!xpReqSnapshot.hasActiveSession && (
                       <div
                         style={{
@@ -15492,59 +15618,37 @@ const CharacterSheetWrapper = ({
                           };
                           return (
                             <>
-                              <div
-                                style={{
-                                  display: "flex",
-                                  justifyContent: "space-between",
-                                  alignItems: "flex-start",
-                                  gap: "10px",
-                                  padding: "5px 0",
-                                  borderBottom: "1px solid #1f2937",
-                                }}
-                              >
-                                <div
-                                  style={{
-                                    flex: "1 1 0",
-                                    minWidth: 0,
-                                    color: "#d1d5db",
-                                  }}
-                                >
-                                  <div style={{ fontWeight: 500 }}>
-                                    Playbook-specific (end of session, max 2)
-                                  </div>
-                                  <div
-                                    style={{
-                                      fontSize: "10px",
-                                      color: "#6b7280",
-                                      marginTop: "4px",
-                                      lineHeight: 1.45,
-                                    }}
-                                  >
-                                    SRD: mark XP when you used your playbook
-                                    abilities in the fiction (for example resisting harm,
-                                    boosting rolls, or shifting position or effect with
-                                    Stand, Hamon, or Spin). Max 2 XP total for this
-                                    category.
-                                  </div>
-                                </div>
-                                {renderPips(playbookRow)}
-                              </div>
                               {[
                                 {
                                   label:
+                                    "Playbook-specific (end of session, max 2)",
+                                  helpLabel: "Playbook-specific XP",
+                                  helpPanelId: "char-sheet-xp-playbook-help",
+                                  help: "SRD: mark XP when you used your playbook abilities in the fiction (for example resisting harm, boosting rolls, or shifting position or effect with Stand, Hamon, or Spin). Max 2 XP total for this category.",
+                                  v: playbookRow.v,
+                                  trigger: playbookRow.trigger,
+                                },
+                                {
+                                  label:
                                     "Beliefs, drives, heritage, or background (end of session, max 2)",
+                                  helpLabel: "Beliefs XP",
+                                  helpPanelId: "char-sheet-xp-beliefs-help",
+                                  help: "SRD: mark XP when you expressed your beliefs, drives, heritage, or background in the fiction. Max 2 XP total for this category.",
                                   v: xpReqSnapshot.beliefs,
                                   trigger: "BELIEFS",
                                 },
                                 {
                                   label:
                                     "Struggle: vice, trauma, entanglements (end of session, max 2)",
+                                  helpLabel: "Struggle XP",
+                                  helpPanelId: "char-sheet-xp-struggle-help",
+                                  help: "SRD: mark XP when you struggled with your vice, trauma, or crew entanglements. Max 2 XP total for this category.",
                                   v: xpReqSnapshot.struggle,
                                   trigger: "STRUGGLE",
                                 },
                               ].map((row) => (
                                 <div
-                                  key={row.label}
+                                  key={row.trigger}
                                   style={{
                                     display: "flex",
                                     justifyContent: "space-between",
@@ -15554,9 +15658,36 @@ const CharacterSheetWrapper = ({
                                     borderBottom: "1px solid #1f2937",
                                   }}
                                 >
-                                  <span style={{ color: "#d1d5db" }}>
-                                    {row.label}
-                                  </span>
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: "6px",
+                                      flex: "1 1 0",
+                                      minWidth: 0,
+                                      color: "#d1d5db",
+                                    }}
+                                  >
+                                    <span
+                                      style={{ fontWeight: 500 }}
+                                      title={row.help}
+                                    >
+                                      {row.label}
+                                    </span>
+                                    <SessionHelpTip
+                                      label={row.helpLabel}
+                                      panelId={row.helpPanelId}
+                                    >
+                                      <div
+                                        style={{
+                                          color: "#d1d5db",
+                                          lineHeight: 1.45,
+                                        }}
+                                      >
+                                        {row.help}
+                                      </div>
+                                    </SessionHelpTip>
+                                  </div>
                                   {renderPips(row)}
                                 </div>
                               ))}
@@ -15723,23 +15854,10 @@ const CharacterSheetWrapper = ({
                               story beats.
                             </div>
                           )}
-                        <div
-                          style={{
-                            fontSize: "10px",
-                            color: "#6b7280",
-                            marginTop: "8px",
-                          }}
-                        >
-                          <span style={S.lbl}>MARK XP WHEN YOU…</span> (same
-                          SRD) — make a{" "}
-                          <strong style={{ color: "#9ca3af" }}>desperate</strong>{" "}
-                          action roll; express{" "}
-                          <strong style={{ color: "#9ca3af" }}>beliefs, drives, heritage, or background</strong>; struggle with your{" "}
-                          <strong style={{ color: "#9ca3af" }}>vice, trauma, or crew</strong>{" "}
-                          entanglements; plus playbook-specific marks at end of session.
-                        </div>
                       </>
                     )}
+                    </div>
+                    ) : null}
                   </div>
                 </div>
               </div>
@@ -22564,6 +22682,201 @@ const CharacterSheetWrapper = ({
                       />
                     ) : null}
                   </div>
+
+                  {/* NPC Standing — individual relationships (not crew/faction rep) */}
+                  <div style={{ ...S.card, marginBottom: "14px" }}>
+                    <span style={S.lbl}>NPC STANDING</span>
+                    <div
+                      style={{
+                        fontSize: "10px",
+                        color: "#6b7280",
+                        marginTop: "4px",
+                        marginBottom: "8px",
+                        lineHeight: 1.4,
+                      }}
+                    >
+                      Personal relationship with campaign NPCs (−3 to +3). Distinct
+                      from crew/faction reputation.
+                    </div>
+                    {campaignId && campaignNpcsForStanding.length > 0 ? (
+                      <>
+                        <div
+                          style={{
+                            marginBottom: "8px",
+                            maxHeight: 260,
+                            overflowY: "auto",
+                          }}
+                        >
+                          {campaignNpcsForStanding.map((npc) => {
+                            const key = String(npc.id);
+                            const value = clampNpcStandingValue(
+                              charData.npcStanding?.[key] ?? 0,
+                            );
+                            const label =
+                              npc.name ||
+                              npc.stand_name ||
+                              `NPC #${npc.id}`;
+                            const portraitSrc = resolveMediaUrl(
+                              npc.image || npc.image_url || "",
+                            );
+                            return (
+                              <div
+                                key={npc.id}
+                                style={{
+                                  display: "flex",
+                                  gap: "6px",
+                                  marginBottom: "6px",
+                                  alignItems: "center",
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    width: 24,
+                                    height: 24,
+                                    borderRadius: 4,
+                                    border: "1px solid #374151",
+                                    background: "#111827",
+                                    overflow: "hidden",
+                                    flexShrink: 0,
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                  }}
+                                >
+                                  {portraitSrc ? (
+                                    <img
+                                      src={portraitSrc}
+                                      alt=""
+                                      style={{
+                                        width: "100%",
+                                        height: "100%",
+                                        objectFit: "cover",
+                                      }}
+                                    />
+                                  ) : (
+                                    <span
+                                      style={{
+                                        fontSize: 10,
+                                        color: "#6b7280",
+                                        lineHeight: 1,
+                                      }}
+                                    >
+                                      ?
+                                    </span>
+                                  )}
+                                </div>
+                                <span
+                                  style={{
+                                    flex: 1,
+                                    fontSize: "12px",
+                                    color: "#d1d5db",
+                                    minWidth: 0,
+                                  }}
+                                >
+                                  {label}
+                                </span>
+                                <button
+                                  type="button"
+                                  disabled={!canEditSheet}
+                                  onClick={() => {
+                                    if (!canEditSheet) return;
+                                    markDirtyIntent();
+                                    setCharData((p) => ({
+                                      ...p,
+                                      npcStanding: {
+                                        ...(p.npcStanding || {}),
+                                        [key]: clampNpcStandingValue(
+                                          (p.npcStanding?.[key] ?? 0) - 1,
+                                        ),
+                                      },
+                                    }));
+                                  }}
+                                  style={{
+                                    ...S.btn,
+                                    padding: "1px 6px",
+                                    background: "#7f1d1d",
+                                    color: "#fca5a5",
+                                    fontSize: "11px",
+                                    opacity: canEditSheet ? 1 : 0.5,
+                                    cursor: canEditSheet
+                                      ? "pointer"
+                                      : "not-allowed",
+                                  }}
+                                >
+                                  −
+                                </button>
+                                <span
+                                  style={{
+                                    display: "inline-block",
+                                    width: "28px",
+                                    textAlign: "center",
+                                    fontWeight: "bold",
+                                    fontSize: "13px",
+                                    color:
+                                      value > 0
+                                        ? "#34d399"
+                                        : value < 0
+                                          ? "#f87171"
+                                          : "#9ca3af",
+                                  }}
+                                >
+                                  {value > 0 ? `+${value}` : value}
+                                </span>
+                                <button
+                                  type="button"
+                                  disabled={!canEditSheet}
+                                  onClick={() => {
+                                    if (!canEditSheet) return;
+                                    markDirtyIntent();
+                                    setCharData((p) => ({
+                                      ...p,
+                                      npcStanding: {
+                                        ...(p.npcStanding || {}),
+                                        [key]: clampNpcStandingValue(
+                                          (p.npcStanding?.[key] ?? 0) + 1,
+                                        ),
+                                      },
+                                    }));
+                                  }}
+                                  style={{
+                                    ...S.btn,
+                                    padding: "1px 6px",
+                                    background: "#14532d",
+                                    color: "#86efac",
+                                    fontSize: "11px",
+                                    opacity: canEditSheet ? 1 : 0.5,
+                                    cursor: canEditSheet
+                                      ? "pointer"
+                                      : "not-allowed",
+                                  }}
+                                >
+                                  +
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div
+                          style={{
+                            marginTop: "6px",
+                            fontSize: "10px",
+                            color: "#6b7280",
+                          }}
+                        >
+                          −3 War · −2 Hostile · −1 Interfering · 0 Neutral · +1
+                          Helpful · +2 Friendly · +3 Allied
+                        </div>
+                      </>
+                    ) : (
+                      <div style={{ fontSize: "11px", color: "#6b7280" }}>
+                        {campaignId
+                          ? isGM || isCampaignGm
+                            ? "No campaign NPCs yet."
+                            : "No revealed campaign NPCs yet."
+                          : "Assign this character to a campaign to track NPC standing."}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -23461,6 +23774,68 @@ const CharacterSheetWrapper = ({
                                 marginTop: "auto",
                               }}
                             >
+                              {Array.isArray(row.npcs) && row.npcs.length > 0 ? (
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    gap: "4px",
+                                    flexWrap: "wrap",
+                                  }}
+                                >
+                                  <button
+                                    type="button"
+                                    style={{
+                                      ...S.btn,
+                                      fontSize: "10px",
+                                      padding: "2px 6px",
+                                      flex: "1 1 auto",
+                                    }}
+                                    title="Players can see all NPCs in this faction"
+                                    onClick={() => {
+                                      const ids = (row.npcs || [])
+                                        .map((n) => n?.id)
+                                        .filter((id) => id != null);
+                                      Promise.all(
+                                        ids.map((id) =>
+                                          npcAPI.patchNPC(id, {
+                                            visible_to_players: true,
+                                          }),
+                                        ),
+                                      )
+                                        .then(() => onCampaignRefresh?.())
+                                        .catch(() => {});
+                                    }}
+                                  >
+                                    Show all members
+                                  </button>
+                                  <button
+                                    type="button"
+                                    style={{
+                                      ...S.btn,
+                                      fontSize: "10px",
+                                      padding: "2px 6px",
+                                      flex: "1 1 auto",
+                                    }}
+                                    title="Hide all NPCs in this faction from players"
+                                    onClick={() => {
+                                      const ids = (row.npcs || [])
+                                        .map((n) => n?.id)
+                                        .filter((id) => id != null);
+                                      Promise.all(
+                                        ids.map((id) =>
+                                          npcAPI.patchNPC(id, {
+                                            visible_to_players: false,
+                                          }),
+                                        ),
+                                      )
+                                        .then(() => onCampaignRefresh?.())
+                                        .catch(() => {});
+                                    }}
+                                  >
+                                    Hide all members
+                                  </button>
+                                </div>
+                              ) : null}
                               <label
                                 style={{
                                   display: "flex",

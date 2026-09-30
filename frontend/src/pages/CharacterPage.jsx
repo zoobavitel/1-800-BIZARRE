@@ -1683,6 +1683,44 @@ export default function CharacterPage({
     [guardUnsavedCharacterNavigation, handleOpenExistingNpc],
   );
 
+  const handleOpenNpcFromNpcSheet = useCallback(
+    (targetNpc) => {
+      if (!targetNpc?.id) return;
+      const fromList = npcs.find((n) => Number(n.id) === Number(targetNpc.id));
+      handleOpenExistingNpc(fromList || targetNpc);
+    },
+    [npcs, handleOpenExistingNpc],
+  );
+
+  const handleOpenCharacterFromNpcSheet = useCallback(
+    (targetChar) => {
+      if (!targetChar?.id) return;
+      void (async () => {
+        try {
+          const fromList = characters.find(
+            (c) => Number(c.id) === Number(targetChar.id),
+          );
+          let front = fromList;
+          if (!front) {
+            const raw = await characterAPI.getCharacter(targetChar.id);
+            front = transformBackendToFrontend(raw);
+          }
+          setMode(MODES.CHARACTER);
+          openCharacterInTab(front);
+          if (typeof window !== "undefined") {
+            window.location.hash = characterHashFromIdAndName(
+              front.id,
+              front.name || front.true_name || front.alias,
+            );
+          }
+        } catch (err) {
+          console.error("Open character from NPC contacts failed:", err);
+        }
+      })();
+    },
+    [characters, openCharacterInTab],
+  );
+
   // ── Render ───────────────────────────────────────────────────────────────
   return (
     <div style={PAGE_STYLES.page}>
@@ -2078,6 +2116,8 @@ export default function CharacterPage({
                   isGM={true}
                   onFactionChange={refreshCampaigns}
                   onCampaignRefresh={refreshCampaigns}
+                  onOpenNpc={handleOpenNpcFromNpcSheet}
+                  onOpenCharacter={handleOpenCharacterFromNpcSheet}
                 />
               </div>
             ))
