@@ -3333,25 +3333,18 @@ class CampaignSerializer(serializers.ModelSerializer):
 
     def get_campaign_npcs(self, obj):
         """
-        Roster NPC summaries. GMs see all; players only see NPCs that are
-        visible_to_players and whose faction is revealed with players_see_npcs.
-        Unaffiliated NPCs are omitted for players (no roster visibility toggle).
+        Roster NPC summaries. GMs see all; players see NPCs with
+        visible_to_players=True (including unaffiliated and members of
+        hidden factions). Faction membership nesting is gated separately
+        on Faction.visible_to_players / players_see_npcs.
         """
         qs = obj.npcs.all().select_related("faction")
         if not self._campaign_viewer_is_gm_or_staff(obj):
-            visible = []
-            for npc in qs:
-                if not getattr(npc, "visible_to_players", True):
-                    continue
-                fac = getattr(npc, "faction", None)
-                if fac is None:
-                    continue
-                if not getattr(fac, "visible_to_players", False):
-                    continue
-                if not getattr(fac, "players_see_npcs", True):
-                    continue
-                visible.append(npc)
-            qs = visible
+            qs = [
+                npc
+                for npc in qs
+                if getattr(npc, "visible_to_players", True)
+            ]
         return NPCSummarySerializer(qs, many=True, context=self.context).data
 
     def get_campaign_characters(self, obj):

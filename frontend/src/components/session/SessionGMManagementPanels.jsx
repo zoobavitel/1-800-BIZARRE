@@ -1340,6 +1340,7 @@ export default function SessionGMManagementPanels({
     return filterSessionFactionPairsForPlayer(
       sessionFactionNpcGroupsRaw.factionPairs,
       factionsById,
+      sessionFactionNpcGroupsRaw.ungrouped,
     );
   }, [isGM, sessionFactionNpcGroupsRaw, factionsById]);
 
