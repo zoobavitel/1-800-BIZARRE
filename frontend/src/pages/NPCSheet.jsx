@@ -20,9 +20,12 @@ import {
   mergeNpcHeritageSelections,
   npcHeritageDefaultsKey,
 } from "../features/character-sheet/utils/npcHeritageDefaults";
+import { STAND_ARCHETYPE_ROWS } from "../features/character-sheet/utils/playbookXpTriggerSrd.js";
 import { HistoryBranchIcon } from "../components/position-effect/PositionEffectIndicators";
 import NpcsStandCoin from "../components/NpcsStandCoin";
 import AvatarCropModal from "../components/AvatarCropModal";
+import { SessionHelpTip } from "../components/session/sessionShellUi";
+import { getCharacterPortraitSrc } from "../utils/homeAvatar";
 import { clockWedgeFillColor } from "../features/character-sheet/utils/progressClockSegments";
 import {
   compressImageForUpload,
@@ -30,21 +33,212 @@ import {
 } from "../utils/compressImageForUpload";
 import "./NPCSheet.css";
 
-function clampCrewStandingValue(n) {
+const STAND_FORM_PRESETS = ["Humanoid", "Non-Humanoid", "Phenomenon"];
+const STAND_CONSCIOUSNESS_GRADES = ["A", "B", "C", "D", "E", "F"];
+const STAND_IDENTITY_TYPE_KEYS = new Set(
+  STAND_ARCHETYPE_ROWS.map((r) => r.key),
+);
+
+function normalizeStandFormsList(raw) {
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  const seen = new Set();
+  for (const x of raw) {
+    const s = String(x || "").trim();
+    if (!s || seen.has(s)) continue;
+    seen.add(s);
+    out.push(s);
+  }
+  return out;
+}
+
+function normalizeStandIdentityTypesLocal(raw) {
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  const seen = new Set();
+  for (const x of raw) {
+    const s = String(x || "")
+      .trim()
+      .toUpperCase();
+    if (!s || !STAND_IDENTITY_TYPE_KEYS.has(s) || seen.has(s)) continue;
+    seen.add(s);
+    out.push(s);
+  }
+  return out;
+}
+
+function normalizeStandConsciousnessLocal(raw) {
+  const c = String(raw || "")
+    .trim()
+    .toUpperCase()
+    .slice(0, 1);
+  return STAND_CONSCIOUSNESS_GRADES.includes(c) ? c : "";
+}
+
+function clampStandingValue(n) {
   const v = Number(n);
   if (!Number.isFinite(v)) return 0;
   return Math.max(-3, Math.min(3, Math.trunc(v)));
 }
 
-function normalizeCrewStandingLocal(raw) {
+function clampCrewStandingValue(n) {
+  return clampStandingValue(n);
+}
+
+function normalizeStandingLocal(raw) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
   const out = {};
   for (const [k, v] of Object.entries(raw)) {
     const sk = String(k).trim();
     if (!sk || !/^\d+$/.test(sk)) continue;
-    out[sk] = clampCrewStandingValue(v);
+    out[sk] = clampStandingValue(v);
   }
   return out;
+}
+
+function normalizeCrewStandingLocal(raw) {
+  return normalizeStandingLocal(raw);
+}
+
+function normalizePcStandingLocal(raw) {
+  return normalizeStandingLocal(raw);
+}
+
+function readNpcSheetBool(npcId, key, fallback) {
+  try {
+    const id = npcId != null ? String(npcId) : "new";
+    const raw = localStorage.getItem(`biz:npc-sheet:${id}:${key}`);
+    if (raw === "true") return true;
+    if (raw === "false") return false;
+  } catch {
+    /* ignore */
+  }
+  return fallback;
+}
+
+function writeNpcSheetBool(npcId, key, value) {
+  try {
+    const id = npcId != null ? String(npcId) : "new";
+    localStorage.setItem(`biz:npc-sheet:${id}:${key}`, value ? "true" : "false");
+  } catch {
+    /* ignore */
+  }
+}
+
+function newInventoryItemId() {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return `item-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function seedFactionStatusFromCampaign(existing, campaignFactions, selfFactionId) {
+  const base =
+    existing && typeof existing === "object" && !Array.isArray(existing)
+      ? { ...existing }
+      : {};
+  let changed = false;
+  for (const f of campaignFactions || []) {
+    if (f == null || f.name == null) continue;
+    if (
+      selfFactionId != null &&
+      selfFactionId !== "" &&
+      Number(f.id) === Number(selfFactionId)
+    ) {
+      continue;
+    }
+    const name = String(f.name).trim();
+    if (!name) continue;
+    if (!(name in base)) {
+      base[name] = 0;
+      changed = true;
+    }
+  }
+  return { next: base, changed };
+}
+
+/** Resolve a freeform/manual contact to an openable NPC or PC sheet when possible. */
+function resolveContactSheetLink(
+  contact,
+  { allNpcs = [], campaignPlayerCharacters = [] } = {},
+) {
+  if (!contact || typeof contact !== "object") return null;
+  const npcIdRaw = contact.npc_id ?? contact.npcId;
+  if (npcIdRaw != null && npcIdRaw !== "") {
+    const id = Number(npcIdRaw);
+    if (Number.isFinite(id)) {
+      const entity = (allNpcs || []).find((n) => Number(n.id) === id) || {
+        id,
+        name: contact.name,
+      };
+      return { kind: "npc", id, entity };
+    }
+  }
+  const pcIdRaw = contact.character_id ?? contact.characterId;
+  if (pcIdRaw != null && pcIdRaw !== "") {
+    const id = Number(pcIdRaw);
+    if (Number.isFinite(id)) {
+      const entity =
+        (campaignPlayerCharacters || []).find((c) => Number(c.id) === id) || {
+          id,
+          name: contact.name,
+        };
+      return { kind: "pc", id, entity };
+    }
+  }
+  const name = String(contact.name || "")
+    .trim()
+    .toLowerCase();
+  if (!name) return null;
+  const npcHits = (allNpcs || []).filter(
+    (n) => String(n?.name || "").trim().toLowerCase() === name,
+  );
+  if (npcHits.length === 1) {
+    return { kind: "npc", id: npcHits[0].id, entity: npcHits[0] };
+  }
+  const pcHits = (campaignPlayerCharacters || []).filter((ch) => {
+    const labels = [ch.true_name, ch.name, ch.alias]
+      .map((x) => String(x || "").trim().toLowerCase())
+      .filter(Boolean);
+    return labels.includes(name);
+  });
+  if (pcHits.length === 1) {
+    return { kind: "pc", id: pcHits[0].id, entity: pcHits[0] };
+  }
+  return null;
+}
+
+function ContactOpenButton({ link, onOpenNpc, onOpenCharacter }) {
+  if (!link) return null;
+  const openNpc = typeof onOpenNpc === "function";
+  const openPc = typeof onOpenCharacter === "function";
+  if (link.kind === "npc" && !openNpc) return null;
+  if (link.kind === "pc" && !openPc) return null;
+  return (
+    <button
+      type="button"
+      title={
+        link.kind === "npc" ? "Open NPC sheet" : "Open character sheet"
+      }
+      onClick={() => {
+        if (link.kind === "npc") onOpenNpc(link.entity || { id: link.id });
+        else onOpenCharacter(link.entity || { id: link.id });
+      }}
+      style={{
+        fontSize: "10px",
+        padding: "2px 6px",
+        background: "#1e3a5f",
+        color: "#93c5fd",
+        border: "1px solid #1d4ed8",
+        borderRadius: "4px",
+        cursor: "pointer",
+        fontFamily: "monospace",
+        flexShrink: 0,
+      }}
+    >
+      Open
+    </button>
+  );
 }
 
 // ─── SRD Data Tables ──────────────────────────────────────────────────────────
@@ -643,6 +837,9 @@ const NPCSheet = ({
   isGM = false,
   onFactionChange,
   onCampaignRefresh,
+  onOpenNpc,
+  onOpenCharacter,
+  onCreateCharacter,
 }) => {
   const [activeMode, setActiveMode] = useState("NPC");
 
@@ -665,6 +862,37 @@ const NPCSheet = ({
   const [crewStanding, setCrewStanding] = useState(() =>
     normalizeCrewStandingLocal(npc?.crew_standing),
   );
+  const [pcStanding, setPcStanding] = useState(() =>
+    normalizePcStandingLocal(npc?.pc_standing),
+  );
+  const [standIdentityTypes, setStandIdentityTypes] = useState(() =>
+    normalizeStandIdentityTypesLocal(
+      npc?.stand_identity_types ?? npc?.standIdentityTypes,
+    ),
+  );
+  const [standTypeCustom, setStandTypeCustom] = useState(() =>
+    String(npc?.stand_type_custom ?? npc?.standTypeCustom ?? "").trim(),
+  );
+  const [standForms, setStandForms] = useState(() =>
+    normalizeStandFormsList(npc?.stand_forms ?? npc?.standForms),
+  );
+  const [standConsciousness, setStandConsciousness] = useState(() =>
+    normalizeStandConsciousnessLocal(
+      npc?.stand_consciousness ?? npc?.standConsciousness,
+    ),
+  );
+  const [standFormCustomDraft, setStandFormCustomDraft] = useState("");
+  const [healingSectionExpanded, setHealingSectionExpanded] = useState(() =>
+    readNpcSheetBool(npc?.id, "healing", true),
+  );
+  const [clocksSectionExpanded, setClocksSectionExpanded] = useState(() =>
+    readNpcSheetBool(npc?.id, "clocks", true),
+  );
+  const [heritageSectionExpanded, setHeritageSectionExpanded] = useState(() =>
+    readNpcSheetBool(npc?.id, "heritage", false),
+  );
+  const [hideCompletedClocks, setHideCompletedClocks] = useState(false);
+  const [showFactionItemPicker, setShowFactionItemPicker] = useState(false);
 
   useEffect(() => {
     setFaction(npc?.faction ?? npc?.faction_id ?? "");
@@ -681,6 +909,78 @@ const NPCSheet = ({
   useEffect(() => {
     setCrewStanding(normalizeCrewStandingLocal(npc?.crew_standing));
   }, [npc?.id, npc?.crew_standing]);
+
+  useEffect(() => {
+    setPcStanding(normalizePcStandingLocal(npc?.pc_standing));
+  }, [npc?.id, npc?.pc_standing]);
+
+  useEffect(() => {
+    setStandIdentityTypes(
+      normalizeStandIdentityTypesLocal(
+        npc?.stand_identity_types ?? npc?.standIdentityTypes,
+      ),
+    );
+    setStandTypeCustom(
+      String(npc?.stand_type_custom ?? npc?.standTypeCustom ?? "").trim(),
+    );
+    setStandForms(
+      normalizeStandFormsList(npc?.stand_forms ?? npc?.standForms),
+    );
+    setStandConsciousness(
+      normalizeStandConsciousnessLocal(
+        npc?.stand_consciousness ?? npc?.standConsciousness,
+      ),
+    );
+  }, [
+    npc?.id,
+    npc?.stand_identity_types,
+    npc?.standIdentityTypes,
+    npc?.stand_type_custom,
+    npc?.standTypeCustom,
+    npc?.stand_forms,
+    npc?.standForms,
+    npc?.stand_consciousness,
+    npc?.standConsciousness,
+  ]);
+
+  useEffect(() => {
+    setHealingSectionExpanded(readNpcSheetBool(npc?.id, "healing", true));
+    setClocksSectionExpanded(readNpcSheetBool(npc?.id, "clocks", true));
+    setHeritageSectionExpanded(readNpcSheetBool(npc?.id, "heritage", false));
+  }, [npc?.id]);
+
+  const setHealingSectionExpandedPersist = useCallback(
+    (updater) => {
+      setHealingSectionExpanded((prev) => {
+        const next = typeof updater === "function" ? updater(prev) : updater;
+        writeNpcSheetBool(npc?.id, "healing", next);
+        return next;
+      });
+    },
+    [npc?.id],
+  );
+
+  const setClocksSectionExpandedPersist = useCallback(
+    (updater) => {
+      setClocksSectionExpanded((prev) => {
+        const next = typeof updater === "function" ? updater(prev) : updater;
+        writeNpcSheetBool(npc?.id, "clocks", next);
+        return next;
+      });
+    },
+    [npc?.id],
+  );
+
+  const setHeritageSectionExpandedPersist = useCallback(
+    (updater) => {
+      setHeritageSectionExpanded((prev) => {
+        const next = typeof updater === "function" ? updater(prev) : updater;
+        writeNpcSheetBool(npc?.id, "heritage", next);
+        return next;
+      });
+    },
+    [npc?.id],
+  );
 
   const campaignId = typeof campaign === "object" ? campaign?.id : campaign;
   const activeCampaign = useMemo(
@@ -742,6 +1042,17 @@ const NPCSheet = ({
     [activeCampaign?.campaign_characters],
   );
 
+  const crewAssociatePcs = useMemo(() => {
+    if (currentCrewId == null) return [];
+    return campaignPlayerCharacters.filter((ch) => {
+      const raw = ch.crew_id ?? ch.crew;
+      const cid =
+        raw != null && typeof raw === "object" ? raw.id ?? null : raw;
+      if (cid === "" || cid == null) return false;
+      return Number(cid) === Number(currentCrewId);
+    });
+  }, [campaignPlayerCharacters, currentCrewId]);
+
   const activeSessionId = useMemo(() => {
     const raw = activeCampaign?.active_session;
     if (raw == null) return null;
@@ -759,6 +1070,12 @@ const NPCSheet = ({
   const [vulnRevealSaving, setVulnRevealSaving] = useState(false);
   /** Invalidate in-flight GET /sessions/:id after PATCH so stale responses cannot revert UI */
   const activeSessionDetailNonceRef = useRef(0);
+  const activeSessionDetailIdRef = useRef(null);
+
+  useEffect(() => {
+    activeSessionDetailIdRef.current =
+      activeSessionDetail?.id != null ? Number(activeSessionDetail.id) : null;
+  }, [activeSessionDetail?.id]);
 
   useEffect(() => {
     if (!isGM || activeSessionId == null) {
@@ -769,7 +1086,12 @@ const NPCSheet = ({
     let cancelled = false;
     activeSessionDetailNonceRef.current += 1;
     const ticket = activeSessionDetailNonceRef.current;
-    setActiveSessionLoading(true);
+    const softRefresh =
+      activeSessionDetailIdRef.current != null &&
+      Number(activeSessionDetailIdRef.current) === Number(activeSessionId);
+    if (!softRefresh) {
+      setActiveSessionLoading(true);
+    }
     sessionAPI
       .getSession(activeSessionId)
       .then((data) => {
@@ -792,9 +1114,7 @@ const NPCSheet = ({
     return () => {
       cancelled = true;
     };
-    // Include `campaigns`: session NPC involvements change when GM edits session elsewhere;
-    // nonce drops stale GETs started before our own PATCH completes.
-  }, [isGM, activeSessionId, campaigns]);
+  }, [isGM, activeSessionId]);
 
   const sessionInvolvementForNpc = useMemo(() => {
     const id = npc?.id;
@@ -924,6 +1244,21 @@ const NPCSheet = ({
 
   // Faction detail — loaded from server when a faction is selected
   const [factionDetailLoading, setFactionDetailLoading] = useState(false);
+  const loadedFactionIdRef = useRef(null);
+  const campaignFactionsRef = useRef(campaignFactions);
+  campaignFactionsRef.current = campaignFactions;
+
+  const campaignFactionIdsKey = useMemo(
+    () =>
+      (campaignFactions || [])
+        .map((f) => f?.id)
+        .filter((id) => id != null && id !== "")
+        .map(Number)
+        .filter((n) => Number.isFinite(n))
+        .sort((a, b) => a - b)
+        .join(","),
+    [campaignFactions],
+  );
 
   // Faction-level editable fields (shared across all NPCs in the faction)
   const [factionName, setFactionName] = useState("");
@@ -935,36 +1270,91 @@ const NPCSheet = ({
   const [factionInventory, setFactionInventory] = useState([]);
   const [factionStatusData, setFactionStatusData] = useState({});
   const [factionCrewNotes, setFactionCrewNotes] = useState("");
+  const [factionVisibleToPlayers, setFactionVisibleToPlayers] = useState(false);
 
-  // Load faction detail whenever the selected faction changes
+  // Load faction detail only when selected faction id changes (not on campaigns churn).
   useEffect(() => {
     if (!faction) {
+      loadedFactionIdRef.current = null;
       return;
     }
-    setFactionDetailLoading(true);
+    let cancelled = false;
+    const soft =
+      loadedFactionIdRef.current != null &&
+      Number(loadedFactionIdRef.current) === Number(faction);
+    if (!soft) {
+      setFactionDetailLoading(true);
+    }
     factionAPI
       .getFaction(faction)
       .then((f) => {
+        if (cancelled) return;
+        loadedFactionIdRef.current = Number(faction);
         setFactionName(f.name || "");
         setFactionType(f.faction_type || "");
         setFactionLevel(typeof f.level === "number" ? f.level : 0);
         setFactionHold(f.hold || "weak");
         setFactionReputation(typeof f.reputation === "number" ? f.reputation : 0);
         setFactionContacts(Array.isArray(f.contacts) ? f.contacts : []);
-        setFactionInventory(Array.isArray(f.inventory) ? f.inventory : []);
-        setFactionStatusData(f.faction_status && typeof f.faction_status === "object" ? f.faction_status : {});
+        setFactionInventory(
+          normalizeCharacterInventory(
+            Array.isArray(f.inventory) ? f.inventory : [],
+          ),
+        );
+        setFactionStatusData(() => {
+          const { next } = seedFactionStatusFromCampaign(
+            f.faction_status && typeof f.faction_status === "object"
+              ? f.faction_status
+              : {},
+            campaignFactionsRef.current,
+            faction,
+          );
+          return next;
+        });
         setFactionCrewNotes(f.crew_notes || "");
+        setFactionVisibleToPlayers(!!f.visible_to_players);
       })
       .catch(() => {})
-      .finally(() => setFactionDetailLoading(false));
+      .finally(() => {
+        if (!cancelled) setFactionDetailLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [faction]);
+
+  // When no faction selected, seed NPC-level faction_status when faction id set changes.
+  useEffect(() => {
+    if (faction) return;
+    setFactionStatus((prev) => {
+      const { next, changed } = seedFactionStatusFromCampaign(
+        prev,
+        campaignFactionsRef.current,
+        null,
+      );
+      return changed ? next : prev;
+    });
+  }, [faction, campaignFactionIdsKey]);
+
+  // Re-seed faction-level status only when campaign faction id set grows/changes.
+  useEffect(() => {
+    if (!faction) return;
+    setFactionStatusData((prev) => {
+      const { next, changed } = seedFactionStatusFromCampaign(
+        prev,
+        campaignFactionsRef.current,
+        faction,
+      );
+      return changed ? next : prev;
+    });
+  }, [faction, campaignFactionIdsKey]);
 
   // Debounce ref for faction auto-save
   const factionDebounceRef = useRef(null);
   const factionSavingRef = useRef(false);
   const factionMountedRef = useRef(false);
 
-  // Debounced faction auto-save
+  // Debounced faction auto-save (do not refreshCampaigns — that retriggered Loading)
   useEffect(() => {
     if (!factionMountedRef.current) {
       factionMountedRef.current = true;
@@ -986,8 +1376,18 @@ const NPCSheet = ({
           inventory: factionInventory,
           faction_status: factionStatusData,
           crew_notes: factionCrewNotes,
+          visible_to_players: factionVisibleToPlayers,
         });
-        if (onFactionChange) onFactionChange(updated);
+        setLocalExtraFactions((prev) => {
+          const id = Number(faction);
+          const idx = prev.findIndex((f) => Number(f.id) === id);
+          if (idx >= 0) {
+            const next = [...prev];
+            next[idx] = { ...next[idx], ...updated };
+            return next;
+          }
+          return updated?.id != null ? [...prev, updated] : prev;
+        });
       } catch {
         // silently ignore faction save errors
       } finally {
@@ -1009,6 +1409,7 @@ const NPCSheet = ({
     factionInventory,
     factionStatusData,
     factionCrewNotes,
+    factionVisibleToPlayers,
   ]);
 
   // Reset faction-mounted flag when faction changes so first load doesn't trigger a spurious save
@@ -1088,6 +1489,13 @@ const NPCSheet = ({
   const [conflictClocks, setConflictClocks] = useState(() =>
     normalizeClockList(npc?.conflict_clocks ?? npc?.conflictClocks ?? []),
   );
+
+  const visibleConflictClocks = useMemo(() => {
+    if (!hideCompletedClocks) return conflictClocks;
+    return conflictClocks.filter(
+      (c) => Number(c?.filled || 0) < Number(c?.segments || 0),
+    );
+  }, [conflictClocks, hideCompletedClocks]);
 
   const [altClocks, setAltClocks] = useState(() =>
     normalizeClockList(npc?.alt_clocks ?? npc?.altClocks ?? []),
@@ -1761,6 +2169,11 @@ const NPCSheet = ({
       faction_status: factionStatus,
       inventory,
       crew_standing: normalizeCrewStandingLocal(crewStanding),
+      pc_standing: normalizePcStandingLocal(pcStanding),
+      stand_identity_types: normalizeStandIdentityTypesLocal(standIdentityTypes),
+      stand_type_custom: String(standTypeCustom || "").trim(),
+      stand_forms: normalizeStandFormsList(standForms),
+      stand_consciousness: normalizeStandConsciousnessLocal(standConsciousness),
       ...(imageFile ? { imageFile } : {}),
       ...(!imageFile && imageUrl ? { image: null } : {}),
     }),
@@ -1792,6 +2205,11 @@ const NPCSheet = ({
       factionStatus,
       inventory,
       crewStanding,
+      pcStanding,
+      standIdentityTypes,
+      standTypeCustom,
+      standForms,
+      standConsciousness,
     ],
   );
 
@@ -1930,6 +2348,11 @@ const NPCSheet = ({
     factionStatus,
     inventory,
     crewStanding,
+    pcStanding,
+    standIdentityTypes,
+    standTypeCustom,
+    standForms,
+    standConsciousness,
     runNpcAutosave,
   ]);
 
@@ -2474,7 +2897,7 @@ const NPCSheet = ({
               borderRadius: mode === "NPC" ? "4px 0 0 4px" : "0 4px 4px 0",
             }}
           >
-            {mode === "NPC" ? "NPC MODE" : "CREW MODE"}
+            {mode === "NPC" ? "NPC MODE" : "Faction Mode"}
           </button>
         ))}
       </div>
@@ -2482,24 +2905,27 @@ const NPCSheet = ({
       <div className="npc-sheet-body">
         {activeMode === "NPC" && (
           <>
-            {/* ── Identity Bar ── */}
-            <div style={{ ...S.card, borderColor: "#4c1d95" }}>
+            <div className="npc-sheet-g2" style={S.g2}>
+              {/* ════ LEFT — Identity + Clocks + Inventory + Healing + Notes ════ */}
+              <div>
+              <div style={{ ...S.card, borderColor: "#4c1d95" }}>
               <div style={{ display: "flex", gap: "16px", alignItems: "flex-start", flexWrap: "wrap" }}>
-                {/* Portrait */}
+                {/* Left: portrait + level */}
                 <div
                   style={{
                     display: "flex",
                     flexDirection: "column",
                     alignItems: "center",
                     gap: "4px",
-                    flexShrink: 0,
+                    flex: "0 0 auto",
+                    width: "170px",
                   }}
                 >
                   <div
                     style={{
                       width: "150px",
                       height: "150px",
-                      borderRadius: "50%",
+                      borderRadius: "4px",
                       border: "2px solid #4b2d8f",
                       background: "#1f1035",
                       overflow: "hidden",
@@ -2586,9 +3012,45 @@ const NPCSheet = ({
                       onApply={handleCropApply}
                     />
                   ) : null}
+                  <div style={{ textAlign: "center", marginTop: "8px", width: "100%" }}>
+                    <span style={S.lbl}>NPC LEVEL</span>
+                    <div
+                      style={{
+                        fontSize: "28px",
+                        fontWeight: "bold",
+                        color:
+                          level >= 7
+                            ? "#f87171"
+                            : level >= 4
+                              ? "#fbbf24"
+                              : "#34d399",
+                        lineHeight: 1,
+                      }}
+                    >
+                      {level}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: "10px",
+                        color: "#6b7280",
+                        marginTop: "2px",
+                      }}
+                    >
+                      {totalPoints} pts × 10
+                    </div>
+                    <div
+                      style={{
+                        fontSize: "10px",
+                        color: "#4c1d95",
+                        marginTop: "1px",
+                      }}
+                    >
+                      = {totalSpentXP} XP spent
+                    </div>
+                  </div>
                 </div>
-                {/* Fields */}
-                <div className="npc-sheet-fields-grid">
+                {/* Right: stacked identity fields */}
+                <div style={{ flex: "1 1 220px", minWidth: 0, display: "flex", flexDirection: "column", gap: "8px" }}>
                   <div>
                     <span style={S.lbl}>NPC Name / User Name</span>
                     <input
@@ -2672,7 +3134,7 @@ const NPCSheet = ({
                         ＋ New Faction
                       </button>
                     )}
-                    {isGM && showNewFactionForm && (
+                    {isGM && campaignId && showNewFactionForm && (
                       <div style={{ marginTop: "6px", display: "flex", gap: "4px" }}>
                         <input
                           style={{ ...S.inp, flex: 1 }}
@@ -2747,45 +3209,6 @@ const NPCSheet = ({
                       </select>
                     </div>
                   ) : null}
-                  <div style={{ textAlign: "center", minWidth: "100px" }}>
-                    <span style={S.lbl}>NPC LEVEL</span>
-                    <div
-                      style={{
-                        fontSize: "28px",
-                        fontWeight: "bold",
-                        color:
-                          level >= 7
-                            ? "#f87171"
-                            : level >= 4
-                              ? "#fbbf24"
-                              : "#34d399",
-                        lineHeight: 1,
-                      }}
-                    >
-                      {level}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: "10px",
-                        color: "#6b7280",
-                        marginTop: "2px",
-                      }}
-                    >
-                      {totalPoints} pts × 10
-                    </div>
-                    <div
-                      style={{
-                        fontSize: "10px",
-                        color: "#4c1d95",
-                        marginTop: "1px",
-                      }}
-                    >
-                      = {totalSpentXP} XP spent
-                    </div>
-                  </div>
-                </div>
-                {/* Heritage + NPC Type row */}
-                <div className="npc-sheet-two-col">
                   <div>
                     <span style={S.lbl}>Heritage</span>
                     <select
@@ -2807,395 +3230,2316 @@ const NPCSheet = ({
                       ))}
                     </select>
                   </div>
-                  <div>
-                    <span style={S.lbl}>NPC Type</span>
-                    <select
-                      style={{ ...S.sel, width: "100%" }}
-                      value={playbook}
-                      onChange={(e) => setPlaybook(e.target.value)}
-                    >
-                      <option value="STAND">Stand User</option>
-                      <option value="HAMON">Hamon User</option>
-                      <option value="SPIN">Spin User</option>
-                      <option value="NON_BIZARRE">Non-Bizarre</option>
-                    </select>
-                  </div>
                 </div>
               </div>
-            </div>
+              </div>
 
-            <div className="npc-sheet-g2" style={S.g2}>
-              {/* ════ LEFT — Stats + Reference ════ */}
+                {/* Conflict Clocks — PCs roll to fill these */}
+                <div style={S.card}>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setClocksSectionExpandedPersist((prev) => !prev)
+                    }
+                    aria-expanded={clocksSectionExpanded}
+                    aria-controls="npc-sheet-clocks-panel"
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      width: "100%",
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      padding: 0,
+                      marginBottom: clocksSectionExpanded ? "8px" : 0,
+                      textAlign: "left",
+                    }}
+                  >
+                    <span
+                      aria-hidden
+                      style={{
+                        color: "#9ca3af",
+                        fontSize: "10px",
+                        lineHeight: 1,
+                        width: "12px",
+                        flexShrink: 0,
+                        userSelect: "none",
+                      }}
+                    >
+                      {clocksSectionExpanded ? "▼" : "►"}
+                    </span>
+                    <span
+                      style={{
+                        color: S.lbl.color,
+                        fontSize: S.lbl.fontSize,
+                        fontWeight: S.lbl.fontWeight,
+                      }}
+                    >
+                      CLOCKS
+                    </span>
+                  </button>
+                  {clocksSectionExpanded ? (
+                  <div id="npc-sheet-clocks-panel">
+                    <div
+                      style={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        alignItems: "center",
+                        gap: "8px",
+                        marginBottom: "8px",
+                        fontSize: "10px",
+                        color: "#9ca3af",
+                      }}
+                    >
+                      <label
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "4px",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={hideCompletedClocks}
+                          onChange={(e) =>
+                            setHideCompletedClocks(e.target.checked)
+                          }
+                        />
+                        Hide completed
+                      </label>
+                      <div
+                        style={{
+                          fontSize: "10px",
+                          color: "#6b7280",
+                          flex: "1 1 160px",
+                        }}
+                      >
+                        PCs roll action ratings to fill these. Limited=1 tick,
+                        Standard=2, Greater=3. Use{" "}
+                        <strong>Players see</strong> to show individual clocks on
+                        session-linked PC sheets without revealing every clock.
+                      </div>
+                    </div>
+
+                    {playbook === "STAND" &&
+                    (isDurS ? (
+                      /* S-DURABILITY — No vulnerability clock */
+                      <div
+                        style={{
+                          marginBottom: "12px",
+                          borderBottom: "1px solid #2d1f52",
+                          paddingBottom: "12px",
+                        }}
+                      >
+                        <div style={S.sdur}>
+                          <div
+                            style={{
+                              fontSize: "14px",
+                              fontWeight: "bold",
+                              color: "#22c55e",
+                              marginBottom: "6px",
+                            }}
+                          >
+                            ⬛ DURABILITY S — INVINCIBLE TO DIRECT HARM
+                          </div>
+                          <div style={{ marginBottom: "8px" }}>
+                            This NPC has no Vulnerability Clock. Direct harm
+                            from PCs cannot defeat them. Create alternative win
+                            condition clocks below.
+                          </div>
+                          <div style={{ color: "#6b7280", fontSize: "10px" }}>
+                            Examples: &quot;Expose the User&quot; · &quot;Break
+                            Stand Logic&quot; · &quot;Destroy the Mechanism&quot;
+                          </div>
+                        </div>
+                        <div style={{ marginTop: "16px" }}>
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              marginBottom: "8px",
+                            }}
+                          >
+                            <span style={S.lbl}>Alternative Win Conditions</span>
+                            <button
+                              type="button"
+                              onClick={() => toggleClockDraftCard("alt")}
+                              style={{
+                                ...S.btn,
+                                background: "#166534",
+                                color: "#86efac",
+                                fontSize: "11px",
+                              }}
+                            >
+                              + Add Clock
+                            </button>
+                          </div>
+                          <NpcClockAddCard
+                            draft={
+                              clockDraftCard?.kind === "alt"
+                                ? clockDraftCard
+                                : null
+                            }
+                            error={
+                              clockDraftCard?.kind === "alt"
+                                ? clockDraftError
+                                : ""
+                            }
+                            onFieldChange={patchClockDraft}
+                            onCommit={() => {
+                              if (clockDraftCard?.kind === "alt")
+                                commitClockDraftCard();
+                            }}
+                            onCancel={cancelClockDraftCard}
+                            namePlaceholder='e.g. "Expose User", "Break Stand Logic"'
+                            borderColor="#166534"
+                            createBg="#14532d"
+                            createColor="#86efac"
+                            createLabel="Add clock"
+                          />
+                          {altClocks.length === 0 && (
+                            <div style={{ ...S.warn, textAlign: "center" }}>
+                              S-DUR NPCs must have at least one alternative win
+                              condition clock!
+                            </div>
+                          )}
+                          <div
+                            style={{
+                              display: "flex",
+                              flexWrap: "wrap",
+                              gap: "16px",
+                              justifyContent: "center",
+                            }}
+                          >
+                            {altClocks.map((clk, cidx) => (
+                              <div
+                                key={
+                                  clk.id != null
+                                    ? String(clk.id)
+                                    : `alt-${cidx}`
+                                }
+                                style={{
+                                  textAlign: "center",
+                                  position: "relative",
+                                }}
+                              >
+                                <ProgressClock
+                                  size={90}
+                                  segments={clk.segments}
+                                  filled={clk.filled}
+                                  onClick={(f) => updateAltClock(clk.id, f)}
+                                  label={clk.name}
+                                  sublabel={`${clk.segments}-segment clock`}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => deleteAltClock(clk.id)}
+                                  style={{
+                                    position: "absolute",
+                                    top: "-4px",
+                                    right: "-4px",
+                                    color: "#f87171",
+                                    background: "#1a0000",
+                                    border: "1px solid #7f1d1d",
+                                    borderRadius: "50%",
+                                    width: "16px",
+                                    height: "16px",
+                                    cursor: "pointer",
+                                    fontSize: "10px",
+                                    padding: 0,
+                                    lineHeight: 1,
+                                  }}
+                                >
+                                  ×
+                                </button>
+                                <NpcClockSegmentsSelect
+                                  value={clk.segments}
+                                  onChange={(segs) =>
+                                    setAltClockSegments(clk.id, segs)
+                                  }
+                                  color="#86efac"
+                                />
+                                <label
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    gap: "6px",
+                                    marginTop: "4px",
+                                    fontSize: "10px",
+                                    color: "#86efac",
+                                    cursor: "pointer",
+                                    userSelect: "none",
+                                  }}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={!!clk.show_to_players}
+                                    onChange={(e) =>
+                                      setAltClocks((p) =>
+                                        p.map((c) =>
+                                          npcClockIdsMatch(c.id, clk.id)
+                                            ? {
+                                                ...c,
+                                                show_to_players:
+                                                  e.target.checked,
+                                              }
+                                            : c,
+                                        ),
+                                      )
+                                    }
+                                  />
+                                  Players see
+                                </label>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const newName = prompt(
+                                      "Rename clock:",
+                                      clk.name,
+                                    );
+                                    if (newName)
+                                      setAltClocks((p) =>
+                                        p.map((c) =>
+                                          npcClockIdsMatch(c.id, clk.id)
+                                            ? { ...c, name: newName }
+                                            : c,
+                                        ),
+                                      );
+                                  }}
+                                  style={{
+                                    display: "block",
+                                    margin: "2px auto 0",
+                                    color: "#6b7280",
+                                    background: "none",
+                                    border: "none",
+                                    cursor: "pointer",
+                                    fontSize: "10px",
+                                  }}
+                                >
+                                  rename
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      /* NORMAL DURABILITY — Vulnerability Clock */
+                      <div
+                        style={{
+                          marginBottom: "12px",
+                          borderBottom: "1px solid #2d1f52",
+                          paddingBottom: "12px",
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "baseline",
+                            marginBottom: "10px",
+                          }}
+                        >
+                          <span style={S.lbl}>
+                            Durability {stats.durability} — Vulnerability Clock
+                          </span>
+                          <span style={{ fontSize: "10px", color: "#6b7280" }}>
+                            {vulnSegs} segments
+                          </span>
+                        </div>
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: "20px",
+                            alignItems: "flex-start",
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          <div style={{ flex: "0 0 auto" }}>
+                            {(() => {
+                              const isDefeated = vulnFilled >= vulnSegs;
+                              return (
+                                <div style={{ textAlign: "center" }}>
+                                  {isDefeated && (
+                                    <div
+                                      style={{
+                                        ...S.warn,
+                                        marginBottom: "6px",
+                                        textAlign: "center",
+                                        fontWeight: "bold",
+                                      }}
+                                    >
+                                      ☠ DEFEATED
+                                    </div>
+                                  )}
+                                  <ProgressClock
+                                    size={100}
+                                    segments={vulnSegs}
+                                    filled={vulnFilled}
+                                    label="Vulnerability"
+                                    sublabel={`${vulnFilled}/${vulnSegs}`}
+                                    onClick={(newFilled) =>
+                                      setVulnFilled(
+                                        Math.min(
+                                          Math.max(0, newFilled),
+                                          vulnSegs,
+                                        ),
+                                      )
+                                    }
+                                  />
+                                </div>
+                              );
+                            })()}
+                            {isGM &&
+                              campaignId &&
+                              npc?.id &&
+                              vulnSegs > 0 && (
+                                <div
+                                  style={{
+                                    marginTop: "10px",
+                                    maxWidth: "260px",
+                                    textAlign: "left",
+                                    fontSize: "10px",
+                                    color: "#9ca3af",
+                                  }}
+                                >
+                                  {activeSessionLoading && (
+                                    <div>Loading session…</div>
+                                  )}
+                                  {!activeSessionLoading &&
+                                    activeSessionId == null && (
+                                      <div>
+                                        Set an active session for this campaign
+                                        to control player visibility.
+                                      </div>
+                                    )}
+                                  {!activeSessionLoading &&
+                                    activeSessionId != null &&
+                                    !sessionInvolvementForNpc && (
+                                      <div>
+                                        Add this NPC to the active session in
+                                        Campaign Management to show its
+                                        vulnerability clock on player character
+                                        sheets.
+                                      </div>
+                                    )}
+                                  {!activeSessionLoading &&
+                                    sessionInvolvementForNpc && (
+                                      <label
+                                        style={{
+                                          display: "flex",
+                                          alignItems: "flex-start",
+                                          gap: "6px",
+                                          cursor:
+                                            vulnRevealSaving ||
+                                            !!sessionInvolvementForNpc.show_clocks_to_players
+                                              ? "not-allowed"
+                                              : "pointer",
+                                        }}
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={
+                                            !!sessionInvolvementForNpc.show_clocks_to_players ||
+                                            !!sessionInvolvementForNpc.show_vulnerability_clock_to_players
+                                          }
+                                          disabled={
+                                            vulnRevealSaving ||
+                                            !!sessionInvolvementForNpc.show_clocks_to_players
+                                          }
+                                          onChange={() =>
+                                            void toggleVulnerabilityVisibleToPlayers()
+                                          }
+                                        />
+                                        <span>
+                                          Show vulnerability clock on player
+                                          character sheets (active session)
+                                        </span>
+                                      </label>
+                                    )}
+                                </div>
+                              )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => toggleClockDraftCard("conflict")}
+                      style={{
+                        ...S.btn,
+                        border: "2px dashed #2d1f52",
+                        background: "transparent",
+                        color: "#a78bfa",
+                        width: "100%",
+                        padding: "8px",
+                        marginBottom: "8px",
+                        fontSize: "11px",
+                      }}
+                    >
+                      + Add Clock
+                    </button>
+                  <NpcClockAddCard
+                    draft={
+                      clockDraftCard?.kind === "conflict"
+                        ? clockDraftCard
+                        : null
+                    }
+                    error={
+                      clockDraftCard?.kind === "conflict"
+                        ? clockDraftError
+                        : ""
+                    }
+                    onFieldChange={patchClockDraft}
+                    onCommit={() => {
+                      if (clockDraftCard?.kind === "conflict")
+                        commitClockDraftCard();
+                    }}
+                    onCancel={cancelClockDraftCard}
+                    namePlaceholder='e.g. "Defeat antagonist", "Expose the User"'
+                    borderColor="#6d28d9"
+                    createBg="#4c1d95"
+                    createColor="#e9d5ff"
+                    createLabel="Add clock"
+                  />
+
+                  {visibleConflictClocks.length === 0 && conflictClocks.length === 0 && (
+                    <div
+                      style={{
+                        color: "#6b7280",
+                        fontSize: "11px",
+                        textAlign: "center",
+                        padding: "12px",
+                      }}
+                    >
+                      No clocks yet — add one to start tracking the conflict.
+                    </div>
+                  )}
+
+                  <div
+                    style={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: "16px",
+                      justifyContent:
+                        visibleConflictClocks.length <= 2 ? "center" : "flex-start",
+                    }}
+                  >
+                    {visibleConflictClocks.map((clk, cidx) => {
+                      const isComplete = clk.filled >= clk.segments;
+                      return (
+                        <div
+                          key={
+                            clk.id != null ? String(clk.id) : `conf-${cidx}`
+                          }
+                          style={{
+                            textAlign: "center",
+                            position: "relative",
+                            background: isComplete ? "#0a1a0a" : "transparent",
+                            border: isComplete ? "1px solid #16a34a" : "none",
+                            borderRadius: "6px",
+                            padding: isComplete ? "6px" : "0",
+                          }}
+                        >
+                          {isComplete && (
+                            <div
+                              style={{
+                                fontSize: "10px",
+                                color: "#22c55e",
+                                fontWeight: "bold",
+                                marginBottom: "4px",
+                              }}
+                            >
+                              ✓ COMPLETE
+                            </div>
+                          )}
+                          <ProgressClock
+                            size={90}
+                            segments={clk.segments}
+                            filled={clk.filled}
+                            onClick={(f) => updateConflictClock(clk.id, f)}
+                            label={clk.name}
+                            sublabel={`${clk.segments}-seg`}
+                          />
+                          <div
+                            style={{
+                              marginTop: "6px",
+                              display: "flex",
+                              flexDirection: "column",
+                              alignItems: "center",
+                              gap: "4px",
+                            }}
+                          >
+                            <NpcClockSegmentsSelect
+                              value={clk.segments}
+                              onChange={(segs) =>
+                                setConflictClockSegments(clk.id, segs)
+                              }
+                              color="#a78bfa"
+                            />
+                            <label
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "6px",
+                                fontSize: "10px",
+                                color: "#a78bfa",
+                                cursor: "pointer",
+                                userSelect: "none",
+                              }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={!!clk.show_to_players}
+                                onChange={(e) =>
+                                  setConflictClocks((p) =>
+                                    p.map((c) =>
+                                      npcClockIdsMatch(c.id, clk.id)
+                                        ? {
+                                            ...c,
+                                            show_to_players: e.target.checked,
+                                          }
+                                        : c,
+                                    ),
+                                  )
+                                }
+                              />
+                              Players see
+                            </label>
+                            <div
+                              style={{
+                                display: "flex",
+                                gap: "4px",
+                                justifyContent: "center",
+                              }}
+                            >
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const newName = prompt(
+                                    "Rename clock:",
+                                    clk.name,
+                                  );
+                                  if (newName)
+                                    setConflictClocks((p) =>
+                                      p.map((c) =>
+                                        npcClockIdsMatch(c.id, clk.id)
+                                          ? { ...c, name: newName }
+                                          : c,
+                                      ),
+                                    );
+                                }}
+                                style={{
+                                  color: "#6b7280",
+                                  background: "none",
+                                  border: "none",
+                                  cursor: "pointer",
+                                  fontSize: "10px",
+                                }}
+                              >
+                                rename
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => deleteConflictClock(clk.id)}
+                                style={{
+                                  color: "#f87171",
+                                  background: "none",
+                                  border: "none",
+                                  cursor: "pointer",
+                                  fontSize: "10px",
+                                }}
+                              >
+                                delete
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Effect tick reference */}
+                  <div
+                    style={{
+                      marginTop: "12px",
+                      display: "flex",
+                      gap: "6px",
+                      justifyContent: "center",
+                    }}
+                  >
+                    {[
+                      ["LIMITED", "1 tick", "#6b7280"],
+                      ["STANDARD", "2 ticks", "#7c3aed"],
+                      ["GREATER", "3 ticks", "#16a34a"],
+                    ].map(([label, ticks, color]) => (
+                      <div
+                        key={label}
+                        style={{
+                          background: "#0a0a14",
+                          border: `1px solid ${color}`,
+                          borderRadius: "4px",
+                          padding: "4px 8px",
+                          textAlign: "center",
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: "10px",
+                            color,
+                            fontWeight: "bold",
+                          }}
+                        >
+                          {label}
+                        </div>
+                        <div style={{ fontSize: "11px", color: "#d1d5db" }}>
+                          {ticks}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  </div>
+                  ) : null}
+                </div>
+
+                {/* Inventory — structured kit (same field as CREW mode when no faction) */}
+                <div style={S.card}>
+                  <span style={S.lbl}>INVENTORY</span>
+                  <div style={{ minWidth: 0 }}>
+                    <CharacterSheetInventoryList
+                      panelId="npc-sheet-inventory-panel"
+                      inventory={inventory}
+                      readOnly={false}
+                      allowArmor={false}
+                      campaignId={campaignId}
+                      isGM={isGM}
+                      onChange={setInventory}
+                      onPromoteToCampaign={
+                        isGM ? handlePromoteItemToCampaign : undefined
+                      }
+                      onPublishToSite={
+                        isGM ? handlePublishItemToSite : undefined
+                      }
+                    />
+                  </div>
+                  {currentFactionId && factionInventory.length > 0 ? (
+                    <div style={{ marginTop: "10px" }}>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setShowFactionItemPicker((prev) => !prev)
+                        }
+                        style={{
+                          ...S.btn,
+                          border: "1px dashed #4b2d8f",
+                          background: "transparent",
+                          color: "#a78bfa",
+                          width: "100%",
+                          padding: "6px",
+                          fontSize: "11px",
+                        }}
+                      >
+                        {showFactionItemPicker
+                          ? "Hide faction items"
+                          : "Add faction item"}
+                      </button>
+                      {showFactionItemPicker ? (
+                        <div
+                          style={{
+                            marginTop: "8px",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "4px",
+                          }}
+                        >
+                          {factionInventory.map((item, i) => {
+                            const label =
+                              item?.name ||
+                              item?.item_name ||
+                              `Item ${i + 1}`;
+                            return (
+                              <button
+                                key={item?.id != null ? String(item.id) : `fi-${i}`}
+                                type="button"
+                                onClick={() => {
+                                  const copy = {
+                                    ...item,
+                                    id: newInventoryItemId(),
+                                  };
+                                  setInventory((p) =>
+                                    normalizeCharacterInventory([
+                                      ...(Array.isArray(p) ? p : []),
+                                      copy,
+                                    ]),
+                                  );
+                                  setShowFactionItemPicker(false);
+                                }}
+                                style={{
+                                  ...S.btn,
+                                  textAlign: "left",
+                                  background: "#1f1035",
+                                  border: "1px solid #2d1f52",
+                                  color: "#d1d5db",
+                                  fontSize: "11px",
+                                  padding: "6px 8px",
+                                }}
+                              >
+                                {label}
+                                {item?.load != null ? (
+                                  <span style={{ color: "#6b7280" }}>
+                                    {" "}
+                                    · load {item.load}
+                                  </span>
+                                ) : null}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+                {/* Healing and Recovery — GM reference (no PC-style dice pool on NPCs) */}
+                <div style={S.card}>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setHealingSectionExpandedPersist((prev) => !prev)
+                    }
+                    aria-expanded={healingSectionExpanded}
+                    aria-controls="npc-sheet-healing-panel"
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      width: "100%",
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      padding: 0,
+                      marginBottom: healingSectionExpanded ? "8px" : 0,
+                      textAlign: "left",
+                    }}
+                  >
+                    <span
+                      aria-hidden
+                      style={{
+                        color: "#9ca3af",
+                        fontSize: "10px",
+                        lineHeight: 1,
+                        width: "12px",
+                        flexShrink: 0,
+                        userSelect: "none",
+                      }}
+                    >
+                      {healingSectionExpanded ? "\u25bc" : "\u25ba"}
+                    </span>
+                    <span
+                      style={{
+                        color: S.lbl.color,
+                        fontSize: S.lbl.fontSize,
+                        fontWeight: S.lbl.fontWeight,
+                      }}
+                    >
+                      Healing and recovery
+                    </span>
+                  </button>
+                  {healingSectionExpanded ? (
+                  <div
+                    id="npc-sheet-healing-panel"
+                    style={{
+                      fontSize: "11px",
+                      lineHeight: 1.75,
+                      color: "#9ca3af",
+                    }}
+                  >
+                    <div
+                      style={{
+                        marginBottom: "10px",
+                        padding: "8px",
+                        background: "#0a0a14",
+                        borderRadius: "4px",
+                        border: "1px solid #2d1f52",
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: "10px",
+                          fontWeight: "bold",
+                          color: "#a78bfa",
+                          marginBottom: "4px",
+                          letterSpacing: "0.04em",
+                        }}
+                      >
+                        Heal ally
+                      </div>
+                      <div
+                        style={{
+                          marginBottom: "10px",
+                          padding: "8px",
+                          background: "#08080f",
+                          borderRadius: "4px",
+                          border: "1px solid #3b2d5c",
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            gap: "8px",
+                            marginBottom: "6px",
+                          }}
+                        >
+                          <div
+                            style={{
+                              fontSize: "10px",
+                              fontWeight: "bold",
+                              color: "#c4b5fd",
+                              letterSpacing: "0.04em",
+                            }}
+                          >
+                            Quality tier
+                          </div>
+                          <SessionHelpTip
+                            label="Quality tier help"
+                            panelId="npc-sheet-quality-tier-help"
+                          >
+                            Quality tier sets how many d6 to roll on a fortune
+                            when this NPC provides care. Raise it via care
+                            quality or a player consumable / fiction bump. Same
+                            tier for mid-score recover and downtime recover;
+                            rolls are table preview only (not saved).
+                          </SessionHelpTip>
+                        </div>
+                        <div
+                          style={{
+                            fontSize: "10px",
+                            color: "#6b7280",
+                            marginBottom: "8px",
+                            lineHeight: 1.5,
+                          }}
+                        >
+                          Sets fortune dice for care. Same tier for recover in
+                          play and downtime; pick a heal target to unlock rolls.
+                        </div>
+                        <div
+                          style={{
+                            display: "flex",
+                            flexWrap: "wrap",
+                            gap: "6px",
+                          }}
+                        >
+                          {[
+                            { dice: 1, label: "I", blurb: "1d" },
+                            { dice: 2, label: "II", blurb: "2d" },
+                            { dice: 3, label: "III", blurb: "3d" },
+                            { dice: 4, label: "IV", blurb: "4d" },
+                          ].map(({ dice, label, blurb }) => {
+                            const on = healQualityFortuneDice === dice;
+                            return (
+                              <button
+                                key={dice}
+                                type="button"
+                                onClick={() => setHealQualityFortuneDice(dice)}
+                                title={`Fortune pool ${blurb} when this NPC heals or stabilizes`}
+                                style={{
+                                  flex: "1 1 68px",
+                                  minWidth: "68px",
+                                  padding: "6px 4px",
+                                  borderRadius: "4px",
+                                  border: on
+                                    ? "1px solid #a78bfa"
+                                    : "1px solid #4b5563",
+                                  background: on ? "#4c1d95" : "#111827",
+                                  color: on ? "#f5f3ff" : "#9ca3af",
+                                  fontSize: "10px",
+                                  fontFamily: "monospace",
+                                  cursor: "pointer",
+                                  lineHeight: 1.35,
+                                }}
+                              >
+                                <div style={{ fontWeight: "bold", color: "#e9d5ff" }}>
+                                  Tier {label}
+                                </div>
+                                <div style={{ fontSize: "9px", opacity: 0.9 }}>
+                                  {blurb} fortune
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <div style={{ color: "#6b7280", marginBottom: "10px" }}>
+                        When this NPC treats or stabilizes a PC (or another NPC),
+                        resolve with agreed fiction: fortune, clocks, consumables,
+                        or a direct consequence trade. NPCs do not use PC action
+                        dice or stand-coin pools for healing rolls unless the table
+                        explicitly homebrews it.
+                      </div>
+                      <div
+                        style={{
+                          fontSize: "10px",
+                          fontWeight: "bold",
+                          color: "#94a3b8",
+                          marginBottom: "4px",
+                        }}
+                      >
+                        Fellow faction NPCs
+                      </div>
+                      {currentFactionId == null ? (
+                        <div
+                          style={{
+                            fontSize: "10px",
+                            color: "#57534e",
+                            marginBottom: "10px",
+                          }}
+                        >
+                          Assign this NPC to a faction above to list allies in the
+                          same faction.
+                        </div>
+                      ) : factionNpcPeers.length === 0 ? (
+                        <div
+                          style={{
+                            fontSize: "10px",
+                            color: "#57534e",
+                            marginBottom: "10px",
+                          }}
+                        >
+                          No other NPCs in this faction yet.
+                        </div>
+                      ) : (
+                        <ul
+                          style={{
+                            margin: "0 0 10px 0",
+                            paddingLeft: "18px",
+                            fontSize: "10px",
+                            color: "#d1d5db",
+                          }}
+                        >
+                          {factionNpcPeers.map((n) => (
+                            <li key={n.id}>
+                              {n.name || "NPC"}
+                              {n.stand_name ? (
+                                <span style={{ color: "#6b7280" }}>
+                                  {" "}
+                                  — {n.stand_name}
+                                </span>
+                              ) : null}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      <div
+                        style={{
+                          fontSize: "10px",
+                          fontWeight: "bold",
+                          color: "#94a3b8",
+                          marginBottom: "4px",
+                        }}
+                      >
+                        Player character (heal target)
+                      </div>
+                      {campaignId == null ? (
+                        <div
+                          style={{
+                            fontSize: "10px",
+                            color: "#57534e",
+                            marginBottom: "10px",
+                          }}
+                        >
+                          Link this NPC to a campaign to pick a PC from the roster.
+                        </div>
+                      ) : campaignPlayerCharacters.length === 0 ? (
+                        <div
+                          style={{
+                            fontSize: "10px",
+                            color: "#57534e",
+                            marginBottom: "10px",
+                          }}
+                        >
+                          No PCs on this campaign yet.
+                        </div>
+                      ) : (
+                        <select
+                          aria-label="Heal target player character"
+                          value={healAllyPcId}
+                          onChange={(e) => setHealAllyPcId(e.target.value)}
+                          style={{
+                            width: "100%",
+                            maxWidth: "320px",
+                            marginBottom: "10px",
+                            background: "#1f2937",
+                            color: "#e5e7eb",
+                            border: "1px solid #4b5563",
+                            padding: "6px 8px",
+                            fontSize: "11px",
+                            fontFamily: "monospace",
+                            borderRadius: "4px",
+                          }}
+                        >
+                          <option value="">— Choose PC —</option>
+                          {campaignPlayerCharacters.map((ch) => (
+                            <option key={ch.id} value={String(ch.id)}>
+                              {ch.true_name || ch.alias || `Character ${ch.id}`}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                      <div
+                        style={{
+                          marginTop: "10px",
+                          paddingTop: "10px",
+                          borderTop: "1px solid #2d1f52",
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            gap: "8px",
+                            marginBottom: "6px",
+                          }}
+                        >
+                          <div
+                            style={{
+                              fontSize: "10px",
+                              fontWeight: "bold",
+                              color: "#38bdf8",
+                              letterSpacing: "0.03em",
+                            }}
+                          >
+                            Recover in play (mid-score)
+                          </div>
+                          <SessionHelpTip
+                            label="Recover in play help"
+                            panelId="npc-sheet-recover-in-play-help"
+                          >
+                            Mid-score recover needs a credible pause (time,
+                            cover, or pressure drop). Use position/effect for
+                            how dangerous rushed treatment is. Stress and similar
+                            costs usually land on the recipient PC, not this NPC.
+                            Pick a heal target to unlock position, effect, and
+                            fortune roll.
+                          </SessionHelpTip>
+                        </div>
+                        <div
+                          style={{
+                            fontSize: "10px",
+                            color: "#57534e",
+                            marginBottom: "8px",
+                            lineHeight: 1.65,
+                          }}
+                        >
+                          Needs a credible pause mid-score. Position/effect flag
+                          danger; stress usually on the recipient PC.
+                        </div>
+                        {campaignId != null &&
+                        campaignPlayerCharacters.length > 0 &&
+                        !healAllyPcId ? (
+                          <div
+                            style={{
+                              fontSize: "9px",
+                              color: "#78716c",
+                              marginBottom: "10px",
+                              lineHeight: 1.55,
+                              padding: "8px",
+                              background: "#0d1117",
+                              borderRadius: "4px",
+                              border: "1px solid #374151",
+                            }}
+                          >
+                            Choose a <strong style={{ color: "#a8a29e" }}>player character</strong>{" "}
+                            above to unlock recover-in-play{" "}
+                            <strong style={{ color: "#a8a29e" }}>position</strong>,{" "}
+                            <strong style={{ color: "#a8a29e" }}>effect</strong>, and{" "}
+                            <strong style={{ color: "#a8a29e" }}>fortune</strong>{" "}
+                            (same nested card style as{" "}
+                            <strong style={{ color: "#a8a29e" }}>Quality tier</strong>
+                            ).
+                          </div>
+                        ) : null}
+                        {healAllyPcId ? (
+                          <div
+                            style={{
+                              marginBottom: "10px",
+                              padding: "8px",
+                              background: "#08080f",
+                              borderRadius: "4px",
+                              border: "1px solid #3b2d5c",
+                            }}
+                          >
+                            <div
+                              style={{
+                                fontSize: "9px",
+                                fontWeight: "bold",
+                                color: "#c4b5fd",
+                                marginBottom: "6px",
+                                letterSpacing: "0.04em",
+                              }}
+                            >
+                              Quality tier — recover in play
+                            </div>
+                            <div
+                              style={{
+                                fontSize: "9px",
+                                fontWeight: "bold",
+                                color: "#6b7280",
+                                marginBottom: "6px",
+                              }}
+                            >
+                              Recover in play — default position & effect
+                            </div>
+                            <div
+                              style={{
+                                fontSize: "10px",
+                                color: "#57534e",
+                                marginBottom: "8px",
+                                lineHeight: 1.55,
+                              }}
+                            >
+                              Saved on this NPC for recover in play under this
+                              character&apos;s care (current target: selected PC
+                              above).
+                            </div>
+                            <div
+                              style={{
+                                display: "flex",
+                                flexWrap: "wrap",
+                                gap: "8px",
+                                alignItems: "center",
+                                marginBottom: "8px",
+                              }}
+                            >
+                              <label
+                                style={{
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  gap: "2px",
+                                  fontSize: "9px",
+                                  color: "#6b7280",
+                                }}
+                              >
+                                Position
+                                <select
+                                  aria-label="Recover in play default position"
+                                  value={healAllyPosition}
+                                  onChange={(e) =>
+                                    setHealAllyPosition(e.target.value)
+                                  }
+                                  style={{
+                                    background: "#1f2937",
+                                    color: "#e5e7eb",
+                                    border: "1px solid #4b5563",
+                                    padding: "4px 6px",
+                                    fontSize: "11px",
+                                    fontFamily: "monospace",
+                                    borderRadius: "4px",
+                                  }}
+                                >
+                                  <option value="controlled">Controlled</option>
+                                  <option value="risky">Risky</option>
+                                  <option value="desperate">Desperate</option>
+                                </select>
+                              </label>
+                              <label
+                                style={{
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  gap: "2px",
+                                  fontSize: "9px",
+                                  color: "#6b7280",
+                                }}
+                              >
+                                Effect
+                                <select
+                                  aria-label="Recover in play default effect tier"
+                                  value={healAllyEffect}
+                                  onChange={(e) =>
+                                    setHealAllyEffect(e.target.value)
+                                  }
+                                  style={{
+                                    background: "#1f2937",
+                                    color: "#e5e7eb",
+                                    border: "1px solid #4b5563",
+                                    padding: "4px 6px",
+                                    fontSize: "11px",
+                                    fontFamily: "monospace",
+                                    borderRadius: "4px",
+                                  }}
+                                >
+                                  <option value="limited">Limited</option>
+                                  <option value="standard">Standard</option>
+                                  <option value="extreme">Extreme</option>
+                                </select>
+                              </label>
+                            </div>
+                            <div
+                              style={{
+                                fontSize: "9px",
+                                color: "#6b7280",
+                                lineHeight: 1.45,
+                                marginBottom: "6px",
+                              }}
+                            >
+                              Fortune uses the <strong style={{ color: "#a8a29e" }}>d6 count</strong>{" "}
+                              from <strong style={{ color: "#a8a29e" }}>Quality tier</strong>{" "}
+                              above.
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                rollHealQualityFortune("recover_in_play")
+                              }
+                              title="Roll Nd6 using Quality tier (GM preview — not saved to session)"
+                              style={{
+                                padding: "8px 10px",
+                                borderRadius: "4px",
+                                border: "1px solid #7c3aed",
+                                background: "#5b21b6",
+                                color: "#faf5ff",
+                                fontSize: "11px",
+                                fontFamily: "monospace",
+                                fontWeight: "bold",
+                                cursor: "pointer",
+                                width: "100%",
+                                boxSizing: "border-box",
+                              }}
+                            >
+                              Roll recover in play fortune ({healQualityFortuneDice}d)
+                            </button>
+                            {healFortuneRollPreview?.kind === "recover_in_play" ? (
+                              <div
+                                style={{
+                                  marginTop: "6px",
+                                  fontSize: "10px",
+                                  color: "#c4b5fd",
+                                  textAlign: "center",
+                                  lineHeight: 1.5,
+                                  padding: "6px",
+                                  background: "#111827",
+                                  borderRadius: "4px",
+                                  border: "1px solid #4c1d95",
+                                }}
+                              >
+                                [
+                                {healFortuneRollPreview.results.join(", ")}] → highest{" "}
+                                <strong>{healFortuneRollPreview.highest}</strong>
+                                {healFortuneRollPreview.critical ? (
+                                  <span style={{ color: "#fbbf24" }}> · critical</span>
+                                ) : null}
+                                <div style={{ fontSize: "9px", color: "#6b7280" }}>
+                                  GM preview only — log to session history or a PC
+                                  roll if you need a saved record.
+                                </div>
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : null}
+                        <textarea
+                          value={healAllyRecoveryNote}
+                          onChange={(e) =>
+                            setHealAllyRecoveryNote(e.target.value)
+                          }
+                          placeholder="In-play notes: stress spent, clocks ticked, complications, scene beats…"
+                          style={{
+                            width: "100%",
+                            minHeight: "48px",
+                            background: "#0d1117",
+                            color: "#d1d5db",
+                            border: "1px solid #374151",
+                            padding: "6px 8px",
+                            fontSize: "10px",
+                            fontFamily: "monospace",
+                            borderRadius: "4px",
+                            resize: "vertical",
+                            boxSizing: "border-box",
+                          }}
+                        />
+                      </div>
+                      <div
+                        style={{
+                          marginTop: "10px",
+                          paddingTop: "10px",
+                          borderTop: "1px solid #2d1f52",
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            gap: "8px",
+                            marginBottom: "6px",
+                          }}
+                        >
+                          <div
+                            style={{
+                              fontSize: "10px",
+                              fontWeight: "bold",
+                              color: "#34d399",
+                              letterSpacing: "0.03em",
+                            }}
+                          >
+                            Downtime recover
+                          </div>
+                          <SessionHelpTip
+                            label="Downtime recover help"
+                            panelId="npc-sheet-downtime-recover-help"
+                          >
+                            Between scores (or any downtime pause): longer
+                            treatment, kits, sleep, and healing clocks without
+                            score pressure. Not the same bar as mid-action
+                            recover—no position/effect track unless you re-add
+                            danger. Fortune still uses Quality tier.
+                          </SessionHelpTip>
+                        </div>
+                        <div
+                          style={{
+                            fontSize: "10px",
+                            color: "#57534e",
+                            marginBottom: "8px",
+                            lineHeight: 1.65,
+                          }}
+                        >
+                          Between scores: longer treatment, kits, clocks. Fortune
+                          still uses Quality tier.
+                        </div>
+                        {healAllyPcId ? (
+                          <div
+                            style={{
+                              marginBottom: "8px",
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "6px",
+                              alignItems: "stretch",
+                            }}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => rollHealQualityFortune("downtime")}
+                              title="Roll Nd6 using Quality tier (GM preview — not saved to session)"
+                              style={{
+                                padding: "8px 10px",
+                                borderRadius: "4px",
+                                border: "1px solid #059669",
+                                background: "#047857",
+                                color: "#ecfdf5",
+                                fontSize: "11px",
+                                fontFamily: "monospace",
+                                fontWeight: "bold",
+                                cursor: "pointer",
+                              }}
+                            >
+                              Roll downtime recover fortune ({healQualityFortuneDice}d)
+                            </button>
+                            {healFortuneRollPreview?.kind === "downtime" ? (
+                              <div
+                                style={{
+                                  fontSize: "10px",
+                                  color: "#6ee7b7",
+                                  textAlign: "center",
+                                  lineHeight: 1.5,
+                                  padding: "6px",
+                                  background: "#111827",
+                                  borderRadius: "4px",
+                                  border: "1px solid #065f46",
+                                }}
+                              >
+                                [
+                                {healFortuneRollPreview.results.join(", ")}] → highest{" "}
+                                <strong>{healFortuneRollPreview.highest}</strong>
+                                {healFortuneRollPreview.critical ? (
+                                  <span style={{ color: "#fbbf24" }}> · critical</span>
+                                ) : null}
+                                <div style={{ fontSize: "9px", color: "#6b7280" }}>
+                                  GM preview only — log to session history or a PC
+                                  roll if you need a saved record.
+                                </div>
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : campaignId != null &&
+                          campaignPlayerCharacters.length > 0 ? (
+                          <div
+                            style={{
+                              fontSize: "9px",
+                              color: "#78716c",
+                              marginBottom: "8px",
+                              lineHeight: 1.55,
+                            }}
+                          >
+                            Choose a <strong style={{ color: "#a8a29e" }}>heal target</strong>{" "}
+                            above to roll downtime recover fortune.
+                          </div>
+                        ) : null}
+                        <textarea
+                          value={healAllyDowntimeNote}
+                          onChange={(e) =>
+                            setHealAllyDowntimeNote(e.target.value)
+                          }
+                          placeholder="Downtime notes: projects, healing clock fills, supplies used, off-screen care…"
+                          style={{
+                            width: "100%",
+                            minHeight: "48px",
+                            background: "#0d1117",
+                            color: "#d1d5db",
+                            border: "1px solid #374151",
+                            padding: "6px 8px",
+                            fontSize: "10px",
+                            fontFamily: "monospace",
+                            borderRadius: "4px",
+                            resize: "vertical",
+                            boxSizing: "border-box",
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <div
+                      style={{
+                        padding: "8px",
+                        background: "#0a0a14",
+                        borderRadius: "4px",
+                        border: "1px solid #2d1f52",
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: "10px",
+                          fontWeight: "bold",
+                          color: "#a78bfa",
+                          marginBottom: "4px",
+                          letterSpacing: "0.04em",
+                        }}
+                      >
+                        Rest & recovery
+                      </div>
+                      <div
+                        style={{
+                          color: "#6b7280",
+                          marginBottom: "10px",
+                          lineHeight: 1.55,
+                        }}
+                      >
+                        Complements <strong style={{ color: "#94a3b8" }}>
+                          Downtime recover
+                        </strong>{" "}
+                        above: stress clears, long projects, and any
+                        other between-score upkeep the table tracks for this NPC.
+                      </div>
+                      <button
+                        type="button"
+                        aria-label="Refresh all clocks for rest"
+                        title="Clears vulnerability, conflict, and alt clock progress (autosaves)."
+                        onClick={refreshRestClocksAndArmor}
+                        style={{
+                          width: "100%",
+                          boxSizing: "border-box",
+                          padding: "8px 10px",
+                          borderRadius: "4px",
+                          border: "1px solid #7c3aed",
+                          background: "#4c1d95",
+                          color: "#f5f3ff",
+                          fontSize: "11px",
+                          fontFamily: "monospace",
+                          fontWeight: "bold",
+                          cursor: "pointer",
+                        }}
+                      >
+                        Refresh clocks
+                      </button>
+                    </div>
+                  </div>
+                  ) : null}
+                </div>
+
+                {/* GM Notes */}
+                <div style={S.card}>
+                  <span style={S.lbl}>GM Notes</span>
+                  <textarea
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="Tactics, motivations, encounter context, rematch notes…"
+                    style={{
+                      width: "100%",
+                      height: "120px",
+                      background: "#0a0a14",
+                      color: "#d1d5db",
+                      border: "1px solid #2d1f52",
+                      padding: "8px",
+                      fontFamily: "monospace",
+                      fontSize: "12px",
+                      resize: "vertical",
+                      boxSizing: "border-box",
+                      outline: "none",
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* ════ RIGHT — PLAYBOOK (single card like PC) ════ */}
               <div>
-                {/* Stand Coin Stats — Stand-playbook NPCs only */}
+                <div style={{ ...S.card, border: "1px solid #4b5563" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: "12px",
+                      flexWrap: "wrap",
+                      marginBottom: 0,
+                    }}
+                  >
+                    <span style={{ ...S.lbl, margin: 0 }}>PLAYBOOK</span>
+                    <div style={{ flex: "1 1 160px", minWidth: 0, maxWidth: 220 }}>
+                      <span style={S.lbl}>NPC Type</span>
+                      <select
+                        style={{ ...S.sel, width: "100%" }}
+                        value={playbook}
+                        onChange={(e) => setPlaybook(e.target.value)}
+                      >
+                        <option value="STAND">Stand User</option>
+                        <option value="HAMON">Hamon User</option>
+                        <option value="SPIN">Spin User</option>
+                        <option value="NON_BIZARRE">Non-Bizarre</option>
+                      </select>
+                    </div>
+                  </div>
+
                 {playbook === "STAND" && (
-                  <div style={S.card}>
+                  <div
+                    style={{
+                      marginTop: 14,
+                      paddingTop: 14,
+                      borderTop: "1px solid #2d1f52",
+                    }}
+                  >
+                    <span style={S.lbl}>Stand Identity</span>
+                    <div
+                      style={{
+                        fontSize: "10px",
+                        color: "#6b7280",
+                        marginBottom: "8px",
+                        lineHeight: 1.45,
+                      }}
+                    >
+                      Flavor for NPCs — optional type / form / consciousness for
+                      GM notes (not advancement).
+                    </div>
+                    <div
+                      style={{
+                        fontSize: "10px",
+                        color: "#9ca3af",
+                        marginBottom: "4px",
+                      }}
+                    >
+                      Stand type(s)
+                    </div>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: "8px 12px",
+                        marginBottom: "8px",
+                      }}
+                    >
+                      {STAND_ARCHETYPE_ROWS.map((opt) => (
+                        <label
+                          key={opt.key}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "5px",
+                            fontSize: "10px",
+                            color: "#d1d5db",
+                            cursor: "pointer",
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={standIdentityTypes.includes(opt.key)}
+                            onChange={() => {
+                              setStandIdentityTypes((prev) => {
+                                if (prev.includes(opt.key))
+                                  return prev.filter((k) => k !== opt.key);
+                                return normalizeStandIdentityTypesLocal([
+                                  ...prev,
+                                  opt.key,
+                                ]);
+                              });
+                            }}
+                          />
+                          {opt.label}
+                        </label>
+                      ))}
+                    </div>
+                    <label
+                      style={{
+                        display: "block",
+                        fontSize: "10px",
+                        color: "#9ca3af",
+                        marginBottom: "8px",
+                      }}
+                    >
+                      Custom type label (optional)
+                      <input
+                        type="text"
+                        value={standTypeCustom}
+                        onChange={(e) => setStandTypeCustom(e.target.value)}
+                        placeholder="Fiction subtype name"
+                        style={{
+                          ...S.inp,
+                          display: "block",
+                          width: "100%",
+                          marginTop: "4px",
+                          fontSize: "11px",
+                        }}
+                      />
+                    </label>
+                    <div
+                      style={{
+                        fontSize: "10px",
+                        color: "#9ca3af",
+                        marginBottom: "4px",
+                      }}
+                    >
+                      Form(s)
+                    </div>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: "8px 12px",
+                        marginBottom: "6px",
+                      }}
+                    >
+                      {STAND_FORM_PRESETS.map((formLabel) => {
+                        const checked = standForms.includes(formLabel);
+                        return (
+                          <label
+                            key={formLabel}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "5px",
+                              fontSize: "10px",
+                              color: "#d1d5db",
+                              cursor: "pointer",
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => {
+                                setStandForms((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(formLabel)) next.delete(formLabel);
+                                  else next.add(formLabel);
+                                  return STAND_FORM_PRESETS.filter((f) =>
+                                    next.has(f),
+                                  ).concat(
+                                    prev.filter(
+                                      (f) => !STAND_FORM_PRESETS.includes(f),
+                                    ),
+                                  );
+                                });
+                              }}
+                            />
+                            {formLabel}
+                          </label>
+                        );
+                      })}
+                    </div>
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: "6px",
+                        alignItems: "center",
+                        marginBottom: "8px",
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <input
+                        type="text"
+                        value={standFormCustomDraft}
+                        onChange={(e) =>
+                          setStandFormCustomDraft(e.target.value)
+                        }
+                        placeholder="Custom form…"
+                        style={{
+                          ...S.inp,
+                          flex: "1 1 120px",
+                          fontSize: "11px",
+                        }}
+                      />
+                      <button
+                        type="button"
+                        disabled={!standFormCustomDraft.trim()}
+                        onClick={() => {
+                          const custom = standFormCustomDraft.trim();
+                          if (!custom) return;
+                          setStandForms((prev) =>
+                            normalizeStandFormsList([...prev, custom]),
+                          );
+                          setStandFormCustomDraft("");
+                        }}
+                        style={{
+                          ...S.btn,
+                          fontSize: "10px",
+                          padding: "4px 8px",
+                        }}
+                      >
+                        Add
+                      </button>
+                    </div>
+                    {standForms.some((f) => !STAND_FORM_PRESETS.includes(f)) && (
+                      <div
+                        style={{
+                          display: "flex",
+                          flexWrap: "wrap",
+                          gap: "6px",
+                          marginBottom: "8px",
+                        }}
+                      >
+                        {standForms
+                          .filter((f) => !STAND_FORM_PRESETS.includes(f))
+                          .map((f) => (
+                            <button
+                              key={f}
+                              type="button"
+                              onClick={() =>
+                                setStandForms((prev) =>
+                                  prev.filter((x) => x !== f),
+                                )
+                              }
+                              title="Remove custom form"
+                              style={{
+                                fontSize: "10px",
+                                padding: "2px 8px",
+                                borderRadius: 4,
+                                border: "1px solid #4b5563",
+                                background: "#1f2937",
+                                color: "#d1d5db",
+                                cursor: "pointer",
+                              }}
+                            >
+                              {f} ×
+                            </button>
+                          ))}
+                      </div>
+                    )}
+                    <label
+                      style={{
+                        display: "block",
+                        fontSize: "10px",
+                        color: "#9ca3af",
+                      }}
+                    >
+                      Consciousness (flavor grade)
+                      <select
+                        value={standConsciousness}
+                        onChange={(e) =>
+                          setStandConsciousness(e.target.value)
+                        }
+                        style={{
+                          ...S.sel,
+                          display: "block",
+                          marginTop: "4px",
+                          width: "100%",
+                          maxWidth: 120,
+                        }}
+                      >
+                        <option value="">—</option>
+                        {STAND_CONSCIOUSNESS_GRADES.map((g) => (
+                          <option key={g} value={g}>
+                            {g}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                )}
+
+                {/* Heritage (inside unified PLAYBOOK card) */}
+                <div
+                  style={{
+                    marginTop: 14,
+                    paddingTop: 14,
+                    borderTop: "1px solid #2d1f52",
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setHeritageSectionExpandedPersist((prev) => !prev)
+                    }
+                    aria-expanded={heritageSectionExpanded}
+                    aria-controls="npc-sheet-heritage-panel"
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      width: "100%",
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      padding: 0,
+                      marginBottom: heritageSectionExpanded ? "8px" : 0,
+                      textAlign: "left",
+                    }}
+                  >
+                    <span
+                      aria-hidden
+                      style={{
+                        color: "#9ca3af",
+                        fontSize: "10px",
+                        lineHeight: 1,
+                        width: "12px",
+                        flexShrink: 0,
+                        userSelect: "none",
+                      }}
+                    >
+                      {heritageSectionExpanded ? "▼" : "►"}
+                    </span>
+                    <span
+                      style={{
+                        color: S.lbl.color,
+                        fontSize: S.lbl.fontSize,
+                        fontWeight: S.lbl.fontWeight,
+                      }}
+                    >
+                      HERITAGE
+                      {!heritageSectionExpanded &&
+                      resolvedHeritageDetails?.name
+                        ? ` · ${resolvedHeritageDetails.name}`
+                        : ""}
+                    </span>
+                  </button>
+                  {heritageSectionExpanded ? (
+                    <div id="npc-sheet-heritage-panel">
+                      {resolvedHeritageDetails ? (
+                        <>
+                          <div
+                            style={{
+                              fontSize: "12px",
+                              fontWeight: 700,
+                              color: "#fde68a",
+                              marginBottom: "6px",
+                            }}
+                          >
+                            {resolvedHeritageDetails.name || "Heritage"}
+                          </div>
+                          {resolvedHeritageDetails.description ? (
+                            <div
+                              style={{
+                                fontSize: "10px",
+                                color: "#9ca3af",
+                                lineHeight: 1.55,
+                                marginBottom: "8px",
+                              }}
+                            >
+                              {resolvedHeritageDetails.description}
+                            </div>
+                          ) : null}
+                          <div
+                            style={{
+                              fontSize: "9px",
+                              color: "#6b7280",
+                              marginBottom: "8px",
+                              lineHeight: 1.4,
+                            }}
+                          >
+                            Check what is in play for this NPC (GM notes — no HP
+                            budget). Required picks start checked; uncheck if not
+                            in play.
+                          </div>
+                          <div
+                            style={{
+                              display: "grid",
+                              gridTemplateColumns: "1fr 1fr",
+                              gap: "12px",
+                              marginBottom: "8px",
+                            }}
+                          >
+                            <div>
+                              <span
+                                style={{
+                                  fontSize: "10px",
+                                  color: "#6ee7b7",
+                                  fontWeight: 600,
+                                  display: "block",
+                                  marginBottom: "4px",
+                                }}
+                              >
+                                Benefits
+                              </span>
+                              {(Array.isArray(resolvedHeritageDetails.benefits)
+                                ? resolvedHeritageDetails.benefits
+                                : []
+                              ).map((b) => {
+                                const checked = selectedBenefitIds.includes(
+                                  Number(b.id),
+                                );
+                                return (
+                                  <label
+                                    key={b.id}
+                                    title={
+                                      (b.description || "").trim() || undefined
+                                    }
+                                    style={{
+                                      display: "flex",
+                                      alignItems: "flex-start",
+                                      gap: "6px",
+                                      marginBottom: "4px",
+                                      fontSize: "11px",
+                                      color: checked ? "#a7f3d0" : "#6b7280",
+                                      cursor: "pointer",
+                                      lineHeight: 1.35,
+                                    }}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={checked}
+                                      onChange={() => {
+                                        const id = Number(b.id);
+                                        setSelectedBenefitIds((prev) =>
+                                          prev.includes(id)
+                                            ? prev.filter((x) => x !== id)
+                                            : [...prev, id],
+                                        );
+                                      }}
+                                      style={{ marginTop: "2px" }}
+                                    />
+                                    <span style={{ flex: 1, minWidth: 0 }}>
+                                      {b.name}
+                                      {b.required ? " (required)" : ""}
+                                    </span>
+                                  </label>
+                                );
+                              })}
+                              {!(
+                                Array.isArray(resolvedHeritageDetails.benefits) &&
+                                resolvedHeritageDetails.benefits.length > 0
+                              ) ? (
+                                <div
+                                  style={{ fontSize: "10px", color: "#6b7280" }}
+                                >
+                                  None
+                                </div>
+                              ) : null}
+                            </div>
+                            <div>
+                              <span
+                                style={{
+                                  fontSize: "10px",
+                                  color: "#fca5a5",
+                                  fontWeight: 600,
+                                  display: "block",
+                                  marginBottom: "4px",
+                                }}
+                              >
+                                Detriments
+                              </span>
+                              {(Array.isArray(
+                                resolvedHeritageDetails.detriments,
+                              )
+                                ? resolvedHeritageDetails.detriments
+                                : []
+                              ).map((d) => {
+                                const checked = selectedDetrimentIds.includes(
+                                  Number(d.id),
+                                );
+                                return (
+                                  <label
+                                    key={d.id}
+                                    title={
+                                      (d.description || "").trim() || undefined
+                                    }
+                                    style={{
+                                      display: "flex",
+                                      alignItems: "flex-start",
+                                      gap: "6px",
+                                      marginBottom: "4px",
+                                      fontSize: "11px",
+                                      color: checked ? "#fecaca" : "#6b7280",
+                                      cursor: "pointer",
+                                      lineHeight: 1.35,
+                                    }}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={checked}
+                                      onChange={() => {
+                                        const id = Number(d.id);
+                                        setSelectedDetrimentIds((prev) =>
+                                          prev.includes(id)
+                                            ? prev.filter((x) => x !== id)
+                                            : [...prev, id],
+                                        );
+                                      }}
+                                      style={{ marginTop: "2px" }}
+                                    />
+                                    <span style={{ flex: 1, minWidth: 0 }}>
+                                      {d.name}
+                                      {d.required ? " (required)" : ""}
+                                    </span>
+                                  </label>
+                                );
+                              })}
+                              {!(
+                                Array.isArray(
+                                  resolvedHeritageDetails.detriments,
+                                ) &&
+                                resolvedHeritageDetails.detriments.length > 0
+                              ) ? (
+                                <div
+                                  style={{ fontSize: "10px", color: "#6b7280" }}
+                                >
+                                  None
+                                </div>
+                              ) : null}
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <div
+                          style={{
+                            fontSize: "10px",
+                            color: "#6b7280",
+                            marginBottom: "10px",
+                            lineHeight: 1.5,
+                          }}
+                        >
+                          No heritage on this NPC. Choose one under Identity to
+                          show properties here.
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+
+                {/* Stand Coin — inside PLAYBOOK card */}
+                {playbook === "STAND" && (
+                  <div
+                    style={{
+                      marginTop: 14,
+                      paddingTop: 14,
+                      borderTop: "1px solid #2d1f52",
+                    }}
+                  >
                     <div
                       style={{
                         display: "flex",
                         justifyContent: "space-between",
-                        alignItems: "baseline",
+                        alignItems: "center",
                         marginBottom: "10px",
+                        gap: "8px",
                       }}
                     >
                       <span style={S.lbl}>Stand Coin Stats</span>
-                      <span style={{ fontSize: "11px", color: "#6b7280" }}>
-                        {totalPoints} pts → Level {level}
-                      </span>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "8px",
+                        }}
+                      >
+                        <span style={{ fontSize: "11px", color: "#6b7280" }}>
+                          {totalPoints} pts → Level {level}
+                        </span>
+                        <SessionHelpTip
+                          label="Stand coin and combat reference"
+                          panelId="npc-sheet-stand-combat-help"
+                        >
+                          <div
+                            style={{
+                              fontSize: "11px",
+                              lineHeight: 1.55,
+                              color: "#d1d5db",
+                              marginBottom: "10px",
+                            }}
+                          >
+                            Left-click a segment to raise its grade (F→S).
+                            Right-click or Shift-click to lower. Shift+Enter /
+                            Shift+Space on a focused wedge lowers one step.
+                          </div>
+                          <div
+                            style={{
+                              fontSize: "10px",
+                              fontWeight: "bold",
+                              color: "#a78bfa",
+                              marginBottom: "8px",
+                              letterSpacing: "0.04em",
+                            }}
+                          >
+                            Combat Reference
+                          </div>
+                          {/* Power */}
+                          <div style={{ ...S.ref, marginBottom: "8px" }}>
+                            <div
+                              style={{
+                                color: "#f87171",
+                                fontWeight: "bold",
+                                marginBottom: "4px",
+                              }}
+                            >
+                              POWER {stats.power} — Base Harm: Level{" "}
+                              {powerInfo.harm}
+                            </div>
+                            <div style={{ color: "#9ca3af" }}>
+                              Greater Effect → Harm +1 level &nbsp;|&nbsp;
+                              Lesser Effect → Harm −1 level
+                            </div>
+                            {(stats.power === "S" || stats.power === "A") && (
+                              <div
+                                style={{ color: "#fbbf24", marginTop: "3px" }}
+                              >
+                                ⚠ Can force PC position worse by 1 step
+                              </div>
+                            )}
+                          </div>
+                          {/* Speed */}
+                          <div style={{ ...S.ref, marginBottom: "8px" }}>
+                            <div
+                              style={{
+                                color: "#60a5fa",
+                                fontWeight: "bold",
+                                marginBottom: "4px",
+                              }}
+                            >
+                              SPEED {stats.speed} — {speedInfo.base}
+                            </div>
+                            <div
+                              style={{
+                                display: "grid",
+                                gridTemplateColumns: "1fr 1fr",
+                                gap: "4px",
+                                color: "#9ca3af",
+                              }}
+                            >
+                              <div>Greater: {speedInfo.greater}</div>
+                              <div>Lesser: {speedInfo.lesser}</div>
+                            </div>
+                            <div
+                              style={{
+                                color: "#6b7280",
+                                marginTop: "8px",
+                                fontSize: "10px",
+                                lineHeight: 1.45,
+                              }}
+                            >
+                              <div
+                                style={{
+                                  color: "#9ca3af",
+                                  fontWeight: 600,
+                                  marginBottom: "4px",
+                                }}
+                              >
+                                Unexpected action vs PCs
+                              </div>
+                              Speed sets starting position when Stands clash
+                              directly. Compare grades: higher usually starts
+                              Risky or better, equal starts Risky, lower starts
+                              Desperate. GM adjusts from fiction. Turn order
+                              stays narrative — not a fixed initiative list.
+                            </div>
+                          </div>
+                          {/* Range */}
+                          <div style={{ ...S.ref, marginBottom: "8px" }}>
+                            <div
+                              style={{
+                                color: "#34d399",
+                                fontWeight: "bold",
+                                marginBottom: "4px",
+                              }}
+                            >
+                              RANGE {stats.range} — {rangeInfo.base}
+                            </div>
+                            <div
+                              style={{
+                                display: "grid",
+                                gridTemplateColumns: "1fr 1fr",
+                                gap: "4px",
+                                color: "#9ca3af",
+                              }}
+                            >
+                              <div>Greater: {rangeInfo.greater}</div>
+                              <div>Lesser: {rangeInfo.lesser}</div>
+                            </div>
+                            {stats.range !== "S" && (
+                              <div
+                                style={{ color: "#6b7280", marginTop: "2px" }}
+                              >
+                                Beyond optimal range → Effect drops 1 level
+                              </div>
+                            )}
+                          </div>
+                          {/* Precision */}
+                          <div style={{ ...S.ref, marginBottom: "8px" }}>
+                            <div
+                              style={{
+                                color: "#e879f9",
+                                fontWeight: "bold",
+                                marginBottom: "4px",
+                              }}
+                            >
+                              PRECISION {stats.precision} — Reactive
+                              Counter-Effects
+                            </div>
+                            <div style={{ color: "#9ca3af" }}>
+                              <div>
+                                PC rolls 4–5 (partial): {precInfo.partial}
+                              </div>
+                              <div style={{ marginTop: "2px" }}>
+                                PC rolls 1–3 (failure): {precInfo.failure}
+                              </div>
+                            </div>
+                          </div>
+                          {/* Development */}
+                          <div style={S.ref}>
+                            <div
+                              style={{
+                                color: "#fb923c",
+                                fontWeight: "bold",
+                                marginBottom: "4px",
+                              }}
+                            >
+                              DEVELOPMENT {stats.development} — Tactical
+                              Adaptability
+                            </div>
+                            <div
+                              style={{ color: "#9ca3af", lineHeight: "1.5" }}
+                            >
+                              {devInfo}
+                            </div>
+                          </div>
+                        </SessionHelpTip>
+                      </div>
                     </div>
 
                     <NpcsStandCoin
                       grades={stats}
                       readouts={standCoinReadouts}
                       onStep={bumpStandCoinGrade}
+                      hideIdleHint
                     />
                   </div>
                 )}
 
-                {/* Stat Reference Cards — Stand-playbook NPCs only */}
-                {playbook === "STAND" && (
-                <div style={S.card}>
-                  <span style={S.lbl}>Combat Reference</span>
-
-                  {/* Power */}
-                  <div style={{ ...S.ref, marginBottom: "8px" }}>
-                    <div
-                      style={{
-                        color: "#f87171",
-                        fontWeight: "bold",
-                        marginBottom: "4px",
-                      }}
-                    >
-                      POWER {stats.power} — Base Harm: Level {powerInfo.harm}
-                    </div>
-                    <div style={{ color: "#9ca3af" }}>
-                      Greater Effect → Harm +1 level &nbsp;|&nbsp; Lesser Effect
-                      → Harm −1 level
-                    </div>
-                    {(stats.power === "S" || stats.power === "A") && (
-                      <div style={{ color: "#fbbf24", marginTop: "3px" }}>
-                        ⚠ Can force PC position worse by 1 step
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Speed */}
-                  <div style={{ ...S.ref, marginBottom: "8px" }}>
-                    <div
-                      style={{
-                        color: "#60a5fa",
-                        fontWeight: "bold",
-                        marginBottom: "4px",
-                      }}
-                    >
-                      SPEED {stats.speed} — {speedInfo.base}
-                    </div>
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "1fr 1fr",
-                        gap: "4px",
-                        color: "#9ca3af",
-                      }}
-                    >
-                      <div>Greater: {speedInfo.greater}</div>
-                      <div>Lesser: {speedInfo.lesser}</div>
-                    </div>
-                    <div
-                      style={{
-                        color: "#6b7280",
-                        marginTop: "8px",
-                        fontSize: "10px",
-                        lineHeight: 1.45,
-                      }}
-                    >
-                      <div
-                        style={{
-                          color: "#9ca3af",
-                          fontWeight: 600,
-                          marginBottom: "4px",
-                        }}
-                      >
-                        Unexpected action vs PCs
-                      </div>
-                      Speed sets starting position when Stands clash directly.
-                      Compare grades: higher usually starts Risky or better,
-                      equal starts Risky, lower starts Desperate. GM adjusts
-                      from fiction. Turn order stays narrative — not a fixed
-                      initiative list.
-                    </div>
-                  </div>
-
-                  {/* Range */}
-                  <div style={{ ...S.ref, marginBottom: "8px" }}>
-                    <div
-                      style={{
-                        color: "#34d399",
-                        fontWeight: "bold",
-                        marginBottom: "4px",
-                      }}
-                    >
-                      RANGE {stats.range} — {rangeInfo.base}
-                    </div>
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "1fr 1fr",
-                        gap: "4px",
-                        color: "#9ca3af",
-                      }}
-                    >
-                      <div>Greater: {rangeInfo.greater}</div>
-                      <div>Lesser: {rangeInfo.lesser}</div>
-                    </div>
-                    {stats.range !== "S" && (
-                      <div style={{ color: "#6b7280", marginTop: "2px" }}>
-                        Beyond optimal range → Effect drops 1 level
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Precision */}
-                  <div style={{ ...S.ref, marginBottom: "8px" }}>
-                    <div
-                      style={{
-                        color: "#e879f9",
-                        fontWeight: "bold",
-                        marginBottom: "4px",
-                      }}
-                    >
-                      PRECISION {stats.precision} — Reactive Counter-Effects
-                    </div>
-                    <div style={{ color: "#9ca3af" }}>
-                      <div>PC rolls 4–5 (partial): {precInfo.partial}</div>
-                      <div style={{ marginTop: "2px" }}>
-                        PC rolls 1–3 (failure): {precInfo.failure}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Development */}
-                  <div style={S.ref}>
-                    <div
-                      style={{
-                        color: "#fb923c",
-                        fontWeight: "bold",
-                        marginBottom: "4px",
-                      }}
-                    >
-                      DEVELOPMENT {stats.development} — Tactical Adaptability
-                    </div>
-                    <div style={{ color: "#9ca3af", lineHeight: "1.5" }}>
-                      {devInfo}
-                    </div>
-                  </div>
-                </div>
-                )}
-
-                {/* Heritage reference (recover-in-play defaults live under Heal ally → Recover in play) */}
-                <div style={S.card}>
-                  <span style={S.lbl}>Heritage</span>
-                  {resolvedHeritageDetails ? (
-                    <>
-                      <div
-                        style={{
-                          fontSize: "12px",
-                          fontWeight: 700,
-                          color: "#fde68a",
-                          marginBottom: "6px",
-                        }}
-                      >
-                        {resolvedHeritageDetails.name || "Heritage"}
-                      </div>
-                      {resolvedHeritageDetails.description ? (
-                        <div
-                          style={{
-                            fontSize: "10px",
-                            color: "#9ca3af",
-                            lineHeight: 1.55,
-                            marginBottom: "8px",
-                          }}
-                        >
-                          {resolvedHeritageDetails.description}
-                        </div>
-                      ) : null}
-                      {Array.isArray(resolvedHeritageDetails.benefits) &&
-                      resolvedHeritageDetails.benefits.length > 0 ? (
-                        <div style={{ marginBottom: "8px" }}>
-                          <div
-                            style={{
-                              fontSize: "9px",
-                              fontWeight: 600,
-                              color: "#6ee7b7",
-                              marginBottom: "4px",
-                            }}
-                          >
-                            Benefits
-                          </div>
-                          <div
-                            style={{
-                              fontSize: "9px",
-                              color: "#6b7280",
-                              marginBottom: "6px",
-                              lineHeight: 1.4,
-                            }}
-                          >
-                            Check what is in play for this NPC (GM notes — no HP
-                            budget). Required picks start checked; uncheck if
-                            not in play.
-                          </div>
-                          <div
-                            style={{
-                              display: "flex",
-                              flexDirection: "column",
-                              gap: "6px",
-                            }}
-                          >
-                            {resolvedHeritageDetails.benefits.map((b) => {
-                              const checked = selectedBenefitIds.includes(
-                                Number(b.id),
-                              );
-                              return (
-                                <label
-                                  key={b.id}
-                                  style={{
-                                    display: "flex",
-                                    alignItems: "flex-start",
-                                    gap: "8px",
-                                    fontSize: "10px",
-                                    color: checked ? "#a7f3d0" : "#6b7280",
-                                    cursor: "pointer",
-                                    lineHeight: 1.45,
-                                  }}
-                                >
-                                  <input
-                                    type="checkbox"
-                                    checked={checked}
-                                    onChange={() => {
-                                      const id = Number(b.id);
-                                      setSelectedBenefitIds((prev) =>
-                                        prev.includes(id)
-                                          ? prev.filter((x) => x !== id)
-                                          : [...prev, id],
-                                      );
-                                    }}
-                                    style={{ marginTop: "2px" }}
-                                  />
-                                  <span>
-                                    <span
-                                      style={{
-                                        fontWeight: 600,
-                                        color: checked ? "#a7f3d0" : "#9ca3af",
-                                      }}
-                                    >
-                                      {b.name}
-                                      {b.required ? " (required)" : ""}
-                                    </span>
-                                    {b.description ? (
-                                      <span style={{ color: "#6b7280" }}>
-                                        {" "}
-                                        — {b.description}
-                                      </span>
-                                    ) : null}
-                                  </span>
-                                </label>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ) : null}
-                      {Array.isArray(resolvedHeritageDetails.detriments) &&
-                      resolvedHeritageDetails.detriments.length > 0 ? (
-                        <div style={{ marginBottom: "8px" }}>
-                          <div
-                            style={{
-                              fontSize: "9px",
-                              fontWeight: 600,
-                              color: "#fca5a5",
-                              marginBottom: "4px",
-                            }}
-                          >
-                            Detriments
-                          </div>
-                          <div
-                            style={{
-                              display: "flex",
-                              flexDirection: "column",
-                              gap: "6px",
-                            }}
-                          >
-                            {resolvedHeritageDetails.detriments.map((d) => {
-                              const checked = selectedDetrimentIds.includes(
-                                Number(d.id),
-                              );
-                              return (
-                                <label
-                                  key={d.id}
-                                  style={{
-                                    display: "flex",
-                                    alignItems: "flex-start",
-                                    gap: "8px",
-                                    fontSize: "10px",
-                                    color: checked ? "#fecaca" : "#6b7280",
-                                    cursor: "pointer",
-                                    lineHeight: 1.45,
-                                  }}
-                                >
-                                  <input
-                                    type="checkbox"
-                                    checked={checked}
-                                    onChange={() => {
-                                      const id = Number(d.id);
-                                      setSelectedDetrimentIds((prev) =>
-                                        prev.includes(id)
-                                          ? prev.filter((x) => x !== id)
-                                          : [...prev, id],
-                                      );
-                                    }}
-                                    style={{ marginTop: "2px" }}
-                                  />
-                                  <span>
-                                    <span
-                                      style={{
-                                        fontWeight: 600,
-                                        color: checked ? "#fecaca" : "#9ca3af",
-                                      }}
-                                    >
-                                      {d.name}
-                                      {d.required ? " (required)" : ""}
-                                    </span>
-                                    {d.description ? (
-                                      <span style={{ color: "#6b7280" }}>
-                                        {" "}
-                                        — {d.description}
-                                      </span>
-                                    ) : null}
-                                  </span>
-                                </label>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ) : null}
-                    </>
-                  ) : (
-                    <div
-                      style={{
-                        fontSize: "10px",
-                        color: "#6b7280",
-                        marginBottom: "10px",
-                        lineHeight: 1.5,
-                      }}
-                    >
-                      No heritage on this NPC. Choose one under Identity to show
-                      properties here.
-                    </div>
-                  )}
-                </div>
-
                 {/* Abilities — Stand-playbook NPCs only */}
                 {playbook === "STAND" && (
-                <div style={S.card}>
+                <div
+                  style={{
+                    marginTop: 14,
+                    paddingTop: 14,
+                    borderTop: "1px solid #2d1f52",
+                  }}
+                >
                   <span style={S.lbl}>Stand Abilities</span>
                   <div
                     style={{
@@ -3357,7 +5701,13 @@ const NPCSheet = ({
 
                 {/* Playbook Abilities — Hamon / Spin / Non-Bizarre */}
                 {playbook !== "STAND" && (
-                  <div style={S.card}>
+                  <div
+                    style={{
+                      marginTop: 14,
+                      paddingTop: 14,
+                      borderTop: "1px solid #2d1f52",
+                    }}
+                  >
                     <span style={S.lbl}>
                       {playbook === "HAMON"
                         ? "Hamon Playbook Abilities"
@@ -3600,1432 +5950,175 @@ const NPCSheet = ({
                     )}
                   </div>
                 )}
-              </div>
+                </div>
 
-              {/* ════ RIGHT — Clocks + Armor ════ */}
-              <div>
-                {/* Durability / Vulnerability (Stand) */}
-                {playbook === "STAND" && isDurS && (
-                  /* S-DURABILITY — No vulnerability clock */
-                  <div style={{ ...S.card, border: "2px solid #16a34a" }}>
-                    <div style={S.sdur}>
+                {/* PC Standing — own card under PLAYBOOK / Stand Abilities */}
+                <div style={S.card}>
+                  <span style={S.lbl}>PC STANDING</span>
+                  <div
+                    style={{
+                      fontSize: "10px",
+                      color: "#6b7280",
+                      marginTop: "4px",
+                      marginBottom: "8px",
+                      lineHeight: 1.4,
+                    }}
+                  >
+                    Personal relationship with campaign PCs (−3 to +3). Distinct
+                    from crew/faction standing.
+                  </div>
+                  {campaignId && campaignPlayerCharacters.length > 0 ? (
+                    <>
                       <div
                         style={{
-                          fontSize: "14px",
-                          fontWeight: "bold",
-                          color: "#22c55e",
-                          marginBottom: "6px",
-                        }}
-                      >
-                        ⬛ DURABILITY S — INVINCIBLE TO DIRECT HARM
-                      </div>
-                      <div style={{ marginBottom: "8px" }}>
-                        This NPC has no Vulnerability Clock. Direct harm from
-                        PCs cannot defeat them. Create alternative win condition
-                        clocks below.
-                      </div>
-                      <div style={{ color: "#6b7280", fontSize: "10px" }}>
-                        Examples: "Expose the User" · "Break Stand Logic" ·
-                        "Destroy the Mechanism"
-                      </div>
-                    </div>
-                    {/* Alt win condition clocks */}
-                    <div style={{ marginTop: "16px" }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
                           marginBottom: "8px",
+                          maxHeight: 260,
+                          overflowY: "auto",
                         }}
                       >
-                        <span style={S.lbl}>Alternative Win Conditions</span>
-                        <button
-                          type="button"
-                          onClick={() => toggleClockDraftCard("alt")}
-                          style={{
-                            ...S.btn,
-                            background: "#166534",
-                            color: "#86efac",
-                            fontSize: "11px",
-                          }}
-                        >
-                          + Add Clock
-                        </button>
-                      </div>
-                      <NpcClockAddCard
-                        draft={
-                          clockDraftCard?.kind === "alt"
-                            ? clockDraftCard
-                            : null
-                        }
-                        error={clockDraftCard?.kind === "alt" ? clockDraftError : ""}
-                        onFieldChange={patchClockDraft}
-                        onCommit={() => {
-                          if (clockDraftCard?.kind === "alt")
-                            commitClockDraftCard();
-                        }}
-                        onCancel={cancelClockDraftCard}
-                        namePlaceholder='e.g. "Expose User", "Break Stand Logic"'
-                        borderColor="#166534"
-                        createBg="#14532d"
-                        createColor="#86efac"
-                        createLabel="Add clock"
-                      />
-                      {altClocks.length === 0 && (
-                        <div style={{ ...S.warn, textAlign: "center" }}>
-                          S-DUR NPCs must have at least one alternative win
-                          condition clock!
-                        </div>
-                      )}
-                      <div
-                        style={{
-                          display: "flex",
-                          flexWrap: "wrap",
-                          gap: "16px",
-                          justifyContent: "center",
-                        }}
-                      >
-                        {altClocks.map((clk, cidx) => (
-                          <div
-                            key={
-                              clk.id != null ? String(clk.id) : `alt-${cidx}`
-                            }
-                            style={{
-                              textAlign: "center",
-                              position: "relative",
-                            }}
-                          >
-                            <ProgressClock
-                              size={90}
-                              segments={clk.segments}
-                              filled={clk.filled}
-                              onClick={(f) => updateAltClock(clk.id, f)}
-                              label={clk.name}
-                              sublabel={`${clk.segments}-segment clock`}
-                            />
-                            <button
-                              type="button"
-                              onClick={() => deleteAltClock(clk.id)}
-                              style={{
-                                position: "absolute",
-                                top: "-4px",
-                                right: "-4px",
-                                color: "#f87171",
-                                background: "#1a0000",
-                                border: "1px solid #7f1d1d",
-                                borderRadius: "50%",
-                                width: "16px",
-                                height: "16px",
-                                cursor: "pointer",
-                                fontSize: "10px",
-                                padding: 0,
-                                lineHeight: 1,
-                              }}
-                            >
-                              ×
-                            </button>
-                            <NpcClockSegmentsSelect
-                              value={clk.segments}
-                              onChange={(segs) =>
-                                setAltClockSegments(clk.id, segs)
-                              }
-                              color="#86efac"
-                            />
-                            <label
+                        {campaignPlayerCharacters.map((ch) => {
+                          const key = String(ch.id);
+                          const value = clampStandingValue(pcStanding[key] ?? 0);
+                          const label =
+                            ch.true_name ||
+                            ch.name ||
+                            ch.alias ||
+                            `PC #${ch.id}`;
+                          const portraitSrc = getCharacterPortraitSrc(ch);
+                          return (
+                            <div
+                              key={ch.id}
                               style={{
                                 display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
                                 gap: "6px",
-                                marginTop: "4px",
-                                fontSize: "10px",
-                                color: "#86efac",
-                                cursor: "pointer",
-                                userSelect: "none",
+                                marginBottom: "6px",
+                                alignItems: "center",
                               }}
                             >
-                              <input
-                                type="checkbox"
-                                checked={!!clk.show_to_players}
-                                onChange={(e) =>
-                                  setAltClocks((p) =>
-                                    p.map((c) =>
-                                      npcClockIdsMatch(c.id, clk.id)
-                                        ? {
-                                            ...c,
-                                            show_to_players: e.target.checked,
-                                          }
-                                        : c,
+                              <div
+                                style={{
+                                  width: 24,
+                                  height: 24,
+                                  borderRadius: 4,
+                                  border: "1px solid #2d1f52",
+                                  background: "#1f1035",
+                                  overflow: "hidden",
+                                  flexShrink: 0,
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                }}
+                              >
+                                {portraitSrc ? (
+                                  <img
+                                    src={portraitSrc}
+                                    alt=""
+                                    style={{
+                                      width: "100%",
+                                      height: "100%",
+                                      objectFit: "cover",
+                                    }}
+                                  />
+                                ) : (
+                                  <span
+                                    style={{
+                                      fontSize: 10,
+                                      color: "#6b7280",
+                                      lineHeight: 1,
+                                    }}
+                                  >
+                                    ?
+                                  </span>
+                                )}
+                              </div>
+                              <span
+                                style={{
+                                  flex: 1,
+                                  fontSize: "12px",
+                                  color: "#d1d5db",
+                                  minWidth: 0,
+                                }}
+                              >
+                                {label}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setPcStanding((p) => ({
+                                    ...p,
+                                    [key]: clampStandingValue(
+                                      (p[key] ?? 0) - 1,
                                     ),
-                                  )
+                                  }))
                                 }
-                              />
-                              Players see
-                            </label>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const newName = prompt(
-                                  "Rename clock:",
-                                  clk.name,
-                                );
-                                if (newName)
-                                  setAltClocks((p) =>
-                                    p.map((c) =>
-                                      npcClockIdsMatch(c.id, clk.id)
-                                        ? { ...c, name: newName }
-                                        : c,
+                                style={{
+                                  ...S.btn,
+                                  padding: "1px 6px",
+                                  background: "#7f1d1d",
+                                  color: "#fca5a5",
+                                  fontSize: "11px",
+                                }}
+                              >
+                                −
+                              </button>
+                              <span
+                                style={{
+                                  display: "inline-block",
+                                  width: "28px",
+                                  textAlign: "center",
+                                  fontWeight: "bold",
+                                  fontSize: "13px",
+                                  color:
+                                    value > 0
+                                      ? "#34d399"
+                                      : value < 0
+                                        ? "#f87171"
+                                        : "#9ca3af",
+                                }}
+                              >
+                                {value > 0 ? `+${value}` : value}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setPcStanding((p) => ({
+                                    ...p,
+                                    [key]: clampStandingValue(
+                                      (p[key] ?? 0) + 1,
                                     ),
-                                  );
-                              }}
-                              style={{
-                                display: "block",
-                                margin: "2px auto 0",
-                                color: "#6b7280",
-                                background: "none",
-                                border: "none",
-                                cursor: "pointer",
-                                fontSize: "10px",
-                              }}
-                            >
-                              rename
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {playbook === "STAND" && !isDurS && (
-                  /* NORMAL DURABILITY — Vulnerability Clock */
-                  <div style={S.card}>
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "baseline",
-                        marginBottom: "10px",
-                      }}
-                    >
-                      <span style={S.lbl}>
-                        Durability {stats.durability} — Vulnerability Clock
-                      </span>
-                      <span style={{ fontSize: "10px", color: "#6b7280" }}>
-                        {vulnSegs} segments
-                      </span>
-                    </div>
-
-                    {/* Vuln clock — independently adjustable by GM */}
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: "20px",
-                        alignItems: "flex-start",
-                        flexWrap: "wrap",
-                      }}
-                    >
-                      <div style={{ flex: "0 0 auto" }}>
-                        {/* Vulnerability clock — GM can increment or decrement directly */}
-                        {(() => {
-                          const isDefeated = vulnFilled >= vulnSegs;
-                          return (
-                            <div style={{ textAlign: "center" }}>
-                              {isDefeated && (
-                                <div
-                                  style={{
-                                    ...S.warn,
-                                    marginBottom: "6px",
-                                    textAlign: "center",
-                                    fontWeight: "bold",
-                                  }}
-                                >
-                                  ☠ DEFEATED
-                                </div>
-                              )}
-                              <ProgressClock
-                                size={100}
-                                segments={vulnSegs}
-                                filled={vulnFilled}
-                                label="Vulnerability"
-                                sublabel={`${vulnFilled}/${vulnSegs}`}
-                                onClick={(newFilled) =>
-                                  setVulnFilled(
-                                    Math.min(Math.max(0, newFilled), vulnSegs),
-                                  )
+                                  }))
                                 }
-                              />
+                                style={{
+                                  ...S.btn,
+                                  padding: "1px 6px",
+                                  background: "#14532d",
+                                  color: "#86efac",
+                                  fontSize: "11px",
+                                }}
+                              >
+                                +
+                              </button>
                             </div>
                           );
-                        })()}
-                        {isGM && campaignId && npc?.id && vulnSegs > 0 && (
-                          <div
-                            style={{
-                              marginTop: "10px",
-                              maxWidth: "260px",
-                              textAlign: "left",
-                              fontSize: "10px",
-                              color: "#9ca3af",
-                            }}
-                          >
-                            {activeSessionLoading && (
-                              <div>Loading session…</div>
-                            )}
-                            {!activeSessionLoading && activeSessionId == null && (
-                              <div>
-                                Set an active session for this campaign to control
-                                player visibility.
-                              </div>
-                            )}
-                            {!activeSessionLoading &&
-                              activeSessionId != null &&
-                              !sessionInvolvementForNpc && (
-                                <div>
-                                  Add this NPC to the active session in Campaign
-                                  Management to show its vulnerability clock on player
-                                  character sheets.
-                                </div>
-                              )}
-                            {!activeSessionLoading &&
-                              sessionInvolvementForNpc && (
-                                <label
-                                  style={{
-                                    display: "flex",
-                                    alignItems: "flex-start",
-                                    gap: "6px",
-                                    cursor:
-                                      vulnRevealSaving ||
-                                      !!sessionInvolvementForNpc.show_clocks_to_players
-                                        ? "not-allowed"
-                                        : "pointer",
-                                  }}
-                                >
-                                  <input
-                                    type="checkbox"
-                                    checked={
-                                      !!sessionInvolvementForNpc.show_clocks_to_players ||
-                                      !!sessionInvolvementForNpc.show_vulnerability_clock_to_players
-                                    }
-                                    disabled={
-                                      vulnRevealSaving ||
-                                      !!sessionInvolvementForNpc.show_clocks_to_players
-                                    }
-                                    onChange={() =>
-                                      void toggleVulnerabilityVisibleToPlayers()
-                                    }
-                                  />
-                                  <span>
-                                    Show vulnerability clock on player character
-                                    sheets (active session)
-                                  </span>
-                                </label>
-                              )}
-                          </div>
-                        )}
+                        })}
                       </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Conflict Clocks — PCs roll to fill these */}
-                <div style={S.card}>
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      marginBottom: "8px",
-                    }}
-                  >
-                    <div>
-                      <span style={S.lbl}>Conflict Clocks</span>
                       <div
                         style={{
+                          marginTop: "6px",
                           fontSize: "10px",
                           color: "#6b7280",
-                          marginTop: "2px",
                         }}
                       >
-                        PCs roll action ratings to fill these. Limited=1 tick,
-                        Standard=2, Greater=3. Use{" "}
-                        <strong>Players see</strong> to show individual clocks on
-                        session-linked PC sheets without revealing every clock.
+                        −3 War · −2 Hostile · −1 Interfering · 0 Neutral · +1
+                        Helpful · +2 Friendly · +3 Allied
                       </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => toggleClockDraftCard("conflict")}
-                      style={{
-                        ...S.btn,
-                        background: "#4c1d95",
-                        color: "#e9d5ff",
-                        fontSize: "11px",
-                      }}
-                    >
-                      + Clock
-                    </button>
-                  </div>
-
-                  <NpcClockAddCard
-                    draft={
-                      clockDraftCard?.kind === "conflict"
-                        ? clockDraftCard
-                        : null
-                    }
-                    error={
-                      clockDraftCard?.kind === "conflict"
-                        ? clockDraftError
-                        : ""
-                    }
-                    onFieldChange={patchClockDraft}
-                    onCommit={() => {
-                      if (clockDraftCard?.kind === "conflict")
-                        commitClockDraftCard();
-                    }}
-                    onCancel={cancelClockDraftCard}
-                    namePlaceholder='e.g. "Defeat antagonist", "Expose the User"'
-                    borderColor="#6d28d9"
-                    createBg="#4c1d95"
-                    createColor="#e9d5ff"
-                    createLabel="Add clock"
-                  />
-
-                  {conflictClocks.length === 0 && (
-                    <div
-                      style={{
-                        color: "#6b7280",
-                        fontSize: "11px",
-                        textAlign: "center",
-                        padding: "12px",
-                      }}
-                    >
-                      No clocks yet — add one to start tracking the conflict.
+                    </>
+                  ) : (
+                    <div style={{ fontSize: "11px", color: "#6b7280" }}>
+                      Assign a campaign with player characters to track PC
+                      standing.
                     </div>
                   )}
-
-                  <div
-                    style={{
-                      display: "flex",
-                      flexWrap: "wrap",
-                      gap: "16px",
-                      justifyContent:
-                        conflictClocks.length <= 2 ? "center" : "flex-start",
-                    }}
-                  >
-                    {conflictClocks.map((clk, cidx) => {
-                      const isComplete = clk.filled >= clk.segments;
-                      return (
-                        <div
-                          key={
-                            clk.id != null ? String(clk.id) : `conf-${cidx}`
-                          }
-                          style={{
-                            textAlign: "center",
-                            position: "relative",
-                            background: isComplete ? "#0a1a0a" : "transparent",
-                            border: isComplete ? "1px solid #16a34a" : "none",
-                            borderRadius: "6px",
-                            padding: isComplete ? "6px" : "0",
-                          }}
-                        >
-                          {isComplete && (
-                            <div
-                              style={{
-                                fontSize: "10px",
-                                color: "#22c55e",
-                                fontWeight: "bold",
-                                marginBottom: "4px",
-                              }}
-                            >
-                              ✓ COMPLETE
-                            </div>
-                          )}
-                          <ProgressClock
-                            size={90}
-                            segments={clk.segments}
-                            filled={clk.filled}
-                            onClick={(f) => updateConflictClock(clk.id, f)}
-                            label={clk.name}
-                            sublabel={`${clk.segments}-seg`}
-                          />
-                          <div
-                            style={{
-                              marginTop: "6px",
-                              display: "flex",
-                              flexDirection: "column",
-                              alignItems: "center",
-                              gap: "4px",
-                            }}
-                          >
-                            <NpcClockSegmentsSelect
-                              value={clk.segments}
-                              onChange={(segs) =>
-                                setConflictClockSegments(clk.id, segs)
-                              }
-                              color="#a78bfa"
-                            />
-                            <label
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "6px",
-                                fontSize: "10px",
-                                color: "#a78bfa",
-                                cursor: "pointer",
-                                userSelect: "none",
-                              }}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={!!clk.show_to_players}
-                                onChange={(e) =>
-                                  setConflictClocks((p) =>
-                                    p.map((c) =>
-                                      npcClockIdsMatch(c.id, clk.id)
-                                        ? {
-                                            ...c,
-                                            show_to_players: e.target.checked,
-                                          }
-                                        : c,
-                                    ),
-                                  )
-                                }
-                              />
-                              Players see
-                            </label>
-                            <div
-                              style={{
-                                display: "flex",
-                                gap: "4px",
-                                justifyContent: "center",
-                              }}
-                            >
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const newName = prompt(
-                                    "Rename clock:",
-                                    clk.name,
-                                  );
-                                  if (newName)
-                                    setConflictClocks((p) =>
-                                      p.map((c) =>
-                                        npcClockIdsMatch(c.id, clk.id)
-                                          ? { ...c, name: newName }
-                                          : c,
-                                      ),
-                                    );
-                                }}
-                                style={{
-                                  color: "#6b7280",
-                                  background: "none",
-                                  border: "none",
-                                  cursor: "pointer",
-                                  fontSize: "10px",
-                                }}
-                              >
-                                rename
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => deleteConflictClock(clk.id)}
-                                style={{
-                                  color: "#f87171",
-                                  background: "none",
-                                  border: "none",
-                                  cursor: "pointer",
-                                  fontSize: "10px",
-                                }}
-                              >
-                                delete
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Effect tick reference */}
-                  <div
-                    style={{
-                      marginTop: "12px",
-                      display: "flex",
-                      gap: "6px",
-                      justifyContent: "center",
-                    }}
-                  >
-                    {[
-                      ["LIMITED", "1 tick", "#6b7280"],
-                      ["STANDARD", "2 ticks", "#7c3aed"],
-                      ["GREATER", "3 ticks", "#16a34a"],
-                    ].map(([label, ticks, color]) => (
-                      <div
-                        key={label}
-                        style={{
-                          background: "#0a0a14",
-                          border: `1px solid ${color}`,
-                          borderRadius: "4px",
-                          padding: "4px 8px",
-                          textAlign: "center",
-                        }}
-                      >
-                        <div
-                          style={{
-                            fontSize: "10px",
-                            color,
-                            fontWeight: "bold",
-                          }}
-                        >
-                          {label}
-                        </div>
-                        <div style={{ fontSize: "11px", color: "#d1d5db" }}>
-                          {ticks}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {campaignId != null &&
-                campaignId !== "" &&
-                campaignCrews.length > 0 ? (
-                  <div style={S.card}>
-                    <span style={S.lbl}>Player Crew Standing</span>
-                    <div style={{ marginBottom: "8px" }}>
-                      {campaignCrews.map((c) => {
-                        const key = String(c.id);
-                        const value = clampCrewStandingValue(
-                          crewStanding[key] ?? 0,
-                        );
-                        const isMember = Number(currentCrewId) === Number(c.id);
-                        return (
-                          <div
-                            key={c.id}
-                            style={{
-                              display: "flex",
-                              gap: "6px",
-                              marginBottom: "6px",
-                              alignItems: "center",
-                            }}
-                          >
-                            <span
-                              style={{
-                                flex: 1,
-                                fontSize: "12px",
-                                color: "#d1d5db",
-                              }}
-                            >
-                              {c.name}
-                              {isMember ? (
-                                <span
-                                  style={{
-                                    marginLeft: "6px",
-                                    fontSize: "10px",
-                                    color: "#a78bfa",
-                                    border: "1px solid #4b2d8f",
-                                    borderRadius: "4px",
-                                    padding: "1px 6px",
-                                  }}
-                                >
-                                  Crew member
-                                </span>
-                              ) : null}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setCrewStanding((p) => ({
-                                  ...p,
-                                  [key]: clampCrewStandingValue(
-                                    (p[key] ?? 0) - 1,
-                                  ),
-                                }))
-                              }
-                              style={{
-                                ...S.btn,
-                                padding: "1px 6px",
-                                background: "#7f1d1d",
-                                color: "#fca5a5",
-                                fontSize: "11px",
-                              }}
-                            >
-                              −
-                            </button>
-                            <span
-                              style={{
-                                display: "inline-block",
-                                width: "28px",
-                                textAlign: "center",
-                                fontWeight: "bold",
-                                fontSize: "13px",
-                                color:
-                                  value > 0
-                                    ? "#34d399"
-                                    : value < 0
-                                      ? "#f87171"
-                                      : "#9ca3af",
-                              }}
-                            >
-                              {value > 0 ? `+${value}` : value}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setCrewStanding((p) => ({
-                                  ...p,
-                                  [key]: clampCrewStandingValue(
-                                    (p[key] ?? 0) + 1,
-                                  ),
-                                }))
-                              }
-                              style={{
-                                ...S.btn,
-                                padding: "1px 6px",
-                                background: "#14532d",
-                                color: "#86efac",
-                                fontSize: "11px",
-                              }}
-                            >
-                              +
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    <div
-                      style={{
-                        marginTop: "6px",
-                        fontSize: "10px",
-                        color: "#6b7280",
-                      }}
-                    >
-                      −3 War · −2 Hostile · −1 Interfering · 0 Neutral · +1
-                      Helpful · +2 Friendly · +3 Allied
-                    </div>
-                  </div>
-                ) : null}
-
-                {/* Healing and Recovery — GM reference (no PC-style dice pool on NPCs) */}
-                <div style={S.card}>
-                  <span style={S.lbl}>Healing and recovery</span>
-                  <div
-                    style={{
-                      fontSize: "11px",
-                      lineHeight: 1.75,
-                      color: "#9ca3af",
-                    }}
-                  >
-                    <div
-                      style={{
-                        marginBottom: "10px",
-                        padding: "8px",
-                        background: "#0a0a14",
-                        borderRadius: "4px",
-                        border: "1px solid #2d1f52",
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontSize: "10px",
-                          fontWeight: "bold",
-                          color: "#a78bfa",
-                          marginBottom: "4px",
-                          letterSpacing: "0.04em",
-                        }}
-                      >
-                        Heal ally
-                      </div>
-                      <div
-                        style={{
-                          marginBottom: "10px",
-                          padding: "8px",
-                          background: "#08080f",
-                          borderRadius: "4px",
-                          border: "1px solid #3b2d5c",
-                        }}
-                      >
-                        <div
-                          style={{
-                            fontSize: "10px",
-                            fontWeight: "bold",
-                            color: "#c4b5fd",
-                            marginBottom: "6px",
-                            letterSpacing: "0.04em",
-                          }}
-                        >
-                          Quality tier
-                        </div>
-                        <div
-                          style={{
-                            fontSize: "10px",
-                            color: "#6b7280",
-                            marginBottom: "8px",
-                            lineHeight: 1.5,
-                          }}
-                        >
-                          Sets how many <strong style={{ color: "#a78bfa" }}>d6</strong>{" "}
-                          to roll on a <strong style={{ color: "#a78bfa" }}>fortune</strong>{" "}
-                          when this NPC provides care. After you pick a heal target,
-                          use <strong style={{ color: "#d1d5db" }}>Roll recover in play fortune</strong>{" "}
-                          under <strong style={{ color: "#d1d5db" }}>Recover in play</strong>{" "}
-                          (same card family as this tier), or{" "}
-                          <strong style={{ color: "#d1d5db" }}>
-                            Roll downtime recover fortune
-                          </strong>{" "}
-                          under <strong style={{ color: "#d1d5db" }}>Downtime recover</strong>{" "}
-                          below. Same tier for both; table preview only (not saved).
-                        </div>
-                        <div
-                          style={{
-                            display: "flex",
-                            flexWrap: "wrap",
-                            gap: "6px",
-                          }}
-                        >
-                          {[
-                            { dice: 1, label: "I", blurb: "1d" },
-                            { dice: 2, label: "II", blurb: "2d" },
-                            { dice: 3, label: "III", blurb: "3d" },
-                            { dice: 4, label: "IV", blurb: "4d" },
-                          ].map(({ dice, label, blurb }) => {
-                            const on = healQualityFortuneDice === dice;
-                            return (
-                              <button
-                                key={dice}
-                                type="button"
-                                onClick={() => setHealQualityFortuneDice(dice)}
-                                title={`Fortune pool ${blurb} when this NPC heals or stabilizes`}
-                                style={{
-                                  flex: "1 1 68px",
-                                  minWidth: "68px",
-                                  padding: "6px 4px",
-                                  borderRadius: "4px",
-                                  border: on
-                                    ? "1px solid #a78bfa"
-                                    : "1px solid #4b5563",
-                                  background: on ? "#4c1d95" : "#111827",
-                                  color: on ? "#f5f3ff" : "#9ca3af",
-                                  fontSize: "10px",
-                                  fontFamily: "monospace",
-                                  cursor: "pointer",
-                                  lineHeight: 1.35,
-                                }}
-                              >
-                                <div style={{ fontWeight: "bold", color: "#e9d5ff" }}>
-                                  Tier {label}
-                                </div>
-                                <div style={{ fontSize: "9px", opacity: 0.9 }}>
-                                  {blurb} fortune
-                                </div>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                      <div style={{ color: "#6b7280", marginBottom: "10px" }}>
-                        When this NPC treats or stabilizes a PC (or another NPC),
-                        resolve with agreed fiction: fortune, clocks, consumables,
-                        or a direct consequence trade. NPCs do not use PC action
-                        dice or stand-coin pools for healing rolls unless the table
-                        explicitly homebrews it.
-                      </div>
-                      <div
-                        style={{
-                          fontSize: "10px",
-                          fontWeight: "bold",
-                          color: "#94a3b8",
-                          marginBottom: "4px",
-                        }}
-                      >
-                        Fellow faction NPCs
-                      </div>
-                      {currentFactionId == null ? (
-                        <div
-                          style={{
-                            fontSize: "10px",
-                            color: "#57534e",
-                            marginBottom: "10px",
-                          }}
-                        >
-                          Assign this NPC to a faction above to list allies in the
-                          same faction.
-                        </div>
-                      ) : factionNpcPeers.length === 0 ? (
-                        <div
-                          style={{
-                            fontSize: "10px",
-                            color: "#57534e",
-                            marginBottom: "10px",
-                          }}
-                        >
-                          No other NPCs in this faction yet.
-                        </div>
-                      ) : (
-                        <ul
-                          style={{
-                            margin: "0 0 10px 0",
-                            paddingLeft: "18px",
-                            fontSize: "10px",
-                            color: "#d1d5db",
-                          }}
-                        >
-                          {factionNpcPeers.map((n) => (
-                            <li key={n.id}>
-                              {n.name || "NPC"}
-                              {n.stand_name ? (
-                                <span style={{ color: "#6b7280" }}>
-                                  {" "}
-                                  — {n.stand_name}
-                                </span>
-                              ) : null}
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                      <div
-                        style={{
-                          fontSize: "10px",
-                          fontWeight: "bold",
-                          color: "#94a3b8",
-                          marginBottom: "4px",
-                        }}
-                      >
-                        Player character (heal target)
-                      </div>
-                      {campaignId == null ? (
-                        <div
-                          style={{
-                            fontSize: "10px",
-                            color: "#57534e",
-                            marginBottom: "10px",
-                          }}
-                        >
-                          Link this NPC to a campaign to pick a PC from the roster.
-                        </div>
-                      ) : campaignPlayerCharacters.length === 0 ? (
-                        <div
-                          style={{
-                            fontSize: "10px",
-                            color: "#57534e",
-                            marginBottom: "10px",
-                          }}
-                        >
-                          No PCs on this campaign yet.
-                        </div>
-                      ) : (
-                        <select
-                          aria-label="Heal target player character"
-                          value={healAllyPcId}
-                          onChange={(e) => setHealAllyPcId(e.target.value)}
-                          style={{
-                            width: "100%",
-                            maxWidth: "320px",
-                            marginBottom: "10px",
-                            background: "#1f2937",
-                            color: "#e5e7eb",
-                            border: "1px solid #4b5563",
-                            padding: "6px 8px",
-                            fontSize: "11px",
-                            fontFamily: "monospace",
-                            borderRadius: "4px",
-                          }}
-                        >
-                          <option value="">— Choose PC —</option>
-                          {campaignPlayerCharacters.map((ch) => (
-                            <option key={ch.id} value={String(ch.id)}>
-                              {ch.true_name || ch.alias || `Character ${ch.id}`}
-                            </option>
-                          ))}
-                        </select>
-                      )}
-                      <div
-                        style={{
-                          marginTop: "10px",
-                          paddingTop: "10px",
-                          borderTop: "1px solid #2d1f52",
-                        }}
-                      >
-                        <div
-                          style={{
-                            fontSize: "10px",
-                            fontWeight: "bold",
-                            color: "#38bdf8",
-                            marginBottom: "6px",
-                            letterSpacing: "0.03em",
-                          }}
-                        >
-                          Recover in play (mid-score)
-                        </div>
-                        <div
-                          style={{
-                            fontSize: "10px",
-                            color: "#57534e",
-                            marginBottom: "8px",
-                            lineHeight: 1.65,
-                          }}
-                        >
-                          <strong style={{ color: "#78716c" }}>Ruling:</strong>{" "}
-                          During an active score the fiction must allow a credible
-                          pause—time, cover, or pressure drop the table agrees on.
-                          Use position/effect to flag how dangerous rushed treatment
-                          is. If you mirror PC healing costs, stress and similar
-                          spends usually belong to the{" "}
-                          <strong style={{ color: "#a8a29e" }}>
-                            recipient PC
-                          </strong>
-                          , not this NPC’s sheet.
-                        </div>
-                        {campaignId != null &&
-                        campaignPlayerCharacters.length > 0 &&
-                        !healAllyPcId ? (
-                          <div
-                            style={{
-                              fontSize: "9px",
-                              color: "#78716c",
-                              marginBottom: "10px",
-                              lineHeight: 1.55,
-                              padding: "8px",
-                              background: "#0d1117",
-                              borderRadius: "4px",
-                              border: "1px solid #374151",
-                            }}
-                          >
-                            Choose a <strong style={{ color: "#a8a29e" }}>player character</strong>{" "}
-                            above to unlock recover-in-play{" "}
-                            <strong style={{ color: "#a8a29e" }}>position</strong>,{" "}
-                            <strong style={{ color: "#a8a29e" }}>effect</strong>, and{" "}
-                            <strong style={{ color: "#a8a29e" }}>fortune</strong>{" "}
-                            (same nested card style as{" "}
-                            <strong style={{ color: "#a8a29e" }}>Quality tier</strong>
-                            ).
-                          </div>
-                        ) : null}
-                        {healAllyPcId ? (
-                          <div
-                            style={{
-                              marginBottom: "10px",
-                              padding: "8px",
-                              background: "#08080f",
-                              borderRadius: "4px",
-                              border: "1px solid #3b2d5c",
-                            }}
-                          >
-                            <div
-                              style={{
-                                fontSize: "9px",
-                                fontWeight: "bold",
-                                color: "#c4b5fd",
-                                marginBottom: "6px",
-                                letterSpacing: "0.04em",
-                              }}
-                            >
-                              Quality tier — recover in play
-                            </div>
-                            <div
-                              style={{
-                                fontSize: "9px",
-                                fontWeight: "bold",
-                                color: "#6b7280",
-                                marginBottom: "6px",
-                              }}
-                            >
-                              Recover in play — default position & effect
-                            </div>
-                            <div
-                              style={{
-                                fontSize: "10px",
-                                color: "#57534e",
-                                marginBottom: "8px",
-                                lineHeight: 1.55,
-                              }}
-                            >
-                              Saved on this NPC for recover in play under this
-                              character&apos;s care (current target: selected PC
-                              above).
-                            </div>
-                            <div
-                              style={{
-                                display: "flex",
-                                flexWrap: "wrap",
-                                gap: "8px",
-                                alignItems: "center",
-                                marginBottom: "8px",
-                              }}
-                            >
-                              <label
-                                style={{
-                                  display: "flex",
-                                  flexDirection: "column",
-                                  gap: "2px",
-                                  fontSize: "9px",
-                                  color: "#6b7280",
-                                }}
-                              >
-                                Position
-                                <select
-                                  aria-label="Recover in play default position"
-                                  value={healAllyPosition}
-                                  onChange={(e) =>
-                                    setHealAllyPosition(e.target.value)
-                                  }
-                                  style={{
-                                    background: "#1f2937",
-                                    color: "#e5e7eb",
-                                    border: "1px solid #4b5563",
-                                    padding: "4px 6px",
-                                    fontSize: "11px",
-                                    fontFamily: "monospace",
-                                    borderRadius: "4px",
-                                  }}
-                                >
-                                  <option value="controlled">Controlled</option>
-                                  <option value="risky">Risky</option>
-                                  <option value="desperate">Desperate</option>
-                                </select>
-                              </label>
-                              <label
-                                style={{
-                                  display: "flex",
-                                  flexDirection: "column",
-                                  gap: "2px",
-                                  fontSize: "9px",
-                                  color: "#6b7280",
-                                }}
-                              >
-                                Effect
-                                <select
-                                  aria-label="Recover in play default effect tier"
-                                  value={healAllyEffect}
-                                  onChange={(e) =>
-                                    setHealAllyEffect(e.target.value)
-                                  }
-                                  style={{
-                                    background: "#1f2937",
-                                    color: "#e5e7eb",
-                                    border: "1px solid #4b5563",
-                                    padding: "4px 6px",
-                                    fontSize: "11px",
-                                    fontFamily: "monospace",
-                                    borderRadius: "4px",
-                                  }}
-                                >
-                                  <option value="limited">Limited</option>
-                                  <option value="standard">Standard</option>
-                                  <option value="extreme">Extreme</option>
-                                </select>
-                              </label>
-                            </div>
-                            <div
-                              style={{
-                                fontSize: "9px",
-                                color: "#6b7280",
-                                lineHeight: 1.45,
-                                marginBottom: "6px",
-                              }}
-                            >
-                              Fortune uses the <strong style={{ color: "#a8a29e" }}>d6 count</strong>{" "}
-                              from <strong style={{ color: "#a8a29e" }}>Quality tier</strong>{" "}
-                              above.
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                rollHealQualityFortune("recover_in_play")
-                              }
-                              title="Roll Nd6 using Quality tier (GM preview — not saved to session)"
-                              style={{
-                                padding: "8px 10px",
-                                borderRadius: "4px",
-                                border: "1px solid #7c3aed",
-                                background: "#5b21b6",
-                                color: "#faf5ff",
-                                fontSize: "11px",
-                                fontFamily: "monospace",
-                                fontWeight: "bold",
-                                cursor: "pointer",
-                                width: "100%",
-                                boxSizing: "border-box",
-                              }}
-                            >
-                              Roll recover in play fortune ({healQualityFortuneDice}d)
-                            </button>
-                            {healFortuneRollPreview?.kind === "recover_in_play" ? (
-                              <div
-                                style={{
-                                  marginTop: "6px",
-                                  fontSize: "10px",
-                                  color: "#c4b5fd",
-                                  textAlign: "center",
-                                  lineHeight: 1.5,
-                                  padding: "6px",
-                                  background: "#111827",
-                                  borderRadius: "4px",
-                                  border: "1px solid #4c1d95",
-                                }}
-                              >
-                                [
-                                {healFortuneRollPreview.results.join(", ")}] → highest{" "}
-                                <strong>{healFortuneRollPreview.highest}</strong>
-                                {healFortuneRollPreview.critical ? (
-                                  <span style={{ color: "#fbbf24" }}> · critical</span>
-                                ) : null}
-                                <div style={{ fontSize: "9px", color: "#6b7280" }}>
-                                  GM preview only — log to session history or a PC
-                                  roll if you need a saved record.
-                                </div>
-                              </div>
-                            ) : null}
-                          </div>
-                        ) : null}
-                        <textarea
-                          value={healAllyRecoveryNote}
-                          onChange={(e) =>
-                            setHealAllyRecoveryNote(e.target.value)
-                          }
-                          placeholder="In-play notes: stress spent, clocks ticked, complications, scene beats…"
-                          style={{
-                            width: "100%",
-                            minHeight: "48px",
-                            background: "#0d1117",
-                            color: "#d1d5db",
-                            border: "1px solid #374151",
-                            padding: "6px 8px",
-                            fontSize: "10px",
-                            fontFamily: "monospace",
-                            borderRadius: "4px",
-                            resize: "vertical",
-                            boxSizing: "border-box",
-                          }}
-                        />
-                      </div>
-                      <div
-                        style={{
-                          marginTop: "10px",
-                          paddingTop: "10px",
-                          borderTop: "1px solid #2d1f52",
-                        }}
-                      >
-                        <div
-                          style={{
-                            fontSize: "10px",
-                            fontWeight: "bold",
-                            color: "#34d399",
-                            marginBottom: "6px",
-                            letterSpacing: "0.03em",
-                          }}
-                        >
-                          Downtime recover
-                        </div>
-                        <div
-                          style={{
-                            fontSize: "10px",
-                            color: "#57534e",
-                            marginBottom: "8px",
-                            lineHeight: 1.65,
-                          }}
-                        >
-                          <strong style={{ color: "#78716c" }}>Ruling:</strong>{" "}
-                          Between scores (or any pause the table treats as
-                          downtime): longer treatment scenes, full kits, sleep,
-                          and healing clocks without the score breathing down your
-                          neck.{" "}
-                          <strong style={{ color: "#a8a29e" }}>
-                            Not the same bar as mid-action recover
-                          </strong>
-                          —no position/effect track here unless you deliberately
-                          re-introduce danger as a second beat.
-                        </div>
-                        {healAllyPcId ? (
-                          <div
-                            style={{
-                              marginBottom: "8px",
-                              display: "flex",
-                              flexDirection: "column",
-                              gap: "6px",
-                              alignItems: "stretch",
-                            }}
-                          >
-                            <button
-                              type="button"
-                              onClick={() => rollHealQualityFortune("downtime")}
-                              title="Roll Nd6 using Quality tier (GM preview — not saved to session)"
-                              style={{
-                                padding: "8px 10px",
-                                borderRadius: "4px",
-                                border: "1px solid #059669",
-                                background: "#047857",
-                                color: "#ecfdf5",
-                                fontSize: "11px",
-                                fontFamily: "monospace",
-                                fontWeight: "bold",
-                                cursor: "pointer",
-                              }}
-                            >
-                              Roll downtime recover fortune ({healQualityFortuneDice}d)
-                            </button>
-                            {healFortuneRollPreview?.kind === "downtime" ? (
-                              <div
-                                style={{
-                                  fontSize: "10px",
-                                  color: "#6ee7b7",
-                                  textAlign: "center",
-                                  lineHeight: 1.5,
-                                  padding: "6px",
-                                  background: "#111827",
-                                  borderRadius: "4px",
-                                  border: "1px solid #065f46",
-                                }}
-                              >
-                                [
-                                {healFortuneRollPreview.results.join(", ")}] → highest{" "}
-                                <strong>{healFortuneRollPreview.highest}</strong>
-                                {healFortuneRollPreview.critical ? (
-                                  <span style={{ color: "#fbbf24" }}> · critical</span>
-                                ) : null}
-                                <div style={{ fontSize: "9px", color: "#6b7280" }}>
-                                  GM preview only — log to session history or a PC
-                                  roll if you need a saved record.
-                                </div>
-                              </div>
-                            ) : null}
-                          </div>
-                        ) : campaignId != null &&
-                          campaignPlayerCharacters.length > 0 ? (
-                          <div
-                            style={{
-                              fontSize: "9px",
-                              color: "#78716c",
-                              marginBottom: "8px",
-                              lineHeight: 1.55,
-                            }}
-                          >
-                            Choose a <strong style={{ color: "#a8a29e" }}>heal target</strong>{" "}
-                            above to roll downtime recover fortune.
-                          </div>
-                        ) : null}
-                        <textarea
-                          value={healAllyDowntimeNote}
-                          onChange={(e) =>
-                            setHealAllyDowntimeNote(e.target.value)
-                          }
-                          placeholder="Downtime notes: projects, healing clock fills, supplies used, off-screen care…"
-                          style={{
-                            width: "100%",
-                            minHeight: "48px",
-                            background: "#0d1117",
-                            color: "#d1d5db",
-                            border: "1px solid #374151",
-                            padding: "6px 8px",
-                            fontSize: "10px",
-                            fontFamily: "monospace",
-                            borderRadius: "4px",
-                            resize: "vertical",
-                            boxSizing: "border-box",
-                          }}
-                        />
-                      </div>
-                    </div>
-                    <div
-                      style={{
-                        padding: "8px",
-                        background: "#0a0a14",
-                        borderRadius: "4px",
-                        border: "1px solid #2d1f52",
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontSize: "10px",
-                          fontWeight: "bold",
-                          color: "#a78bfa",
-                          marginBottom: "4px",
-                          letterSpacing: "0.04em",
-                        }}
-                      >
-                        Rest & recovery
-                      </div>
-                      <div
-                        style={{
-                          color: "#6b7280",
-                          marginBottom: "10px",
-                          lineHeight: 1.55,
-                        }}
-                      >
-                        Complements <strong style={{ color: "#94a3b8" }}>
-                          Downtime recover
-                        </strong>{" "}
-                        above: stress clears, long projects, and any
-                        other between-score upkeep the table tracks for this NPC.
-                      </div>
-                      <button
-                        type="button"
-                        aria-label="Refresh all clocks for rest"
-                        title="Clears vulnerability, conflict, and alt clock progress (autosaves)."
-                        onClick={refreshRestClocksAndArmor}
-                        style={{
-                          width: "100%",
-                          boxSizing: "border-box",
-                          padding: "8px 10px",
-                          borderRadius: "4px",
-                          border: "1px solid #7c3aed",
-                          background: "#4c1d95",
-                          color: "#f5f3ff",
-                          fontSize: "11px",
-                          fontFamily: "monospace",
-                          fontWeight: "bold",
-                          cursor: "pointer",
-                        }}
-                      >
-                        Refresh clocks
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* GM Notes */}
-                <div style={S.card}>
-                  <span style={S.lbl}>GM Notes</span>
-                  <textarea
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    placeholder="Tactics, motivations, encounter context, rematch notes…"
-                    style={{
-                      width: "100%",
-                      height: "120px",
-                      background: "#0a0a14",
-                      color: "#d1d5db",
-                      border: "1px solid #2d1f52",
-                      padding: "8px",
-                      fontFamily: "monospace",
-                      fontSize: "12px",
-                      resize: "vertical",
-                      boxSizing: "border-box",
-                      outline: "none",
-                    }}
-                  />
-                </div>
-                {/* Inventory — structured kit (same field as CREW mode when no faction) */}
-                <div style={S.card}>
-                  <span style={S.lbl}>INVENTORY</span>
-                  <div style={{ minWidth: 0 }}>
-                    <CharacterSheetInventoryList
-                      panelId="npc-sheet-inventory-panel"
-                      inventory={inventory}
-                      readOnly={false}
-                      allowArmor={false}
-                      campaignId={campaignId}
-                      isGM={isGM}
-                      onChange={setInventory}
-                      onPromoteToCampaign={
-                        isGM ? handlePromoteItemToCampaign : undefined
-                      }
-                      onPublishToSite={
-                        isGM ? handlePublishItemToSite : undefined
-                      }
-                    />
-                  </div>
                 </div>
               </div>
             </div>
@@ -5052,7 +6145,7 @@ const NPCSheet = ({
                     color: "#c4b5fd",
                   }}
                 >
-                  {name || "New NPC"} — Crew Management
+                  {name || "New NPC"} — Faction Management
                 </span>
                 {role && (
                   <span
@@ -5068,106 +6161,167 @@ const NPCSheet = ({
                   </span>
                 )}
               </div>
-              <div style={{ marginTop: "8px" }}>
-                <span style={S.lbl}>Faction</span>
-                <select
-                  style={{ ...S.sel, width: "100%" }}
-                  value={faction || ""}
-                  onChange={(e) =>
-                    setFaction(
-                      e.target.value ? parseInt(e.target.value, 10) : "",
-                    )
-                  }
-                >
-                  <option value="">— None —</option>
-                  {campaignFactions.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.name}
-                    </option>
-                  ))}
-                </select>
-                {isGM && campaignId && !showNewFactionForm && (
-                  <button
-                    onClick={() => setShowNewFactionForm(true)}
-                    style={{
-                      ...S.btn,
-                      marginLeft: "8px",
-                      fontSize: "10px",
-                      padding: "3px 10px",
-                      background: "transparent",
-                      border: "1px dashed #4b2d8f",
-                      color: "#a78bfa",
-                    }}
+              <div
+                style={{
+                  marginTop: "8px",
+                  display: "flex",
+                  gap: "12px",
+                  flexWrap: "wrap",
+                  alignItems: "flex-start",
+                }}
+              >
+                <div style={{ flex: "1 1 160px", minWidth: 0 }}>
+                  <span style={S.lbl}>Campaign</span>
+                  <select
+                    style={{ ...S.sel, width: "100%" }}
+                    value={campaign}
+                    onChange={(e) =>
+                      setCampaign(
+                        e.target.value ? parseInt(e.target.value, 10) : "",
+                      )
+                    }
                   >
-                    ＋ New Faction
-                  </button>
-                )}
-                {isGM && showNewFactionForm && (
-                  <div style={{ marginTop: "6px", display: "flex", gap: "4px" }}>
-                    <input
-                      style={{ ...S.inp, flex: 1 }}
-                      value={newFactionName}
-                      onChange={(e) => { setNewFactionName(e.target.value); setFactionCreateError(""); }}
-                      placeholder="Faction name…"
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") handleCreateFaction();
-                        if (e.key === "Escape") {
+                    <option value="">No Campaign</option>
+                    {campaigns.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div style={{ flex: "1 1 200px", minWidth: 0 }}>
+                  <span style={S.lbl}>Faction</span>
+                  <select
+                    style={{ ...S.sel, width: "100%" }}
+                    value={faction || ""}
+                    onChange={(e) =>
+                      setFaction(
+                        e.target.value ? parseInt(e.target.value, 10) : "",
+                      )
+                    }
+                    disabled={campaignId == null || campaignId === ""}
+                  >
+                    <option value="">— None —</option>
+                    {campaignFactions.map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.name}
+                      </option>
+                    ))}
+                  </select>
+                  {isGM && campaignId && !showNewFactionForm && (
+                    <button
+                      onClick={() => setShowNewFactionForm(true)}
+                      style={{
+                        ...S.btn,
+                        marginTop: "4px",
+                        fontSize: "10px",
+                        padding: "3px 10px",
+                        background: "transparent",
+                        border: "1px dashed #4b2d8f",
+                        color: "#a78bfa",
+                        width: "100%",
+                      }}
+                    >
+                      ＋ New Faction
+                    </button>
+                  )}
+                  {isGM && campaignId && showNewFactionForm && (
+                    <div style={{ marginTop: "6px", display: "flex", gap: "4px" }}>
+                      <input
+                        style={{ ...S.inp, flex: 1 }}
+                        value={newFactionName}
+                        onChange={(e) => {
+                          setNewFactionName(e.target.value);
+                          setFactionCreateError("");
+                        }}
+                        placeholder="Faction name…"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") handleCreateFaction();
+                          if (e.key === "Escape") {
+                            setShowNewFactionForm(false);
+                            setNewFactionName("");
+                            setFactionCreateError("");
+                          }
+                        }}
+                        autoFocus
+                      />
+                      <button
+                        onClick={handleCreateFaction}
+                        disabled={creatingFaction || !newFactionName.trim()}
+                        style={{
+                          ...S.btn,
+                          background: "#4c1d95",
+                          color: "#e9d5ff",
+                          fontSize: "10px",
+                          padding: "2px 8px",
+                        }}
+                      >
+                        {creatingFaction ? "…" : "Create"}
+                      </button>
+                      <button
+                        onClick={() => {
                           setShowNewFactionForm(false);
                           setNewFactionName("");
                           setFactionCreateError("");
+                        }}
+                        style={{
+                          ...S.btn,
+                          background: "transparent",
+                          color: "#6b7280",
+                          fontSize: "10px",
+                          padding: "2px 6px",
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
+                  {factionCreateError && (
+                    <div
+                      style={{
+                        color: "#f87171",
+                        fontSize: "11px",
+                        marginTop: "4px",
+                      }}
+                    >
+                      {factionCreateError}
+                    </div>
+                  )}
+                  <div
+                    style={{
+                      fontSize: "10px",
+                      color: "#6b7280",
+                      marginTop: "4px",
+                    }}
+                  >
+                    {campaignId == null || campaignId === ""
+                      ? "Pick a campaign to list factions for this NPC."
+                      : "Faction this NPC belongs to (also in campaign management)."}
+                  </div>
+                  {isGM && campaignId && faction ? (
+                    <label
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        marginTop: "8px",
+                        fontSize: "11px",
+                        color: "#d1d5db",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={factionVisibleToPlayers}
+                        onChange={(e) =>
+                          setFactionVisibleToPlayers(e.target.checked)
                         }
-                      }}
-                      autoFocus
-                    />
-                    <button
-                      onClick={handleCreateFaction}
-                      disabled={creatingFaction || !newFactionName.trim()}
-                      style={{
-                        ...S.btn,
-                        background: "#4c1d95",
-                        color: "#e9d5ff",
-                        fontSize: "10px",
-                        padding: "2px 8px",
-                      }}
-                    >
-                      {creatingFaction ? "…" : "Create"}
-                    </button>
-                    <button
-                      onClick={() => {
-                        setShowNewFactionForm(false);
-                        setNewFactionName("");
-                        setFactionCreateError("");
-                      }}
-                      style={{
-                        ...S.btn,
-                        background: "transparent",
-                        color: "#6b7280",
-                        fontSize: "10px",
-                        padding: "2px 6px",
-                      }}
-                    >
-                      ✕
-                    </button>
-                  </div>
-                )}
-                {factionCreateError && (
-                  <div style={{ color: "#f87171", fontSize: "11px", marginTop: "4px" }}>
-                    {factionCreateError}
-                  </div>
-                )}
-                <div
-                  style={{
-                    fontSize: "10px",
-                    color: "#6b7280",
-                    marginTop: "4px",
-                  }}
-                >
-                  Faction this NPC belongs to (also manageable in campaign
-                  management)
+                      />
+                      Players can see this faction
+                    </label>
+                  ) : null}
                 </div>
-              </div>
-              {campaignId != null && campaignId !== "" ? (
-                <div style={{ marginTop: "8px" }}>
+                <div style={{ flex: "1 1 200px", minWidth: 0 }}>
                   <span style={S.lbl}>Player Crew</span>
                   <select
                     style={{ ...S.sel, width: "100%" }}
@@ -5177,6 +6331,7 @@ const NPCSheet = ({
                         e.target.value ? parseInt(e.target.value, 10) : "",
                       )
                     }
+                    disabled={campaignId == null || campaignId === ""}
                   >
                     <option value="">— None —</option>
                     {campaignCrews.map((c) => (
@@ -5185,8 +6340,21 @@ const NPCSheet = ({
                       </option>
                     ))}
                   </select>
+                  <div
+                    style={{
+                      fontSize: "10px",
+                      color: "#6b7280",
+                      marginTop: "4px",
+                    }}
+                  >
+                    {campaignId == null || campaignId === ""
+                      ? "Pick a campaign to assign this NPC to a player crew."
+                      : campaignCrews.length === 0
+                        ? "No player crews in this campaign yet."
+                        : "Assign this NPC to a player characters' crew (optional)."}
+                  </div>
                 </div>
-              ) : null}
+              </div>
             </div>
 
             {/* Faction Identity Panel — only shown when a faction is selected */}
@@ -5282,8 +6450,110 @@ const NPCSheet = ({
               {/* Contacts */}
               <div style={S.card}>
                 <span style={S.lbl}>CONTACTS / ASSOCIATES</span>
+                {(factionNpcPeers.length > 0 ||
+                  crewAssociatePcs.length > 0) && (
+                  <div style={{ marginBottom: "10px" }}>
+                    <div
+                      style={{
+                        fontSize: "10px",
+                        color: "#6b7280",
+                        marginBottom: "6px",
+                      }}
+                    >
+                      Auto from faction membership / player crew
+                    </div>
+                    {factionNpcPeers.map((n) => (
+                      <div
+                        key={`peer-${n.id}`}
+                        style={{
+                          display: "flex",
+                          gap: "6px",
+                          marginBottom: "6px",
+                          alignItems: "center",
+                          fontSize: "12px",
+                          color: "#d1d5db",
+                        }}
+                      >
+                        <span style={{ flex: 1, minWidth: 0 }}>
+                          {n.name || n.stand_name || `NPC #${n.id}`}
+                        </span>
+                        <span
+                          style={{
+                            fontSize: "10px",
+                            color: "#a78bfa",
+                            flexShrink: 0,
+                          }}
+                        >
+                          Faction member
+                        </span>
+                        <span
+                          style={{
+                            fontSize: "10px",
+                            color: "#86efac",
+                            flexShrink: 0,
+                          }}
+                        >
+                          Allied
+                        </span>
+                        <ContactOpenButton
+                          link={{ kind: "npc", id: n.id, entity: n }}
+                          onOpenNpc={onOpenNpc}
+                          onOpenCharacter={onOpenCharacter}
+                        />
+                      </div>
+                    ))}
+                    {crewAssociatePcs.map((ch) => (
+                      <div
+                        key={`crew-pc-${ch.id}`}
+                        style={{
+                          display: "flex",
+                          gap: "6px",
+                          marginBottom: "6px",
+                          alignItems: "center",
+                          fontSize: "12px",
+                          color: "#d1d5db",
+                        }}
+                      >
+                        <span style={{ flex: 1, minWidth: 0 }}>
+                          {ch.true_name ||
+                            ch.name ||
+                            ch.alias ||
+                            `PC #${ch.id}`}
+                        </span>
+                        <span
+                          style={{
+                            fontSize: "10px",
+                            color: "#93c5fd",
+                            flexShrink: 0,
+                          }}
+                        >
+                          Player crew
+                        </span>
+                        <span
+                          style={{
+                            fontSize: "10px",
+                            color: "#86efac",
+                            flexShrink: 0,
+                          }}
+                        >
+                          Allied
+                        </span>
+                        <ContactOpenButton
+                          link={{ kind: "pc", id: ch.id, entity: ch }}
+                          onOpenNpc={onOpenNpc}
+                          onOpenCharacter={onOpenCharacter}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <div style={{ marginBottom: "8px" }}>
-                  {(faction ? factionContacts : contacts).map((c, i) => (
+                  {(faction ? factionContacts : contacts).map((c, i) => {
+                    const sheetLink = resolveContactSheetLink(c, {
+                      allNpcs,
+                      campaignPlayerCharacters,
+                    });
+                    return (
                     <div
                       key={i}
                       style={{
@@ -5360,6 +6630,11 @@ const NPCSheet = ({
                         <option value="suspicious">Suspicious</option>
                         <option value="hostile">Hostile</option>
                       </select>
+                      <ContactOpenButton
+                        link={sheetLink}
+                        onOpenNpc={onOpenNpc}
+                        onOpenCharacter={onOpenCharacter}
+                      />
                       <button
                         onClick={() =>
                           faction
@@ -5378,36 +6653,151 @@ const NPCSheet = ({
                         ✕
                       </button>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
-                <button
-                  onClick={() =>
-                    faction
-                      ? setFactionContacts((p) => [
-                          ...p,
-                          { name: "", role: "", disposition: "neutral" },
-                        ])
-                      : setContacts((p) => [
-                          ...p,
-                          { name: "", role: "", disposition: "neutral" },
-                        ])
-                  }
+                <div
                   style={{
-                    ...S.btn,
-                    border: "2px dashed #374151",
-                    background: "transparent",
-                    color: "#6b7280",
-                    width: "100%",
-                    padding: "6px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "6px",
                   }}
                 >
-                  + Add Contact
-                </button>
+                  <select
+                    aria-label="Add existing contact"
+                    value=""
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      e.target.value = "";
+                      if (!raw) return;
+                      const [kind, idStr] = raw.split(":");
+                      const id = Number(idStr);
+                      if (!Number.isFinite(id)) return;
+                      if (kind === "pc") {
+                        const ch = campaignPlayerCharacters.find(
+                          (c) => Number(c.id) === id,
+                        );
+                        const label =
+                          ch?.true_name ||
+                          ch?.name ||
+                          ch?.alias ||
+                          `PC #${id}`;
+                        const row = {
+                          name: label,
+                          role: "Player character",
+                          disposition: "neutral",
+                          character_id: id,
+                        };
+                        if (faction) setFactionContacts((p) => [...p, row]);
+                        else setContacts((p) => [...p, row]);
+                        return;
+                      }
+                      if (kind === "npc") {
+                        const n = (allNpcs || []).find(
+                          (x) => Number(x.id) === id,
+                        );
+                        const label =
+                          n?.name || n?.stand_name || `NPC #${id}`;
+                        const row = {
+                          name: label,
+                          role: "NPC",
+                          disposition: "neutral",
+                          npc_id: id,
+                        };
+                        if (faction) setFactionContacts((p) => [...p, row]);
+                        else setContacts((p) => [...p, row]);
+                      }
+                    }}
+                    style={{
+                      ...S.sel,
+                      width: "100%",
+                      fontSize: "11px",
+                      color: "#9ca3af",
+                    }}
+                  >
+                    <option value="">+ Add existing character or NPC…</option>
+                    {campaignPlayerCharacters.length > 0 ? (
+                      <optgroup label="Player characters">
+                        {campaignPlayerCharacters.map((ch) => (
+                          <option key={`pc-${ch.id}`} value={`pc:${ch.id}`}>
+                            {ch.true_name ||
+                              ch.name ||
+                              ch.alias ||
+                              `PC #${ch.id}`}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ) : null}
+                    {(allNpcs || []).filter(
+                      (n) => Number(n.id) !== Number(npc?.id),
+                    ).length > 0 ? (
+                      <optgroup label="NPCs">
+                        {(allNpcs || [])
+                          .filter((n) => Number(n.id) !== Number(npc?.id))
+                          .map((n) => (
+                            <option key={`npc-${n.id}`} value={`npc:${n.id}`}>
+                              {n.name || n.stand_name || `NPC #${n.id}`}
+                            </option>
+                          ))}
+                      </optgroup>
+                    ) : null}
+                  </select>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "6px",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() =>
+                        faction
+                          ? setFactionContacts((p) => [
+                              ...p,
+                              { name: "", role: "", disposition: "neutral" },
+                            ])
+                          : setContacts((p) => [
+                              ...p,
+                              { name: "", role: "", disposition: "neutral" },
+                            ])
+                      }
+                      style={{
+                        ...S.btn,
+                        border: "2px dashed #374151",
+                        background: "transparent",
+                        color: "#6b7280",
+                        flex: "1 1 140px",
+                        padding: "6px",
+                      }}
+                    >
+                      + Blank contact
+                    </button>
+                    {typeof onCreateCharacter === "function" ? (
+                      <button
+                        type="button"
+                        onClick={() => onCreateCharacter()}
+                        style={{
+                          ...S.btn,
+                          border: "2px dashed #1d4ed8",
+                          background: "transparent",
+                          color: "#93c5fd",
+                          flex: "1 1 140px",
+                          padding: "6px",
+                        }}
+                        title="Open a new player character sheet, then add them here from the list"
+                      >
+                        + New character…
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
               </div>
 
               {/* Faction Status */}
+              <div>
               <div style={S.card}>
-                <span style={S.lbl}>FACTION STATUS</span>
+                <span style={S.lbl}>Faction reputation</span>
                 <div style={{ marginBottom: "8px" }}>
                   {Object.entries(faction ? factionStatusData : factionStatus).map(([fName, value]) => (
                     <div
@@ -5555,6 +6945,126 @@ const NPCSheet = ({
                   · +2 Friendly · +3 Allied
                 </div>
               </div>
+
+              {campaignId != null &&
+              campaignId !== "" &&
+              campaignCrews.length > 0 ? (
+                <div style={S.card}>
+                  <span style={S.lbl}>Player Crew Standing</span>
+                  <div style={{ marginBottom: "8px" }}>
+                    {campaignCrews.map((c) => {
+                      const key = String(c.id);
+                      const value = clampCrewStandingValue(
+                        crewStanding[key] ?? 0,
+                      );
+                      const isMember = Number(currentCrewId) === Number(c.id);
+                      return (
+                        <div
+                          key={c.id}
+                          style={{
+                            display: "flex",
+                            gap: "6px",
+                            marginBottom: "6px",
+                            alignItems: "center",
+                          }}
+                        >
+                          <span
+                            style={{
+                              flex: 1,
+                              fontSize: "12px",
+                              color: "#d1d5db",
+                            }}
+                          >
+                            {c.name}
+                            {isMember ? (
+                              <span
+                                style={{
+                                  marginLeft: "6px",
+                                  fontSize: "10px",
+                                  color: "#a78bfa",
+                                  border: "1px solid #4b2d8f",
+                                  borderRadius: "4px",
+                                  padding: "1px 6px",
+                                }}
+                              >
+                                Crew member
+                              </span>
+                            ) : null}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setCrewStanding((p) => ({
+                                ...p,
+                                [key]: clampCrewStandingValue(
+                                  (p[key] ?? 0) - 1,
+                                ),
+                              }))
+                            }
+                            style={{
+                              ...S.btn,
+                              padding: "1px 6px",
+                              background: "#7f1d1d",
+                              color: "#fca5a5",
+                              fontSize: "11px",
+                            }}
+                          >
+                            −
+                          </button>
+                          <span
+                            style={{
+                              display: "inline-block",
+                              width: "28px",
+                              textAlign: "center",
+                              fontWeight: "bold",
+                              fontSize: "13px",
+                              color:
+                                value > 0
+                                  ? "#34d399"
+                                  : value < 0
+                                    ? "#f87171"
+                                    : "#9ca3af",
+                            }}
+                          >
+                            {value > 0 ? `+${value}` : value}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setCrewStanding((p) => ({
+                                ...p,
+                                [key]: clampCrewStandingValue(
+                                  (p[key] ?? 0) + 1,
+                                ),
+                              }))
+                            }
+                            style={{
+                              ...S.btn,
+                              padding: "1px 6px",
+                              background: "#14532d",
+                              color: "#86efac",
+                              fontSize: "11px",
+                            }}
+                          >
+                            +
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div
+                    style={{
+                      marginTop: "6px",
+                      fontSize: "10px",
+                      color: "#6b7280",
+                    }}
+                  >
+                    −3 War · −2 Hostile · −1 Interfering · 0 Neutral · +1
+                    Helpful · +2 Friendly · +3 Allied
+                  </div>
+                </div>
+              ) : null}
+              </div>
             </div>
 
             {/* Inventory — NPC.inventory when no faction; Faction.inventory when faction selected */}
@@ -5579,120 +7089,48 @@ const NPCSheet = ({
                   />
                 </div>
               ) : (
-                <>
-                  <div
-                    style={{
-                      display: "flex",
-                      flexWrap: "wrap",
-                      gap: "6px",
-                      marginBottom: "8px",
-                    }}
-                  >
-                    {factionInventory.map((item, i) => (
-                      <div
-                        key={i}
-                        style={{
-                          display: "flex",
-                          gap: "4px",
-                          alignItems: "center",
-                          background: "#1f1035",
-                          padding: "4px 8px",
-                          borderRadius: "4px",
-                          border: "1px solid #2d1f52",
-                        }}
-                      >
-                        <input
-                          value={item.name}
-                          placeholder="Item"
-                          onChange={(e) =>
-                            setFactionInventory((p) =>
-                              p.map((x, j) =>
-                                j === i ? { ...x, name: e.target.value } : x,
-                              ),
-                            )
-                          }
-                          style={{
-                            ...S.inp,
-                            width: "120px",
-                            borderBottom: "none",
-                            fontSize: "12px",
-                          }}
-                        />
-                        <input
-                          value={item.qty != null ? item.qty : ""}
-                          placeholder="#"
-                          type="number"
-                          min="0"
-                          onChange={(e) =>
-                            setFactionInventory((p) =>
-                              p.map((x, j) =>
-                                j === i
-                                  ? {
-                                      ...x,
-                                      qty:
-                                        e.target.value === ""
-                                          ? null
-                                          : Number(e.target.value),
-                                    }
-                                  : x,
-                              ),
-                            )
-                          }
-                          style={{
-                            ...S.inp,
-                            width: "36px",
-                            borderBottom: "none",
-                            fontSize: "12px",
-                            textAlign: "center",
-                          }}
-                        />
-                        <button
-                          onClick={() =>
-                            setFactionInventory((p) =>
-                              p.filter((_, j) => j !== i),
-                            )
-                          }
-                          style={{
-                            color: "#f87171",
-                            background: "none",
-                            border: "none",
-                            cursor: "pointer",
-                            fontSize: "12px",
-                          }}
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                  <button
-                    onClick={() =>
-                      setFactionInventory((p) => [...p, { name: "", qty: 1 }])
+                <div style={{ minWidth: 0 }}>
+                  <CharacterSheetInventoryList
+                    panelId="npc-sheet-faction-inventory-panel"
+                    inventory={factionInventory}
+                    readOnly={false}
+                    allowArmor={false}
+                    campaignId={campaignId}
+                    isGM={isGM}
+                    hideAggregateLoad
+                    onChange={setFactionInventory}
+                    onPromoteToCampaign={
+                      isGM ? handlePromoteItemToCampaign : undefined
                     }
-                    style={{
-                      ...S.btn,
-                      border: "2px dashed #374151",
-                      background: "transparent",
-                      color: "#6b7280",
-                      width: "100%",
-                      padding: "6px",
-                    }}
-                  >
-                    + Add Item
-                  </button>
-                </>
+                    onPublishToSite={
+                      isGM ? handlePublishItemToSite : undefined
+                    }
+                  />
+                </div>
               )}
             </div>
 
             {/* Crew Notes */}
             <div style={S.card}>
-              <span style={S.lbl}>CREW NOTES</span>
+              <span style={S.lbl}>Faction Notes</span>
+              {faction ? (
+                <div
+                  style={{
+                    fontSize: "10px",
+                    color: "#6b7280",
+                    marginBottom: "6px",
+                    lineHeight: 1.4,
+                  }}
+                >
+                  Shared for all NPCs in this faction (saved on the faction).
+                </div>
+              ) : null}
               <textarea
                 value={faction ? factionCrewNotes : notes}
                 onChange={(e) =>
                   faction ? setFactionCrewNotes(e.target.value) : setNotes(e.target.value)
                 }
-                placeholder="Crew connections, territory control, gang resources, operations notes…"
+                placeholder="Faction agenda, holdings, rivals, ops, and how they treat the player crew…"
                 style={{
                   width: "100%",
                   height: "140px",

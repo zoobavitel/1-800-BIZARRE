@@ -54,6 +54,13 @@ from .models import (
 from .services.playbook_xp_archetype import normalize_playbook_xp_archetypes
 from .services.inventory import normalize_inventory_list
 from .services.crew_standing import normalize_crew_standing
+from .services.pc_standing import normalize_pc_standing
+from .services.npc_stand_identity import (
+    normalize_stand_consciousness,
+    normalize_stand_forms,
+    normalize_stand_identity_types,
+    normalize_stand_type_custom,
+)
 from .services.loadout import (
     apply_loadout_side_effects,
     merge_loadout_map,
@@ -2377,6 +2384,41 @@ class CharacterSerializer(serializers.ModelSerializer):
         if "inventory" in data:
             data["inventory"] = normalize_inventory_list(data.get("inventory"))
 
+        # Prune / clamp npc_standing to campaign NPCs.
+        campaign_for_npc = data.get("campaign", serializers.empty)
+        if campaign_for_npc is serializers.empty:
+            campaign_for_npc = self.instance.campaign if self.instance else None
+        elif campaign_for_npc is not None and not hasattr(campaign_for_npc, "id"):
+            try:
+                campaign_for_npc = Campaign.objects.get(pk=campaign_for_npc)
+            except Campaign.DoesNotExist:
+                campaign_for_npc = None
+
+        valid_npc_ids = None
+        if campaign_for_npc is not None:
+            c_id = (
+                campaign_for_npc.id
+                if hasattr(campaign_for_npc, "id")
+                else campaign_for_npc
+            )
+            valid_npc_ids = list(
+                NPC.objects.filter(campaign_id=c_id).values_list("id", flat=True)
+            )
+        elif "campaign" in data or "npc_standing" in data:
+            valid_npc_ids = []
+
+        if "npc_standing" in data:
+            data["npc_standing"] = normalize_pc_standing(
+                data.get("npc_standing"), valid_ids=valid_npc_ids
+            )
+        elif self.instance is not None and valid_npc_ids is not None:
+            pruned_npc = normalize_pc_standing(
+                getattr(self.instance, "npc_standing", None) or {},
+                valid_ids=valid_npc_ids,
+            )
+            if pruned_npc != (getattr(self.instance, "npc_standing", None) or {}):
+                data["npc_standing"] = pruned_npc
+
         return apply_portrait_exclusivity(self, data)
 
     def validate_image(self, value):
@@ -3671,6 +3713,42 @@ class NPCSerializer(serializers.ModelSerializer):
             if pruned != (self.instance.crew_standing or {}):
                 attrs["crew_standing"] = pruned
 
+        # Prune / clamp pc_standing to campaign characters.
+        valid_char_ids = None
+        if campaign is not None:
+            c_id = campaign.id if hasattr(campaign, "id") else campaign
+            valid_char_ids = list(
+                Character.objects.filter(campaign_id=c_id).values_list("id", flat=True)
+            )
+        elif campaign is None and ("campaign" in attrs or "pc_standing" in attrs):
+            valid_char_ids = []
+
+        if "pc_standing" in attrs:
+            attrs["pc_standing"] = normalize_pc_standing(
+                attrs.get("pc_standing"), valid_character_ids=valid_char_ids
+            )
+        elif valid_char_ids is not None and self.instance is not None:
+            pruned_pc = normalize_pc_standing(
+                self.instance.pc_standing or {}, valid_character_ids=valid_char_ids
+            )
+            if pruned_pc != (self.instance.pc_standing or {}):
+                attrs["pc_standing"] = pruned_pc
+
+        if "stand_identity_types" in attrs:
+            attrs["stand_identity_types"] = normalize_stand_identity_types(
+                attrs.get("stand_identity_types")
+            )
+        if "stand_forms" in attrs:
+            attrs["stand_forms"] = normalize_stand_forms(attrs.get("stand_forms"))
+        if "stand_type_custom" in attrs:
+            attrs["stand_type_custom"] = normalize_stand_type_custom(
+                attrs.get("stand_type_custom")
+            )
+        if "stand_consciousness" in attrs:
+            attrs["stand_consciousness"] = normalize_stand_consciousness(
+                attrs.get("stand_consciousness")
+            )
+
         return attrs
 
     def get_level(self, obj):
@@ -3732,6 +3810,11 @@ class NPCSerializer(serializers.ModelSerializer):
             "faction_status",
             "inventory",
             "crew_standing",
+            "pc_standing",
+            "stand_identity_types",
+            "stand_type_custom",
+            "stand_forms",
+            "stand_consciousness",
             "conflict_clocks",
             "alt_clocks",
             "heal_quality_fortune_dice",
@@ -3759,6 +3842,39 @@ class NPCSerializer(serializers.ModelSerializer):
             )
             validated_data["crew_standing"] = normalize_crew_standing(
                 validated_data.get("crew_standing"), valid_crew_ids=valid_ids
+            )
+        if "pc_standing" in validated_data:
+            campaign = validated_data.get("campaign")
+            if campaign is None and self.instance is not None:
+                campaign = self.instance.campaign
+            valid_char_ids = (
+                list(
+                    Character.objects.filter(campaign_id=campaign.id).values_list(
+                        "id", flat=True
+                    )
+                )
+                if campaign is not None
+                else []
+            )
+            validated_data["pc_standing"] = normalize_pc_standing(
+                validated_data.get("pc_standing"),
+                valid_character_ids=valid_char_ids,
+            )
+        if "stand_identity_types" in validated_data:
+            validated_data["stand_identity_types"] = normalize_stand_identity_types(
+                validated_data.get("stand_identity_types")
+            )
+        if "stand_forms" in validated_data:
+            validated_data["stand_forms"] = normalize_stand_forms(
+                validated_data.get("stand_forms")
+            )
+        if "stand_type_custom" in validated_data:
+            validated_data["stand_type_custom"] = normalize_stand_type_custom(
+                validated_data.get("stand_type_custom")
+            )
+        if "stand_consciousness" in validated_data:
+            validated_data["stand_consciousness"] = normalize_stand_consciousness(
+                validated_data.get("stand_consciousness")
             )
         if "creator" not in validated_data:
             validated_data["creator"] = self.context["request"].user

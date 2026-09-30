@@ -550,6 +550,39 @@ class NPC(models.Model):
             "keyed by crew id string."
         ),
     )
+    pc_standing = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=(
+            "This NPC's personal standing toward campaign player characters "
+            "(-3 to +3), keyed by character id string."
+        ),
+    )
+    stand_identity_types = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=(
+            "Stand type keys for NPC flavor identity (COLONY, AUTOMATIC, etc.). "
+            "Not wired to PC session XP archetypes."
+        ),
+    )
+    stand_type_custom = models.CharField(
+        max_length=100,
+        blank=True,
+        default="",
+        help_text="Optional fiction-only Stand subtype label.",
+    )
+    stand_forms = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Stand form labels (Humanoid / Non-Humanoid / Phenomenon / custom).",
+    )
+    stand_consciousness = models.CharField(
+        max_length=1,
+        blank=True,
+        default="",
+        help_text="Flavor consciousness grade A–F (empty allowed).",
+    )
 
     # Stand abilities (narrative descriptions; frontend sends array of {id, name, type, description})
     abilities = models.JSONField(default=list, blank=True)
@@ -1341,6 +1374,16 @@ class Character(models.Model):
     # Faction reputation tracking - list of {name: str, rep: int} objects
     faction_reputation = models.JSONField(default=list, blank=True, null=True)
 
+    npc_standing = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=(
+            "This character's personal standing toward campaign NPCs "
+            "(-3 to +3), keyed by NPC id string. Distinct from crew/faction "
+            "reputation."
+        ),
+    )
+
     # GM settings for character creation locking
     gm_character_locked = models.BooleanField(default=False)
     gm_allowed_edit_fields = models.JSONField(default=dict, blank=True, null=True)
@@ -1719,6 +1762,38 @@ def prune_npc_crew_standing_on_crew_delete(sender, instance, **kwargs):
             continue
         next_standing = {k: v for k, v in standing.items() if k != key}
         NPC.objects.filter(pk=npc.pk).update(crew_standing=next_standing)
+
+
+@receiver(post_delete, sender=Character)
+def prune_npc_pc_standing_on_character_delete(sender, instance, **kwargs):
+    """Drop stale pc_standing keys when a character is deleted."""
+    key = str(instance.pk)
+    campaign_id = instance.campaign_id
+    if campaign_id is None:
+        return
+    for npc in NPC.objects.filter(campaign_id=campaign_id).iterator():
+        standing = npc.pc_standing if isinstance(npc.pc_standing, dict) else {}
+        if key not in standing:
+            continue
+        next_standing = {k: v for k, v in standing.items() if k != key}
+        NPC.objects.filter(pk=npc.pk).update(pc_standing=next_standing)
+
+
+@receiver(post_delete, sender=NPC)
+def prune_character_npc_standing_on_npc_delete(sender, instance, **kwargs):
+    """Drop stale npc_standing keys when an NPC is deleted."""
+    key = str(instance.pk)
+    campaign_id = instance.campaign_id
+    if campaign_id is None:
+        return
+    for character in Character.objects.filter(campaign_id=campaign_id).iterator():
+        standing = (
+            character.npc_standing if isinstance(character.npc_standing, dict) else {}
+        )
+        if key not in standing:
+            continue
+        next_standing = {k: v for k, v in standing.items() if k != key}
+        Character.objects.filter(pk=character.pk).update(npc_standing=next_standing)
 
 
 class Stand(models.Model):
