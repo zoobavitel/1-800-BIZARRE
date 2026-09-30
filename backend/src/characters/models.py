@@ -2361,6 +2361,9 @@ class Session(models.Model):
     )
     votes = models.ManyToManyField(User, blank=True, related_name="voted_scores")
 
+    class Meta:
+        ordering = ["-session_date", "-id"]
+
     def __str__(self):
         return f"{self.campaign.name} - {self.name} ({self.get_status_display()}) - {self.session_date.strftime('%Y-%m-%d')}"
 

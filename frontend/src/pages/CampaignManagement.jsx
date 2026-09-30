@@ -2589,6 +2589,16 @@ function sessionListPrimaryDate(session) {
   return "N/A";
 }
 
+/** Newest first by session_date then id (matches SessionViewSet / Session.Meta.ordering). */
+function sortSessionsNewestFirst(list) {
+  return [...(list || [])].sort((a, b) => {
+    const ta = a?.session_date ? new Date(a.session_date).getTime() : 0;
+    const tb = b?.session_date ? new Date(b.session_date).getTime() : 0;
+    if (tb !== ta) return tb - ta;
+    return (Number(b?.id) || 0) - (Number(a?.id) || 0);
+  });
+}
+
 /** Status phrase after `date ·` (Planned / In session / Ended, plus edge labels). */
 function sessionListStatusCaption(session, campaignActiveSessionId) {
   const sid = Number(session?.id);
@@ -2673,7 +2683,7 @@ function CampaignSessionsPanel({
     sessionAPI
       .getSessions(campaign.id)
       .then((list) => {
-        if (!cancelled) setSessions(list || []);
+        if (!cancelled) setSessions(sortSessionsNewestFirst(list || []));
       })
       .catch((e) => {
         if (!cancelled) {
@@ -2698,7 +2708,7 @@ function CampaignSessionsPanel({
         name: `Session ${(sessions?.length || 0) + 1}`,
         status: "PLANNED",
       });
-      setSessions((prev) => [session, ...(prev || [])]);
+      setSessions((prev) => sortSessionsNewestFirst([session, ...(prev || [])]));
       onOpenSession(session);
     } catch (e) {
       setError(e.message);
@@ -2709,7 +2719,7 @@ function CampaignSessionsPanel({
 
   const activeId = campaignActiveSessionId(campaign);
 
-  /** Live campaign session if any; else most recent list row (API/create puts newest first). */
+  /** Live campaign session if any; else most recent list row (newest-first). */
   const { featuredSession, olderSessions } = useMemo(() => {
     const list = sessions || [];
     if (!list.length) {

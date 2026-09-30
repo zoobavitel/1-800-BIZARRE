@@ -71,7 +71,10 @@ class SessionViewSet(viewsets.ModelViewSet):
         if status_param:
             base = base.filter(status=status_param)
 
-        return base.prefetch_related(Prefetch("rolls", queryset=rolls_qs))
+        # Newest first — matches CampaignSerializer.get_sessions and UI featured row.
+        return base.order_by("-session_date", "-id").prefetch_related(
+            Prefetch("rolls", queryset=rolls_qs)
+        )
 
     def perform_create(self, serializer):
         serializer.save()
