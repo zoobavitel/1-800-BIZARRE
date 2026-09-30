@@ -950,6 +950,24 @@ function normalizeNpcStandingLocal(raw) {
   return out;
 }
 
+/** Read −3…+3 from a standing map; keys may be string or number ids. */
+function standingMapLookup(map, idKey) {
+  if (!map || typeof map !== "object" || Array.isArray(map)) return 0;
+  const sk = String(idKey ?? "").trim();
+  if (!sk) return 0;
+  if (Object.prototype.hasOwnProperty.call(map, sk)) {
+    return clampNpcStandingValue(map[sk]);
+  }
+  const asNum = Number(sk);
+  if (
+    Number.isFinite(asNum) &&
+    Object.prototype.hasOwnProperty.call(map, asNum)
+  ) {
+    return clampNpcStandingValue(map[asNum]);
+  }
+  return 0;
+}
+
 const CharacterSheetWrapper = ({
   character,
   onClose,
@@ -3089,6 +3107,8 @@ const CharacterSheetWrapper = ({
   /** Optimistic NPC.pc_standing[this PC] overlays for NPC STANDING panel. */
   const [npcTowardMeOverrides, setNpcTowardMeOverrides] = useState({});
   const [npcTowardMeErr, setNpcTowardMeErr] = useState(null);
+  /** Per-NPC patch generation — stale failures must not roll back newer −/+ clicks. */
+  const npcTowardMePatchGenRef = useRef({});
   const [crewHistoryEntries, setCrewHistoryEntries] = useState([]);
   const [crewHistoryOpen, setCrewHistoryOpen] = useState(() =>
     readCharSheetBool(characterId, "crew-history", false),
@@ -3100,6 +3120,7 @@ const CharacterSheetWrapper = ({
     setFactionNpcVisErr(null);
     setNpcTowardMeOverrides({});
     setNpcTowardMeErr(null);
+    npcTowardMePatchGenRef.current = {};
   }, [charCampaign?.id, characterId]);
 
   /** Drop overrides once campaign payload matches (keep them through stale SSE/poll). */
@@ -3154,11 +3175,7 @@ const CharacterSheetWrapper = ({
         const id = Number(k);
         const npc = byId.get(id);
         if (!npc) continue;
-        const map =
-          npc.pc_standing && typeof npc.pc_standing === "object"
-            ? npc.pc_standing
-            : {};
-        const serverVal = clampNpcStandingValue(map[meKey] ?? 0);
+        const serverVal = standingMapLookup(npc.pc_standing, meKey);
         if (serverVal === clampNpcStandingValue(prev[id])) {
           delete next[id];
           changed = true;
@@ -3223,11 +3240,7 @@ const CharacterSheetWrapper = ({
       const meKey =
         characterId != null && characterId !== "" ? String(characterId) : null;
       if (!meKey) return 0;
-      const map =
-        npc?.pc_standing && typeof npc.pc_standing === "object"
-          ? npc.pc_standing
-          : {};
-      return clampNpcStandingValue(map[meKey] ?? 0);
+      return standingMapLookup(npc?.pc_standing, meKey);
     },
     [npcTowardMeOverrides, characterId],
   );
@@ -3240,18 +3253,24 @@ const CharacterSheetWrapper = ({
         characterId != null && characterId !== "" ? String(characterId) : null;
       if (!Number.isFinite(npcId) || !meKey) return;
       const clamped = clampNpcStandingValue(nextValue);
+      const gen = (npcTowardMePatchGenRef.current[npcId] || 0) + 1;
+      npcTowardMePatchGenRef.current[npcId] = gen;
       setNpcTowardMeErr(null);
       setNpcTowardMeOverrides((prev) => ({ ...prev, [npcId]: clamped }));
-      const prevMap =
-        npc?.pc_standing && typeof npc.pc_standing === "object"
-          ? { ...npc.pc_standing }
-          : {};
+      // Start from server map, then overlay any in-flight toward-me overrides so
+      // rapid −/+ does not PATCH a stale pc_standing snapshot.
+      const prevMap = normalizeNpcStandingLocal(npc?.pc_standing);
+      const nextMap = { ...prevMap, [meKey]: clamped };
       try {
-        await npcAPI.patchNPC(npcId, {
-          pc_standing: { ...prevMap, [meKey]: clamped },
+        const saved = await npcAPI.patchNPC(npcId, {
+          pc_standing: nextMap,
         });
+        if (npcTowardMePatchGenRef.current[npcId] !== gen) return;
+        const echoed = standingMapLookup(saved?.pc_standing, meKey);
+        setNpcTowardMeOverrides((prev) => ({ ...prev, [npcId]: echoed }));
         await onCampaignRefresh?.();
       } catch (e) {
+        if (npcTowardMePatchGenRef.current[npcId] !== gen) return;
         setNpcTowardMeOverrides((prev) => {
           const next = { ...prev };
           delete next[npcId];

@@ -346,6 +346,22 @@ function normalizeSheetPayloadToFrontend(payload, traumasList = []) {
     id: payload.id,
     inventory: payload.inventory ?? [],
     reputation_status: payload.reputation_status ?? {},
+    // Must pass through — dropping these makes autosave PATCH empty maps / blank notes,
+    // then hydrate snaps the −/+ standing controls (and notes) back after a flicker.
+    sheetNotes: payload.sheetNotes ?? payload.sheet_notes ?? "",
+    npcStanding: (() => {
+      const raw = payload.npcStanding ?? payload.npc_standing ?? {};
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+      const out = {};
+      for (const [k, v] of Object.entries(raw)) {
+        const sk = String(k).trim();
+        if (!sk || !/^\d+$/.test(sk)) continue;
+        const n = Number(v);
+        if (!Number.isFinite(n)) continue;
+        out[sk] = Math.max(-3, Math.min(3, Math.trunc(n)));
+      }
+      return out;
+    })(),
     selected_benefits: payload.selected_benefits ?? [],
     selected_detriments: payload.selected_detriments ?? [],
     image_url: payload.image_url ?? "",
@@ -1130,6 +1146,29 @@ export default function CharacterPage({
               return echoed;
             }
             return fromPayload || savedFrontend.sheetNotes || "";
+          })(),
+          // Same class as notes/inventory: empty npc_standing echo must not wipe local −/+ edits.
+          npcStanding: (() => {
+            const fromPayload =
+              frontend.npcStanding ??
+              payload.npcStanding ??
+              payload.npc_standing ??
+              {};
+            const fromServer = savedFrontend.npcStanding ?? {};
+            const payloadKeys = Object.keys(fromPayload || {});
+            const serverKeys = Object.keys(fromServer || {});
+            if (
+              saved &&
+              Object.prototype.hasOwnProperty.call(saved, "npc_standing")
+            ) {
+              if (serverKeys.length === 0 && payloadKeys.length > 0) {
+                return { ...fromPayload };
+              }
+              return { ...fromServer };
+            }
+            return payloadKeys.length > 0
+              ? { ...fromPayload }
+              : { ...fromServer };
           })(),
           // Prefer richer payload customs when echo lost/weakened the unique package.
           abilities: mergeAbilitiesPreferRicherCustoms(
