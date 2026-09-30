@@ -1,96 +1,139 @@
 # bizarre-api (Proxmox LXC) deployment
 
-Paths assume clone at `/opt/bizarre` and venv at `/opt/bizarre/.venv`.
+## Two trees + shared host paths
 
-## Getting code onto the CT (you usually do **not** need rsync)
+| Path | Role |
+|------|------|
+| `/opt/bizarre` | **Agent / ops workspace.** Any branch, dirty OK. Cursor agents work here. Never point gunicorn here. |
+| `/opt/bizarre-prod` | **Production code checkout.** Detached at `origin/master` (or a rollback SHA). Own venv. |
+| `/etc/bizarre/prod.env` | **Single prod secrets file.** Units + `BIZARRE_ENV_FILE`. Not under either git tree. |
+| `/var/lib/bizarre/media` | **Prod uploads (MEDIA_ROOT).** Outside git — safe from `git clean`. |
 
-- **Normal path:** `git clone` / `git pull` from GitHub on the container (what `/opt/bizarre` is for). Push from your dev machine, pull on the server — no rsync.
-- **Use rsync (or `scp`) only if:** you have **uncommitted** changes you refuse to push yet, a **private** fork you do not want on GitHub, or you are copying **data** (e.g. `db.sqlite3`, media) — not the whole tree every time.
+### Why the code split is not enough
 
-After pull on the server, reinstall deps if `requirements*.txt` changed: `pip install -r backend/requirements.txt` and `pip install -r backend/requirements-prod.txt`.
+Gunicorn must not serve agent WIP — that is the code split. Agents must also **not share the prod database by default**. If `/opt/bizarre/backend/src/.env` still points at `bizarre_db`, then `manage.py migrate` on a feature branch migrates live prod before that code is deployed. Default agent setup:
 
-## MVP testing (before and after migration)
+- On `/opt/bizarre`, `manage.py` defaults to `app.settings_agent` (CI/local use `app.settings`; prod units set `app.settings_prod`)
+- `DB_NAME=bizarre_db_dev` (snapshot; see `bootstrap-agent-dev-db.sh`)
+- Redis DB index `1` (prod uses `0`)
 
-**Before cutover (on your dev machine):** run the full backend test suite and a production frontend build. In Cursor you can use the **test-runner-django-frontend** subagent, which runs the same checks as [.cursor/rules/pr-before-build.mdc](../../.cursor/rules/pr-before-build.mdc): `python manage.py test` from `backend/src` (with venv) and `npm run build` for the frontend.
+Touching live data (mid-session restore) requires **`ALLOW_PROD_DB=1`** plus `DB_NAME` set to prod — otherwise `settings_agent` raises `ImproperlyConfigured`. Stronger optional layer: Postgres role for agents with no `CONNECT` on the prod DB.
 
-**After deploy (on bizarre-api):** from `/opt/bizarre/backend/src` with `DJANGO_SETTINGS_MODULE=app.settings_prod`, run `python manage.py check` and `python manage.py test` (Postgres must be up). Then smoke-test the live app: GitHub Pages → **Game server URL** with your public API base ending in `/api`.
+### One-time cutover (between sessions)
 
-Re-run the same **post-migration** checks after any change that affects rolls, sessions, or API contracts.
+Do **not** stop gunicorn until step 6.
+
+1. **Bootstrap prod tree + rsync media (copy, not move):**
+   ```bash
+   bash /opt/bizarre/deploy/bizarre-api/bootstrap-prod-tree.sh
+   ```
+2. **Agent dev DB snapshot:**
+   ```bash
+   bash /opt/bizarre/deploy/bizarre-api/bootstrap-agent-dev-db.sh
+   cp /opt/bizarre/deploy/bizarre-api/agent.env.example /opt/bizarre/backend/src/.env
+   # set DB_PASSWORD; confirm DB_NAME=bizarre_db_dev
+   ```
+3. **Install units + Caddy** (media root → `/var/lib/bizarre/media`):
+   ```bash
+   sudo cp /opt/bizarre-prod/deploy/bizarre-api/gunicorn.service /etc/systemd/system/
+   sudo cp /opt/bizarre-prod/deploy/bizarre-api/celery-worker.service /etc/systemd/system/
+   # edit /etc/caddy/Caddyfile media root (see Caddyfile.example)
+   sudo systemctl daemon-reload
+   sudo systemctl restart gunicorn celery-worker
+   sudo systemctl reload caddy
+   ```
+4. **Verify:** log in, open a campaign with images, upload a portrait, confirm a celery task runs.
+5. **Final media rsync** (cutover only — **not** part of CI deploy):
+   ```bash
+   rsync -a /opt/bizarre/backend/src/media/ /var/lib/bizarre/media/
+   # After things look good for a few days, remove the old tree copy so agents
+   # cannot pollute prod media:
+   # rm -rf /opt/bizarre/backend/src/media
+   ```
+6. Leave `/opt/bizarre` alone for a few days — rollback is reverting the unit files + Caddy media path.
+
+Confirm host wiring after install:
+
+```bash
+grep -r /opt/bizarre /etc   # expect agent paths gone from gunicorn/celery/caddy
+# prod clone can git fetch (same credentials as agent remote)
+# deploy pip installs into /opt/bizarre-prod/.venv only
+```
+
+### Ongoing deploys
+
+Manual GitHub Actions `workflow_dispatch` → `deploy-lxc` (must run on `master`). Remote script (`set -euo pipefail` inside SSH):
+
+1. Abort if `/opt/bizarre-prod` or `/etc/bizarre/prod.env` missing, or prod tree dirty (`git status --porcelain`).
+2. `git fetch` + `git checkout --detach origin/master`.
+3. pip into **prod** venv / migrate / collectstatic / restart units.
+
+Fail loud. No `reset --hard`, no `clean -fd`, no checkout of `/opt/bizarre`, no media rsync from the agent tree (that is cutover-only).
+
+Rollback of live code: `cd /opt/bizarre-prod && git fetch origin && git checkout --detach <sha>` then restart gunicorn/celery.
+
+---
+
+## Getting code onto the CT
+
+- **Prod:** CI detach-checkout (or manual detach in `/opt/bizarre-prod`). Merge to `master` first.
+- **Agent:** any branch in `/opt/bizarre`; does not update live API.
+- **rsync/scp:** data only (DB dumps, media) — not the whole app tree every time.
+
+## MVP testing
+
+**Before cutover:** full backend tests + frontend build (see [.cursor/rules/pr-before-build.mdc](../../.cursor/rules/pr-before-build.mdc)).
+
+**After deploy:** from `/opt/bizarre-prod/backend/src` with `DJANGO_SETTINGS_MODULE=app.settings_prod` and `BIZARRE_ENV_FILE=/etc/bizarre/prod.env`, run `python manage.py check`. Smoke-test GitHub Pages → public API `/api`.
 
 ## 1. Environment
 
-Copy [`env.example`](env.example) to `/opt/bizarre/backend/src/.env` and set `SECRET_KEY`, `DB_PASSWORD`, and comma-separated `ALLOWED_HOSTS` / `CORS_ALLOWED_ORIGINS` (include `https://zoobavitel.github.io` for GitHub Pages).
+| File | Purpose |
+|------|---------|
+| [`env.example`](env.example) → `/etc/bizarre/prod.env` | Production only (mode `0640`) |
+| [`agent.env.example`](agent.env.example) → `/opt/bizarre/backend/src/.env` | Agent Postgres clone |
+
+Do **not** keep a second `.env` under `/opt/bizarre-prod`. Units set **only** `BIZARRE_ENV_FILE=/etc/bizarre/prod.env` (no `EnvironmentFile=` — that would inject values into `os.environ` and let systemd-mangled `$` override decouple). Install the file `0640 root:root` (or `root:<service-user>`). Missing file → Django/decouple fail at startup rather than silently using empty defaults.
 
 ## 2. Django (check, migrate, static, superuser)
 
 ```bash
-bash /opt/bizarre/deploy/bizarre-api/initial-deploy.sh
-cd /opt/bizarre/backend/src && source /opt/bizarre/.venv/bin/activate
+bash /opt/bizarre-prod/deploy/bizarre-api/initial-deploy.sh
+cd /opt/bizarre-prod/backend/src && source /opt/bizarre-prod/.venv/bin/activate
+export BIZARRE_ENV_FILE=/etc/bizarre/prod.env DJANGO_SETTINGS_MODULE=app.settings_prod
 python manage.py createsuperuser
 ```
 
-### Reference data (heritage benefits / detriments)
-
-Migrations can seed **Heritage** rows while **Benefit** / **Detriment** tables stay empty if fixtures were never loaded. The sheet then shows heritages with no pick lists. With `DJANGO_SETTINGS_MODULE=app.settings_prod`, run once:
+### Reference data
 
 ```bash
-cd /opt/bizarre/backend/src && source /opt/bizarre/.venv/bin/activate
+cd /opt/bizarre-prod/backend/src && source /opt/bizarre-prod/.venv/bin/activate
+export BIZARRE_ENV_FILE=/etc/bizarre/prod.env DJANGO_SETTINGS_MODULE=app.settings_prod
 python manage.py load_srd_reference_data
 ```
 
-The command loads `srd_benefits` / `srd_detriments` only when the corresponding table is empty.
-
 ## 3. systemd
 
-**Paths:** Unit files live under **`/opt/bizarre/deploy/bizarre-api/`** (repo root), not under `backend/src`. If you `cd` into `backend/src`, relative `deploy/...` will fail — always use the absolute paths below.
-
 ```bash
-sudo cp /opt/bizarre/deploy/bizarre-api/gunicorn.service /etc/systemd/system/
-sudo cp /opt/bizarre/deploy/bizarre-api/celery-worker.service /etc/systemd/system/
+sudo cp /opt/bizarre-prod/deploy/bizarre-api/gunicorn.service /etc/systemd/system/
+sudo cp /opt/bizarre-prod/deploy/bizarre-api/celery-worker.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now gunicorn celery-worker
 sudo systemctl status gunicorn celery-worker --no-pager
 ```
 
-Units rely on **`WorkingDirectory=/opt/bizarre/backend/src`** so **python-decouple** loads `.env` there. Do not use `EnvironmentFile=` for `.env` in systemd: it mangles values containing **`$`**, which breaks `SECRET_KEY` and DB passwords.
-
-Adjust `User=` / paths if you run as non-root.
-
 ## 4. Caddy
 
 ```bash
-sudo cp /opt/bizarre/deploy/bizarre-api/Caddyfile.example /etc/caddy/Caddyfile
-# Edit domain, then:
+sudo cp /opt/bizarre-prod/deploy/bizarre-api/Caddyfile.example /etc/caddy/Caddyfile
+# Edit domain; media root must be /var/lib/bizarre/media
 sudo systemctl reload caddy
 ```
 
-The example Caddyfile serves **`/media/*`** from `/opt/bizarre/backend/src/media` (Django `MEDIA_ROOT`) so uploaded PC/NPC/crew/faction/user portraits are reachable when `DEBUG=False`. Include that `media/` directory in backups alongside the database — Postgres dumps do not contain uploaded files.
+Back up `/var/lib/bizarre/media` with the database — Postgres dumps do not contain uploads.
 
-**Ngrok note:** If ngrok tunnels straight to gunicorn `:8000` (not through Caddy), Django itself must serve `/media/` — `app/urls.py` mounts `django.views.static.serve` when `DEBUG=False` for that path. Prefer Caddy (or another reverse proxy) `file_server` when the public URL goes through it.
+**Ngrok:** agent ngrok against `/opt/bizarre` + `settings_agent` is separate from prod Caddy → gunicorn.
 
-## 5. Firewall (example, ufw)
+## 5. Firewall / Pi-hole / Tailscale / SQLite migration / backups
 
-```bash
-sudo ufw allow 22/tcp
-sudo ufw allow 80/tcp
-sudo ufw allow 443/tcp
-sudo ufw enable
-```
-
-Do not expose PostgreSQL (5432) or Redis (6379) publicly.
-
-## 6. Pi-hole
-
-Local DNS: `bizarre-api` → `192.168.1.204` (or your CT IP).
-
-## 7. SQLite → Postgres (optional)
-
-From a dev machine with SQLite data, see [../../docs/DEPLOY_SQLITE_TO_POSTGRES.md](../../docs/DEPLOY_SQLITE_TO_POSTGRES.md).
-
-## 8. Tailscale (optional)
-
-Install Tailscale on the CT for tailnet access; use **Funnel** or **Serve** for a public HTTPS URL, then add that hostname to `ALLOWED_HOSTS` and `CORS_ALLOWED_ORIGINS`.
-
-## 9. Backups
-
-See [`postgres-backup-cron.example.sh`](postgres-backup-cron.example.sh). Take a Proxmox snapshot before major upgrades.
+Unchanged in spirit — see prior sections. Postgres backups: [`postgres-backup-cron.example.sh`](postgres-backup-cron.example.sh). Include `/var/lib/bizarre/media` in host backups. Take a Proxmox snapshot before major upgrades.

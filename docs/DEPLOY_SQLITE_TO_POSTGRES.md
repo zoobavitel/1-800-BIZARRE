@@ -20,8 +20,8 @@ Adjust `--exclude` if you need fewer tables.
 Copy `jojo-dump.json` to the server, then:
 
 ```bash
-cd /opt/bizarre/backend/src
-source /opt/bizarre/.venv/bin/activate
+cd /opt/bizarre-prod/backend/src
+source /opt/bizarre-prod/.venv/bin/activate
 export DJANGO_SETTINGS_MODULE=app.settings_prod
 python manage.py loaddata /path/to/jojo-dump.json
 ```

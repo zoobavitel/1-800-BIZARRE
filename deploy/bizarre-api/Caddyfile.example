@@ -2,10 +2,9 @@
 # Caddy obtains Let's Encrypt certs automatically for public DNS pointing at this host.
 
 api.example.com {
-	# Serve uploaded portraits/avatars from Django MEDIA_ROOT before the API proxy.
-	# Path must match MEDIA_ROOT on the host (see settings_prod.py / deploy README).
+	# Serve uploaded portraits/avatars from MEDIA_ROOT (outside git trees).
 	handle_path /media/* {
-		root * /opt/bizarre/backend/src/media
+		root * /var/lib/bizarre/media
 		file_server
 	}
 
@@ -18,7 +17,7 @@ api.example.com {
 # :443 {
 # 	tls internal
 # 	handle_path /media/* {
-# 		root * /opt/bizarre/backend/src/media
+# 		root * /var/lib/bizarre/media
 # 		file_server
 # 	}
 # 	handle {

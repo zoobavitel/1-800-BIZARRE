@@ -374,13 +374,32 @@ jobs:
           command_timeout: 20m
           script: |
             set -euo pipefail
-            cd /opt/bizarre
-            git pull --ff-only
+            # Prod serves /opt/bizarre-prod only (detached origin/master).
+            # Agent workspace /opt/bizarre is never touched — unfinished WIP
+            # must not go live on gunicorn restart.
+            PROD_ROOT=/opt/bizarre-prod
+            if [ ! -d "$PROD_ROOT/.git" ]; then
+              echo "Deploy aborted: missing $PROD_ROOT — run deploy/bizarre-api/bootstrap-prod-tree.sh once"
+              exit 1
+            fi
+            if [ ! -f /etc/bizarre/prod.env ]; then
+              echo "Deploy aborted: missing /etc/bizarre/prod.env"
+              exit 1
+            fi
+            cd "$PROD_ROOT"
+            git fetch origin
+            if [ -n "$(git status --porcelain)" ]; then
+              echo "Deploy aborted: dirty working tree in $PROD_ROOT"
+              git status -sb
+              exit 1
+            fi
+            git checkout --detach origin/master
             source .venv/bin/activate
             pip install -q -r backend/requirements.txt
             pip install -q -r backend/requirements-prod.txt
             cd backend/src
             export DJANGO_SETTINGS_MODULE=app.settings_prod
+            export BIZARRE_ENV_FILE=/etc/bizarre/prod.env
             python manage.py migrate --noinput
             python manage.py collectstatic --noinput
             sudo systemctl restart gunicorn
