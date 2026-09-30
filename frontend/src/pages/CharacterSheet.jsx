@@ -3153,41 +3153,17 @@ const CharacterSheetWrapper = ({
     [onCampaignRefresh],
   );
 
-  /** NPC STANDING: omit NPCs with See off (incl. optimistic Hide all). */
+  /** NPC STANDING: GM sees all; players only See-on NPCs (faction optional). */
   const campaignNpcsForStanding = useMemo(() => {
-    const facById = new Map(
-      (charCampaign?.factions || []).map((f) => [Number(f.id), f]),
+    if (isGM || isCampaignGm) {
+      return campaignNpcsRawForStanding;
+    }
+    return campaignNpcsRawForStanding.filter((n) =>
+      resolveNpcPlayerVisible(n),
     );
-    const npcFactionId = (npc) => {
-      const fromNpc =
-        npc?.faction != null
-          ? Number(npc.faction)
-          : npc?.faction_id != null
-            ? Number(npc.faction_id)
-            : NaN;
-      if (Number.isFinite(fromNpc)) return fromNpc;
-      for (const f of charCampaign?.factions || []) {
-        if ((f.npcs || []).some((n) => Number(n?.id) === Number(npc?.id))) {
-          return Number(f.id);
-        }
-      }
-      return null;
-    };
-    return campaignNpcsRawForStanding.filter((n) => {
-      if (!resolveNpcPlayerVisible(n)) return false;
-      // Non-GM: also require revealed faction + players_see_npcs (server usually already did).
-      if (isGM || isCampaignGm) return true;
-      const fid = npcFactionId(n);
-      if (fid == null || !Number.isFinite(fid)) return false;
-      const fac = facById.get(fid);
-      if (!fac || fac.visible_to_players === false) return false;
-      if (fac.players_see_npcs === false) return false;
-      return true;
-    });
   }, [
     campaignNpcsRawForStanding,
     resolveNpcPlayerVisible,
-    charCampaign?.factions,
     isGM,
     isCampaignGm,
   ]);
@@ -22840,6 +22816,9 @@ const CharacterSheetWrapper = ({
                             const portraitSrc = resolveMediaUrl(
                               npc.image || npc.image_url || "",
                             );
+                            const playerSees = resolveNpcPlayerVisible(npc);
+                            const gmHidden =
+                              (isGM || isCampaignGm) && !playerSees;
                             return (
                               <div
                                 key={npc.id}
@@ -22848,6 +22827,7 @@ const CharacterSheetWrapper = ({
                                   gap: "6px",
                                   marginBottom: "6px",
                                   alignItems: "center",
+                                  opacity: gmHidden ? 0.45 : 1,
                                 }}
                               >
                                 <div
@@ -22896,6 +22876,33 @@ const CharacterSheetWrapper = ({
                                 >
                                   {label}
                                 </span>
+                                {isGM || isCampaignGm ? (
+                                  <label
+                                    style={{
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      gap: 3,
+                                      fontSize: 10,
+                                      color: "#9ca3af",
+                                      cursor: "pointer",
+                                      flexShrink: 0,
+                                      userSelect: "none",
+                                    }}
+                                    title="Players see this NPC"
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={playerSees}
+                                      onChange={(e) => {
+                                        void patchFactionNpcVisibility(
+                                          [npc.id],
+                                          e.target.checked,
+                                        );
+                                      }}
+                                    />
+                                    See
+                                  </label>
+                                ) : null}
                                 <button
                                   type="button"
                                   disabled={!canEditSheet}
@@ -22993,7 +23000,7 @@ const CharacterSheetWrapper = ({
                         {campaignId
                           ? isGM || isCampaignGm
                             ? "No campaign NPCs yet."
-                            : "No revealed campaign NPCs yet."
+                            : "No visible campaign NPCs yet."
                           : "Assign this character to a campaign to track NPC standing."}
                       </div>
                     )}

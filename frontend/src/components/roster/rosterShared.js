@@ -28,33 +28,72 @@ export function measureRosterExpandTop(tokensEl, expandedEl) {
   return Math.max(0, cardBottom - rootTop + (tokensEl.scrollTop || 0));
 }
 
+function npcPlayerVisible(npc) {
+  return npc?.visible_to_players !== false;
+}
+
+function dedupeNpcsById(list) {
+  const seen = new Set();
+  const out = [];
+  for (const n of list) {
+    const id = Number(n?.id);
+    if (!Number.isFinite(id) || seen.has(id)) continue;
+    seen.add(id);
+    out.push(n);
+  }
+  return out;
+}
+
 /**
  * Filter faction/NPC roster groups for non-GM players.
  * - Faction shown when visible_to_players !== false
- * - NPCs in that faction when players_see_npcs !== false
- * - Per-NPC visible_to_players !== false (GM still sees all)
- * - Unaffiliated NPCs hidden (no visibility toggle)
+ * - NPCs nest under faction when players_see_npcs !== false and See on
+ * - See-on NPCs from hidden factions (or players_see_npcs=false) promote to unaffiliated
+ * - True orphans with See on appear in unaffiliated
  * - Strip tier/hold/rep/notes fields players_see_* hides
  */
 export function filterFactionRosterForPlayerView(factionGroups, unaffiliated) {
   const groups = Array.isArray(factionGroups) ? factionGroups : [];
-  const filteredGroups = groups
-    .filter(({ faction }) => faction && faction.visible_to_players !== false)
-    .map(({ faction, npcs }) => {
-      const seeNpcs = faction.players_see_npcs !== false;
-      const list = seeNpcs
-        ? (Array.isArray(npcs) ? npcs : []).filter(
-            (n) => n?.visible_to_players !== false,
-          )
-        : [];
-      return {
+  const filteredGroups = [];
+  const promoted = [];
+
+  for (const entry of groups) {
+    const faction = entry?.faction;
+    const npcs = Array.isArray(entry?.npcs) ? entry.npcs : [];
+    if (!faction) continue;
+
+    if (faction.visible_to_players === false) {
+      for (const n of npcs) {
+        if (npcPlayerVisible(n)) promoted.push(n);
+      }
+      continue;
+    }
+
+    const seeNpcs = faction.players_see_npcs !== false;
+    if (!seeNpcs) {
+      for (const n of npcs) {
+        if (npcPlayerVisible(n)) promoted.push(n);
+      }
+      filteredGroups.push({
         faction: sanitizeFactionFieldsForPlayer(faction),
-        npcs: list,
-      };
+        npcs: [],
+      });
+      continue;
+    }
+
+    filteredGroups.push({
+      faction: sanitizeFactionFieldsForPlayer(faction),
+      npcs: npcs.filter(npcPlayerVisible),
     });
+  }
+
+  const orphans = (Array.isArray(unaffiliated) ? unaffiliated : []).filter(
+    npcPlayerVisible,
+  );
+
   return {
     factionGroups: filteredGroups,
-    unaffiliated: [],
+    unaffiliated: dedupeNpcsById([...orphans, ...promoted]),
   };
 }
 
@@ -91,23 +130,46 @@ export function canEditRosterPc(character, user, isGM) {
 
 /**
  * Filter session factionPairs / ungrouped for non-GM players.
+ * See-on NPCs whose faction is hidden or has players_see_npcs=false become ungrouped.
  * @param {Array<[number|string, object[]]>} factionPairs
  * @param {Record<string, object>} factionsById
+ * @param {object[]} [ungrouped]
  */
-export function filterSessionFactionPairsForPlayer(factionPairs, factionsById) {
+export function filterSessionFactionPairsForPlayer(
+  factionPairs,
+  factionsById,
+  ungrouped = [],
+) {
   const pairs = Array.isArray(factionPairs) ? factionPairs : [];
   const filtered = [];
+  const promoted = [];
   for (const [fid, npcList] of pairs) {
     const fac =
       factionsById?.[fid] ||
       factionsById?.[String(fid)] ||
       {};
-    if (fac.visible_to_players === false) continue;
+    const list = npcList || [];
+    if (fac.visible_to_players === false) {
+      for (const n of list) {
+        if (npcPlayerVisible(n)) promoted.push(n);
+      }
+      continue;
+    }
     const seeNpcs = fac.players_see_npcs !== false;
-    const list = seeNpcs
-      ? (npcList || []).filter((n) => n?.visible_to_players !== false)
-      : [];
-    filtered.push([fid, list]);
+    if (!seeNpcs) {
+      for (const n of list) {
+        if (npcPlayerVisible(n)) promoted.push(n);
+      }
+      filtered.push([fid, []]);
+      continue;
+    }
+    filtered.push([fid, list.filter(npcPlayerVisible)]);
   }
-  return { factionPairs: filtered, ungrouped: [] };
+  const orphans = (Array.isArray(ungrouped) ? ungrouped : []).filter(
+    npcPlayerVisible,
+  );
+  return {
+    factionPairs: filtered,
+    ungrouped: dedupeNpcsById([...orphans, ...promoted]),
+  };
 }

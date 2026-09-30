@@ -134,3 +134,25 @@ class FactionPlayersSeeFieldsTests(TestCase):
         self.faction.refresh_from_db()
         self.assertTrue(self.faction.players_see_tier)
         self.assertTrue(self.faction.players_see_npcs)
+
+    def test_player_crew_relationships_omit_hidden_faction(self):
+        hidden = Faction.objects.create(
+            name="Secret Org",
+            campaign=self.campaign,
+            visible_to_players=False,
+        )
+        CrewFactionRelationship.objects.create(
+            crew=self.crew,
+            faction=hidden,
+            reputation_value=-3,
+        )
+        client = APIClient()
+        client.force_authenticate(self.player)
+        r = client.get(self.crew_url)
+        self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
+        names = {
+            row.get("faction_name")
+            for row in (r.data.get("faction_relationships") or [])
+        }
+        self.assertIn("Hidden Bits", names)
+        self.assertNotIn("Secret Org", names)
