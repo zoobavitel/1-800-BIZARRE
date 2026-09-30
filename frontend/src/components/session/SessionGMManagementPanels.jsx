@@ -3665,6 +3665,14 @@ export default function SessionGMManagementPanels({
       if (!npcId || !partial) return;
       setNpcUiBusyKey(`edit:${npcId}`);
       setError(null);
+      setNpcDetailById((p) => ({
+        ...p,
+        [npcId]: {
+          ...(p[npcId] || { id: npcId }),
+          ...partial,
+          id: npcId,
+        },
+      }));
       try {
         await npcAPI.patchNPC(npcId, partial);
         const full = await npcAPI.getNPC(npcId).catch(() => null);
@@ -3673,6 +3681,11 @@ export default function SessionGMManagementPanels({
         }
         onRefresh?.();
       } catch (e) {
+        setNpcDetailById((p) => {
+          const next = { ...p };
+          delete next[npcId];
+          return next;
+        });
         setError(e?.message || "NPC update failed");
       } finally {
         setNpcUiBusyKey(null);
@@ -5170,8 +5183,7 @@ export default function SessionGMManagementPanels({
                         </label>
                       ))}
                     </div>
-                    {draft.players_see_npcs !== false &&
-                    draft.visible_to_players ? (
+                    {draft.players_see_npcs !== false ? (
                       <div
                         style={{
                           marginTop: 8,
@@ -5190,13 +5202,133 @@ export default function SessionGMManagementPanels({
                           }}
                         >
                           NPC visibility
+                          {!draft.visible_to_players ? (
+                            <span style={{ textTransform: "none", marginLeft: 6 }}>
+                              (applies after faction is revealed)
+                            </span>
+                          ) : null}
                         </div>
                         {(factionNpcList || []).length === 0 ? (
                           <div style={{ fontSize: 11, color: "#6b7280" }}>
                             No NPCs in this faction yet.
                           </div>
                         ) : (
-                          (factionNpcList || []).map((n) => (
+                          <>
+                            <div
+                              style={{
+                                display: "flex",
+                                gap: 6,
+                                flexWrap: "wrap",
+                                marginBottom: 8,
+                              }}
+                            >
+                              <button
+                                type="button"
+                                disabled={saving || !!npcUiBusyKey}
+                                style={{
+                                  ...S.btn,
+                                  fontSize: 10,
+                                  padding: "2px 6px",
+                                }}
+                                title="Players can see all NPCs in this faction"
+                                onClick={() => {
+                                  const ids = (factionNpcList || [])
+                                    .map((n) => n?.id)
+                                    .filter((id) => id != null);
+                                  void (async () => {
+                                    setNpcUiBusyKey("bulk-vis");
+                                    setError(null);
+                                    setNpcDetailById((p) => {
+                                      const next = { ...p };
+                                      for (const id of ids) {
+                                        next[id] = {
+                                          ...(next[id] || { id }),
+                                          id,
+                                          visible_to_players: true,
+                                        };
+                                      }
+                                      return next;
+                                    });
+                                    try {
+                                      await Promise.all(
+                                        ids.map((id) =>
+                                          npcAPI.patchNPC(id, {
+                                            visible_to_players: true,
+                                          }),
+                                        ),
+                                      );
+                                      onRefresh?.();
+                                    } catch (e) {
+                                      setError(
+                                        e?.message ||
+                                          "Could not show faction members",
+                                      );
+                                      onRefresh?.();
+                                    } finally {
+                                      setNpcUiBusyKey(null);
+                                    }
+                                  })();
+                                }}
+                              >
+                                Show all members
+                              </button>
+                              <button
+                                type="button"
+                                disabled={saving || !!npcUiBusyKey}
+                                style={{
+                                  ...S.btn,
+                                  fontSize: 10,
+                                  padding: "2px 6px",
+                                }}
+                                title="Hide all NPCs in this faction from players"
+                                onClick={() => {
+                                  const ids = (factionNpcList || [])
+                                    .map((n) => n?.id)
+                                    .filter((id) => id != null);
+                                  void (async () => {
+                                    setNpcUiBusyKey("bulk-vis");
+                                    setError(null);
+                                    setNpcDetailById((p) => {
+                                      const next = { ...p };
+                                      for (const id of ids) {
+                                        next[id] = {
+                                          ...(next[id] || { id }),
+                                          id,
+                                          visible_to_players: false,
+                                        };
+                                      }
+                                      return next;
+                                    });
+                                    try {
+                                      await Promise.all(
+                                        ids.map((id) =>
+                                          npcAPI.patchNPC(id, {
+                                            visible_to_players: false,
+                                          }),
+                                        ),
+                                      );
+                                      onRefresh?.();
+                                    } catch (e) {
+                                      setError(
+                                        e?.message ||
+                                          "Could not hide faction members",
+                                      );
+                                      onRefresh?.();
+                                    } finally {
+                                      setNpcUiBusyKey(null);
+                                    }
+                                  })();
+                                }}
+                              >
+                                Hide all members
+                              </button>
+                            </div>
+                            {(factionNpcList || []).map((n) => {
+                              const detail = npcDetailById[n.id];
+                              const playerSees =
+                                (detail?.visible_to_players ??
+                                  n.visible_to_players) !== false;
+                              return (
                             <label
                               key={`fac-npc-vis-${n.id}`}
                               style={{
@@ -5205,14 +5337,17 @@ export default function SessionGMManagementPanels({
                                 gap: 6,
                                 fontSize: 11,
                                 marginBottom: 4,
-                                opacity:
-                                  n.visible_to_players === false ? 0.65 : 1,
+                                opacity: playerSees ? 1 : 0.65,
                               }}
                             >
                               <input
                                 type="checkbox"
-                                checked={n.visible_to_players !== false}
-                                disabled={saving || !!localNpcPatch[n.id]}
+                                checked={playerSees}
+                                disabled={
+                                  saving ||
+                                  !!localNpcPatch[n.id] ||
+                                  npcUiBusyKey === `edit:${n.id}`
+                                }
                                 onChange={(e) =>
                                   patchNpcExpandFields(n.id, {
                                     visible_to_players: e.target.checked,
@@ -5224,7 +5359,9 @@ export default function SessionGMManagementPanels({
                               </span>
                               Players see
                             </label>
-                          ))
+                              );
+                            })}
+                          </>
                         )}
                       </div>
                     ) : null}

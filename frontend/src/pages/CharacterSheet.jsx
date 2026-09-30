@@ -1097,13 +1097,12 @@ const CharacterSheetWrapper = ({
       }),
     [user, isGM, charCampaign, campaignIdFromCharacter],
   );
-  const campaignNpcsForStanding = useMemo(() => {
+  const campaignNpcsRawForStanding = useMemo(() => {
     const raw = Array.isArray(charCampaign?.campaign_npcs)
       ? charCampaign.campaign_npcs
       : [];
-    if (isGM || isCampaignGm) return raw;
-    return raw.filter((n) => n?.visible_to_players !== false);
-  }, [charCampaign?.campaign_npcs, isGM, isCampaignGm]);
+    return raw;
+  }, [charCampaign?.campaign_npcs]);
   const isGmViewingPc = useMemo(
     () =>
       isGmViewingPlayerCharacterSheet(user, character, {
@@ -3065,11 +3064,133 @@ const CharacterSheetWrapper = ({
   const [crewFactionAddRep, setCrewFactionAddRep] = useState(0);
   const [crewFactionAddBusy, setCrewFactionAddBusy] = useState(false);
   const [crewFactionAddErr, setCrewFactionAddErr] = useState(null);
+  /** Optimistic NPC.visible_to_players overlays until server catches up. */
+  const [npcPlayerVisOverrides, setNpcPlayerVisOverrides] = useState({});
+  const [factionNpcVisErr, setFactionNpcVisErr] = useState(null);
   const [crewHistoryEntries, setCrewHistoryEntries] = useState([]);
   const [crewHistoryOpen, setCrewHistoryOpen] = useState(() =>
     readCharSheetBool(characterId, "crew-history", false),
   );
   const crewHydratedRef = useRef(false);
+
+  useEffect(() => {
+    setNpcPlayerVisOverrides({});
+    setFactionNpcVisErr(null);
+  }, [charCampaign?.id]);
+
+  /** Drop overrides once campaign payload matches (keep them through stale SSE/poll). */
+  useEffect(() => {
+    setNpcPlayerVisOverrides((prev) => {
+      const keys = Object.keys(prev);
+      if (!keys.length) return prev;
+      const byId = new Map();
+      for (const n of charCampaign?.campaign_npcs || []) {
+        if (n?.id != null) byId.set(Number(n.id), n);
+      }
+      for (const f of charCampaign?.factions || []) {
+        for (const n of f?.npcs || []) {
+          if (n?.id != null) byId.set(Number(n.id), n);
+        }
+      }
+      const next = { ...prev };
+      let changed = false;
+      for (const k of keys) {
+        const id = Number(k);
+        const npc = byId.get(id);
+        if (!npc) continue;
+        const serverSees = npc.visible_to_players !== false;
+        if (serverSees === !!prev[id]) {
+          delete next[id];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [charCampaign?.campaign_npcs, charCampaign?.factions]);
+
+  const resolveNpcPlayerVisible = useCallback(
+    (npc) => {
+      if (npc?.id == null) return true;
+      const key = Number(npc.id);
+      if (Object.prototype.hasOwnProperty.call(npcPlayerVisOverrides, key)) {
+        return !!npcPlayerVisOverrides[key];
+      }
+      return npc.visible_to_players !== false;
+    },
+    [npcPlayerVisOverrides],
+  );
+
+  const patchFactionNpcVisibility = useCallback(
+    async (npcIds, visible) => {
+      const ids = (npcIds || [])
+        .map((id) => Number(id))
+        .filter((id) => Number.isFinite(id));
+      if (!ids.length) return;
+      setFactionNpcVisErr(null);
+      setNpcPlayerVisOverrides((prev) => {
+        const next = { ...prev };
+        for (const id of ids) next[id] = !!visible;
+        return next;
+      });
+      try {
+        await Promise.all(
+          ids.map((id) =>
+            npcAPI.patchNPC(id, { visible_to_players: !!visible }),
+          ),
+        );
+        await onCampaignRefresh?.();
+      } catch (e) {
+        setNpcPlayerVisOverrides((prev) => {
+          const next = { ...prev };
+          for (const id of ids) delete next[id];
+          return next;
+        });
+        setFactionNpcVisErr(
+          e?.message || "Could not update NPC visibility for players.",
+        );
+      }
+    },
+    [onCampaignRefresh],
+  );
+
+  /** NPC STANDING: omit NPCs with See off (incl. optimistic Hide all). */
+  const campaignNpcsForStanding = useMemo(() => {
+    const facById = new Map(
+      (charCampaign?.factions || []).map((f) => [Number(f.id), f]),
+    );
+    const npcFactionId = (npc) => {
+      const fromNpc =
+        npc?.faction != null
+          ? Number(npc.faction)
+          : npc?.faction_id != null
+            ? Number(npc.faction_id)
+            : NaN;
+      if (Number.isFinite(fromNpc)) return fromNpc;
+      for (const f of charCampaign?.factions || []) {
+        if ((f.npcs || []).some((n) => Number(n?.id) === Number(npc?.id))) {
+          return Number(f.id);
+        }
+      }
+      return null;
+    };
+    return campaignNpcsRawForStanding.filter((n) => {
+      if (!resolveNpcPlayerVisible(n)) return false;
+      // Non-GM: also require revealed faction + players_see_npcs (server usually already did).
+      if (isGM || isCampaignGm) return true;
+      const fid = npcFactionId(n);
+      if (fid == null || !Number.isFinite(fid)) return false;
+      const fac = facById.get(fid);
+      if (!fac || fac.visible_to_players === false) return false;
+      if (fac.players_see_npcs === false) return false;
+      return true;
+    });
+  }, [
+    campaignNpcsRawForStanding,
+    resolveNpcPlayerVisible,
+    charCampaign?.factions,
+    isGM,
+    isCampaignGm,
+  ]);
 
   const buildCrewPatchPayload = useCallback(() => {
     return {
@@ -23529,6 +23650,18 @@ const CharacterSheetWrapper = ({
                   Standing with campaign factions (-3 hostile, 0 neutral, +3
                   allied). Hidden factions are GM-only until revealed.
                 </div>
+                {isGM && factionNpcVisErr ? (
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: "#fca5a5",
+                      marginBottom: 8,
+                      lineHeight: 1.35,
+                    }}
+                  >
+                    {factionNpcVisErr}
+                  </div>
+                ) : null}
                 <div
                   style={{
                     flex: 1,
@@ -23699,8 +23832,8 @@ const CharacterSheetWrapper = ({
                             if (!showStrip) return null;
                             const stripNpcs = isGM
                               ? rawNpcs
-                              : rawNpcs.filter(
-                                  (n) => n?.visible_to_players !== false,
+                              : rawNpcs.filter((n) =>
+                                  resolveNpcPlayerVisible(n),
                                 );
                             if (stripNpcs.length === 0) return null;
                             return (
@@ -23709,8 +23842,9 @@ const CharacterSheetWrapper = ({
                                 style={{ marginTop: 4 }}
                               >
                                 {stripNpcs.map((npc) => {
-                                  const hidden =
-                                    isGM && npc.visible_to_players === false;
+                                  const playerSees =
+                                    resolveNpcPlayerVisible(npc);
+                                  const hidden = isGM && !playerSees;
                                   return (
                                     <div
                                       key={`stand-npc-${npc.id}`}
@@ -23735,25 +23869,29 @@ const CharacterSheetWrapper = ({
                                             fontSize: 9,
                                             color: "#9ca3af",
                                             cursor: "pointer",
+                                            position: "relative",
+                                            zIndex: 2,
+                                            userSelect: "none",
                                           }}
                                           title="Players see this NPC"
+                                          onMouseDown={(e) => e.stopPropagation()}
                                           onClick={(e) => e.stopPropagation()}
                                         >
                                           <input
                                             type="checkbox"
-                                            checked={
-                                              npc.visible_to_players !== false
+                                            checked={playerSees}
+                                            onMouseDown={(e) =>
+                                              e.stopPropagation()
                                             }
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                            }}
                                             onChange={(e) => {
-                                              const next = e.target.checked;
-                                              npcAPI
-                                                .patchNPC(npc.id, {
-                                                  visible_to_players: next,
-                                                })
-                                                .then(() =>
-                                                  onCampaignRefresh?.(),
-                                                )
-                                                .catch(() => {});
+                                              e.stopPropagation();
+                                              void patchFactionNpcVisibility(
+                                                [npc.id],
+                                                e.target.checked,
+                                              );
                                             }}
                                           />
                                           See
@@ -23765,7 +23903,7 @@ const CharacterSheetWrapper = ({
                               </div>
                             );
                           })()}
-                          {isGM && charData.crewId ? (
+                          {isGM ? (
                             <div
                               style={{
                                 display: "flex",
@@ -23795,15 +23933,10 @@ const CharacterSheetWrapper = ({
                                       const ids = (row.npcs || [])
                                         .map((n) => n?.id)
                                         .filter((id) => id != null);
-                                      Promise.all(
-                                        ids.map((id) =>
-                                          npcAPI.patchNPC(id, {
-                                            visible_to_players: true,
-                                          }),
-                                        ),
-                                      )
-                                        .then(() => onCampaignRefresh?.())
-                                        .catch(() => {});
+                                      void patchFactionNpcVisibility(
+                                        ids,
+                                        true,
+                                      );
                                     }}
                                   >
                                     Show all members
@@ -23821,75 +23954,72 @@ const CharacterSheetWrapper = ({
                                       const ids = (row.npcs || [])
                                         .map((n) => n?.id)
                                         .filter((id) => id != null);
-                                      Promise.all(
-                                        ids.map((id) =>
-                                          npcAPI.patchNPC(id, {
-                                            visible_to_players: false,
-                                          }),
-                                        ),
-                                      )
-                                        .then(() => onCampaignRefresh?.())
-                                        .catch(() => {});
+                                      void patchFactionNpcVisibility(
+                                        ids,
+                                        false,
+                                      );
                                     }}
                                   >
                                     Hide all members
                                   </button>
                                 </div>
                               ) : null}
-                              <label
-                                style={{
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: "4px",
-                                  fontSize: "11px",
-                                  color: "#9ca3af",
-                                }}
-                              >
-                                Rep
-                                <input
-                                  type="number"
-                                  min={-3}
-                                  max={3}
-                                  defaultValue={row.reputation_value}
-                                  key={`${row.id}-${row.reputation_value}`}
+                              {charData.crewId ? (
+                                <label
                                   style={{
-                                    width: "52px",
-                                    background: "#0d1117",
-                                    color: "#fff",
-                                    border: "1px solid #4b5563",
-                                    borderRadius: "4px",
-                                    padding: "2px 4px",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "4px",
+                                    fontSize: "11px",
+                                    color: "#9ca3af",
                                   }}
-                                  onBlur={(e) => {
-                                    const v = Math.min(
-                                      3,
-                                      Math.max(
-                                        -3,
-                                        parseInt(e.target.value, 10) || 0,
-                                      ),
-                                    );
-                                    crewAPI
-                                      .patchCrew(charData.crewId, {
-                                        faction_relationships: [
-                                          {
-                                            faction_id: row.faction_id,
-                                            reputation_value: v,
-                                          },
-                                        ],
-                                      })
-                                      .then(() =>
-                                        crewAPI
-                                          .getCrew(charData.crewId)
-                                          .then((d) => {
-                                            setCrewFactionLinks(
-                                              d.faction_relationships || [],
-                                            );
-                                          }),
-                                      )
-                                      .catch(() => {});
-                                  }}
-                                />
-                              </label>
+                                >
+                                  Rep
+                                  <input
+                                    type="number"
+                                    min={-3}
+                                    max={3}
+                                    defaultValue={row.reputation_value}
+                                    key={`${row.id}-${row.reputation_value}`}
+                                    style={{
+                                      width: "52px",
+                                      background: "#0d1117",
+                                      color: "#fff",
+                                      border: "1px solid #4b5563",
+                                      borderRadius: "4px",
+                                      padding: "2px 4px",
+                                    }}
+                                    onBlur={(e) => {
+                                      const v = Math.min(
+                                        3,
+                                        Math.max(
+                                          -3,
+                                          parseInt(e.target.value, 10) || 0,
+                                        ),
+                                      );
+                                      crewAPI
+                                        .patchCrew(charData.crewId, {
+                                          faction_relationships: [
+                                            {
+                                              faction_id: row.faction_id,
+                                              reputation_value: v,
+                                            },
+                                          ],
+                                        })
+                                        .then(() =>
+                                          crewAPI
+                                            .getCrew(charData.crewId)
+                                            .then((d) => {
+                                              setCrewFactionLinks(
+                                                d.faction_relationships || [],
+                                              );
+                                            }),
+                                        )
+                                        .catch(() => {});
+                                    }}
+                                  />
+                                </label>
+                              ) : null}
                               <button
                                 type="button"
                                 style={{
@@ -23899,22 +24029,29 @@ const CharacterSheetWrapper = ({
                                   width: "100%",
                                 }}
                                 onClick={() => {
+                                  setFactionNpcVisErr(null);
                                   factionAPI
                                     .patchFaction(row.faction_id, {
                                       visible_to_players:
                                         !row.visible_to_players,
                                     })
-                                    .then(() =>
-                                      crewAPI
-                                        .getCrew(charData.crewId)
-                                        .then((d) => {
-                                          setCrewFactionLinks(
-                                            d.faction_relationships || [],
-                                          );
-                                          onCampaignRefresh?.();
-                                        }),
-                                    )
-                                    .catch(() => {});
+                                    .then(async () => {
+                                      if (charData.crewId) {
+                                        const d = await crewAPI.getCrew(
+                                          charData.crewId,
+                                        );
+                                        setCrewFactionLinks(
+                                          d.faction_relationships || [],
+                                        );
+                                      }
+                                      await onCampaignRefresh?.();
+                                    })
+                                    .catch((e) => {
+                                      setFactionNpcVisErr(
+                                        e?.message ||
+                                          "Could not update faction visibility.",
+                                      );
+                                    });
                                 }}
                               >
                                 {row.visible_to_players
