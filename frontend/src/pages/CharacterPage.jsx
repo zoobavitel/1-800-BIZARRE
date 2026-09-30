@@ -49,6 +49,34 @@ const MODES = { CHARACTER: "character", NPC: "npc" };
 /** Poll open character sheets + campaigns while the tab is visible (backup if SSE disconnects). */
 const SHEET_SYNC_INTERVAL_MS = 30000;
 
+/** Staff / creator / campaign GM may edit; campaign players view See-on NPCs read-only. */
+function userCanEditNpcSheet(user, npc, campaigns) {
+  if (!user?.id) return false;
+  if (user.is_staff) return true;
+  if (!npc?.id) return true;
+  const creatorId = npc.creator ?? npc.creator_id;
+  if (creatorId != null && Number(creatorId) === Number(user.id)) return true;
+  const campaignId = npc.campaign ?? npc.campaign_id;
+  if (campaignId == null) return false;
+  const camp = (campaigns || []).find(
+    (c) => Number(c.id) === Number(campaignId),
+  );
+  const gmId = camp?.gm?.id ?? camp?.gm;
+  return gmId != null && Number(gmId) === Number(user.id);
+}
+
+function userIsNpcCampaignGm(user, npc, campaigns) {
+  if (!user?.id) return false;
+  if (user.is_staff) return true;
+  const campaignId = npc?.campaign ?? npc?.campaign_id;
+  if (campaignId == null) return false;
+  const camp = (campaigns || []).find(
+    (c) => Number(c.id) === Number(campaignId),
+  );
+  const gmId = camp?.gm?.id ?? camp?.gm;
+  return gmId != null && Number(gmId) === Number(user.id);
+}
+
 /** Skip poll/SSE character merge while editing, saving, or in dirtyIntent window. */
 function sheetTabIsProtected(meta) {
   return Boolean(meta?.dirtyIntent || meta?.isDirty || meta?.isSaving);
@@ -1280,6 +1308,11 @@ export default function CharacterPage({
 
   const handleSaveNpc = useCallback(
     async (npcData) => {
+      if (!userCanEditNpcSheet(user, npcData, campaigns)) {
+        const err = new Error("You do not have permission to edit this NPC.");
+        console.error("Save NPC refused:", err);
+        throw err;
+      }
       try {
         const nameTrim = String(npcData.name ?? "").trim();
         const payload = { ...npcData, name: nameTrim || "New NPC" };
@@ -1334,7 +1367,7 @@ export default function CharacterPage({
         throw err;
       }
     },
-    [campaignId, activeNpcTabId],
+    [campaignId, activeNpcTabId, user, campaigns],
   );
 
   const handleCreateNewNpcTab = useCallback(() => {
@@ -2230,7 +2263,18 @@ export default function CharacterPage({
               Loading NPCs...
             </div>
           ) : npcTabs.length > 0 ? (
-            npcTabs.map((tab) => (
+            npcTabs.map((tab) => {
+              const canEditNpc = userCanEditNpcSheet(
+                user,
+                tab.npc,
+                campaigns,
+              );
+              const isNpcGm = userIsNpcCampaignGm(
+                user,
+                tab.npc,
+                campaigns,
+              );
+              return (
               <div
                 key={tab.tabId}
                 style={{
@@ -2242,7 +2286,8 @@ export default function CharacterPage({
                   onSave={handleSaveNpc}
                   campaigns={campaigns}
                   allNpcs={npcs}
-                  isGM={true}
+                  isGM={isNpcGm}
+                  readOnly={!canEditNpc}
                   onFactionChange={refreshCampaigns}
                   onCampaignRefresh={refreshCampaigns}
                   onOpenNpc={handleOpenNpcFromNpcSheet}
@@ -2258,7 +2303,8 @@ export default function CharacterPage({
                   }}
                 />
               </div>
-            ))
+              );
+            })
           ) : (
             <div
               style={{ padding: "24px", textAlign: "center", color: "#9ca3af" }}
