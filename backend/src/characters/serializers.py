@@ -2873,12 +2873,20 @@ class NPCSummarySerializer(serializers.ModelSerializer):
             "image",
             "image_url",
             "visible_to_players",
+            "crew_standing",
+            "pc_standing",
         ]
 
 class CrewCampaignSerializer(serializers.ModelSerializer):
     """Lightweight Crew serializer used inside CampaignSerializer."""
 
     members = CharacterSummarySerializer(many=True, read_only=True)
+    faction_relationships = serializers.SerializerMethodField(read_only=True)
+
+    def get_faction_relationships(self, obj):
+        # Same redaction rules as full CrewSerializer (GM vs player).
+        return CrewSerializer.get_faction_relationships(self, obj)
+
     class Meta:
         model = Crew
         fields = [
@@ -2894,6 +2902,7 @@ class CrewCampaignSerializer(serializers.ModelSerializer):
             "advancement_points",
             "members",
             "proposed_name",
+            "faction_relationships",
         ]
 
 class EquipmentItemSerializer(serializers.ModelSerializer):
