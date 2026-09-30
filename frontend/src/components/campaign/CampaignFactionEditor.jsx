@@ -23,6 +23,7 @@ const CampaignFactionEditor = ({
   onAddNpc,
   onRemoveNpc,
   onToggleNpcVisibleToPlayers,
+  onBulkSetNpcVisibleToPlayers,
   embedded = false,
   S,
 }) => {
@@ -391,6 +392,63 @@ const CampaignFactionEditor = ({
           >
             NPCs in this faction
           </span>
+          {(typeof onBulkSetNpcVisibleToPlayers === "function" ||
+            typeof onToggleNpcVisibleToPlayers === "function") &&
+          (factionForm.npcs || []).length > 0 ? (
+            <div
+              style={{
+                display: "flex",
+                gap: 6,
+                flexWrap: "wrap",
+                marginBottom: 8,
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  if (typeof onBulkSetNpcVisibleToPlayers === "function") {
+                    onBulkSetNpcVisibleToPlayers(true);
+                    return;
+                  }
+                  for (const n of factionForm.npcs || []) {
+                    if (n?.id != null && n.visible_to_players === false) {
+                      onToggleNpcVisibleToPlayers(n.id, true);
+                    }
+                  }
+                }}
+                style={{
+                  ...S.btn,
+                  fontSize: "10px",
+                  padding: "2px 6px",
+                }}
+                title="Players can see all NPCs in this faction"
+              >
+                Show all members
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (typeof onBulkSetNpcVisibleToPlayers === "function") {
+                    onBulkSetNpcVisibleToPlayers(false);
+                    return;
+                  }
+                  for (const n of factionForm.npcs || []) {
+                    if (n?.id != null && n.visible_to_players !== false) {
+                      onToggleNpcVisibleToPlayers(n.id, false);
+                    }
+                  }
+                }}
+                style={{
+                  ...S.btn,
+                  fontSize: "10px",
+                  padding: "2px 6px",
+                }}
+                title="Hide all NPCs in this faction from players"
+              >
+                Hide all members
+              </button>
+            </div>
+          ) : null}
           {(factionForm.npcs || []).map((n) => (
             <div
               key={n.id}
@@ -406,9 +464,7 @@ const CampaignFactionEditor = ({
               <span style={{ minWidth: 0, flex: 1 }}>
                 {n.name || n.stand_name || `NPC ${n.id}`}
               </span>
-              {factionForm.players_see_npcs !== false &&
-              factionForm.visible_to_players !== false &&
-              typeof onToggleNpcVisibleToPlayers === "function" ? (
+              {typeof onToggleNpcVisibleToPlayers === "function" ? (
                 <label
                   style={{
                     display: "flex",
@@ -418,6 +474,13 @@ const CampaignFactionEditor = ({
                     whiteSpace: "nowrap",
                     opacity: n.visible_to_players === false ? 0.65 : 1,
                   }}
+                  title={
+                    factionForm.visible_to_players === false
+                      ? "Players will see this NPC once the faction is revealed (and NPCs are shown)"
+                      : factionForm.players_see_npcs === false
+                        ? "Enable “NPCs” under Players may also see to show members"
+                        : "Players see this NPC"
+                  }
                 >
                   <input
                     type="checkbox"

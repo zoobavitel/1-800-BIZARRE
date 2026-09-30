@@ -33,6 +33,7 @@ export default function RosterNpcColumn({
   handleAddNpcToFaction,
   handleRemoveNpcFromFaction,
   handleToggleNpcVisibleToPlayers,
+  handleBulkSetFactionNpcsVisibleToPlayers,
   factionForm,
   setFactionForm,
   factionError,
@@ -402,6 +403,9 @@ export default function RosterNpcColumn({
                 onAddNpc={handleAddNpcToFaction}
                 onRemoveNpc={handleRemoveNpcFromFaction}
                 onToggleNpcVisibleToPlayers={handleToggleNpcVisibleToPlayers}
+                onBulkSetNpcVisibleToPlayers={
+                  handleBulkSetFactionNpcsVisibleToPlayers
+                }
                 embedded
                 S={S}
               />
@@ -492,6 +496,9 @@ export default function RosterNpcColumn({
             onAddNpc={handleAddNpcToFaction}
             onRemoveNpc={handleRemoveNpcFromFaction}
             onToggleNpcVisibleToPlayers={handleToggleNpcVisibleToPlayers}
+            onBulkSetNpcVisibleToPlayers={
+              handleBulkSetFactionNpcsVisibleToPlayers
+            }
             S={S}
           />
         </div>
