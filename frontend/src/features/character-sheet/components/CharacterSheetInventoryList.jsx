@@ -392,6 +392,7 @@ export default function CharacterSheetInventoryList({
   onPromoteToCampaign,
   onPublishToSite,
   allowArmor = true,
+  hideAggregateLoad = false,
 }) {
   const inv = normalizeCharacterInventory(inventory);
   const loadout = normalizeLoadoutEntry(loadoutEntry);
@@ -583,6 +584,7 @@ export default function CharacterSheetInventoryList({
         boxSizing: "border-box",
       }}
     >
+      {!hideAggregateLoad ? (
       <div
         style={{
           marginBottom: "10px",
@@ -646,6 +648,7 @@ export default function CharacterSheetInventoryList({
           </div>
         ) : null}
       </div>
+      ) : null}
 
       {catalogError ? (
         <div style={{ color: "#f85149", fontSize: "10px", marginBottom: "6px" }}>

@@ -743,16 +743,21 @@ export default function CharacterPage({
       setCharTabs((prev) => {
         const filtered = prev.filter((t) => t.tabId !== tabId);
         if (filtered.length === 0) {
-          const blank = {
-            tabId: nextTabId++,
-            characterId: null,
-            character: createDefaultCharacter(),
-          };
-          setActiveCharTabId(blank.tabId);
-          return [blank];
+          setActiveCharTabId(null);
+          if (typeof window !== "undefined") {
+            window.location.hash = "character";
+          }
+          return [];
         }
         if (activeCharTabId === tabId) {
-          setActiveCharTabId(filtered[filtered.length - 1].tabId);
+          const next = filtered[filtered.length - 1];
+          setActiveCharTabId(next.tabId);
+          const nextId = next.characterId ?? next.character?.id;
+          if (typeof window !== "undefined") {
+            window.location.hash = nextId
+              ? characterHashFromIdAndName(nextId, next.character?.name)
+              : "character";
+          }
         }
         return filtered;
       });
@@ -1284,9 +1289,26 @@ export default function CharacterPage({
         } else {
           result = await npcAPI.createNPC(payload);
         }
-        setNpcTabs((prev) =>
-          prev.map((t) =>
-            t.tabId === activeNpcTabId
+        // Bind save to the tab that owns this NPC id — never the current active
+        // tab. Hidden sheets keep debounced autosaves; using activeNpcTabId
+        // here clobbered newly opened tabs and rewrote the hash (duplicate
+        // labels / wrong sheet).
+        let savedOntoTabId = null;
+        setNpcTabs((prev) => {
+          const target =
+            payload.id != null
+              ? prev.find(
+                  (t) =>
+                    Number(t.npcId) === Number(payload.id) ||
+                    Number(t.npc?.id) === Number(payload.id),
+                )
+              : prev.find(
+                  (t) => t.tabId === activeNpcTabId && t.npcId == null,
+                );
+          if (!target) return prev;
+          savedOntoTabId = target.tabId;
+          return prev.map((t) =>
+            t.tabId === target.tabId
               ? {
                   ...t,
                   npcId: result.id,
@@ -1294,10 +1316,16 @@ export default function CharacterPage({
                   label: result.name || "New NPC",
                 }
               : t,
-          ),
-        );
-        if (result.id && typeof window !== "undefined")
+          );
+        });
+        if (
+          savedOntoTabId != null &&
+          savedOntoTabId === activeNpcTabId &&
+          result.id &&
+          typeof window !== "undefined"
+        ) {
           window.location.hash = `npcs/${result.id}`;
+        }
         const list = await npcAPI.getNPCs(campaignId);
         setNpcs(list || []);
         return result;
@@ -1331,10 +1359,19 @@ export default function CharacterPage({
         }
       }
       setNpcTabs((prev) => {
-        if (prev.length <= 1) return prev;
         const filtered = prev.filter((t) => t.tabId !== tabId);
+        if (filtered.length === 0) {
+          setActiveNpcTabId(null);
+          if (typeof window !== "undefined") window.location.hash = "npcs";
+          return [];
+        }
         if (activeNpcTabId === tabId) {
-          setActiveNpcTabId(filtered[filtered.length - 1].tabId);
+          const next = filtered[filtered.length - 1];
+          setActiveNpcTabId(next.tabId);
+          const nextId = next.npcId ?? next.npc?.id;
+          if (typeof window !== "undefined") {
+            window.location.hash = nextId ? `npcs/${nextId}` : "npcs";
+          }
         }
         return filtered;
       });
@@ -1683,6 +1720,44 @@ export default function CharacterPage({
     [guardUnsavedCharacterNavigation, handleOpenExistingNpc],
   );
 
+  const handleOpenNpcFromNpcSheet = useCallback(
+    (targetNpc) => {
+      if (!targetNpc?.id) return;
+      const fromList = npcs.find((n) => Number(n.id) === Number(targetNpc.id));
+      handleOpenExistingNpc(fromList || targetNpc);
+    },
+    [npcs, handleOpenExistingNpc],
+  );
+
+  const handleOpenCharacterFromNpcSheet = useCallback(
+    (targetChar) => {
+      if (!targetChar?.id) return;
+      void (async () => {
+        try {
+          const fromList = characters.find(
+            (c) => Number(c.id) === Number(targetChar.id),
+          );
+          let front = fromList;
+          if (!front) {
+            const raw = await characterAPI.getCharacter(targetChar.id);
+            front = transformBackendToFrontend(raw);
+          }
+          setMode(MODES.CHARACTER);
+          openCharacterInTab(front);
+          if (typeof window !== "undefined") {
+            window.location.hash = characterHashFromIdAndName(
+              front.id,
+              front.name || front.true_name || front.alias,
+            );
+          }
+        } catch (err) {
+          console.error("Open character from NPC contacts failed:", err);
+        }
+      })();
+    },
+    [characters, openCharacterInTab],
+  );
+
   // ── Render ───────────────────────────────────────────────────────────────
   return (
     <div style={PAGE_STYLES.page}>
@@ -1692,11 +1767,10 @@ export default function CharacterPage({
           <button
             type="button"
             onClick={() => {
-              const hadCharTabs = charTabs.length > 0;
-              const hashId = hadCharTabs
-                ? activeCharTab?.characterId ?? activeCharTab?.character?.id
-                : null;
-              seedEmptyCharacterTabs();
+              const hashId =
+                charTabs.length > 0
+                  ? activeCharTab?.characterId ?? activeCharTab?.character?.id
+                  : null;
               setMode(MODES.CHARACTER);
               if (typeof window !== "undefined") {
                 window.location.hash = hashId
@@ -1781,17 +1855,16 @@ export default function CharacterPage({
                   style={TAB_STYLES.tab(tab.tabId === activeNpcTabId)}
                 >
                   <span>{tab.label}</span>
-                  {npcTabs.length > 1 && (
-                    <span
-                      style={TAB_STYLES.close}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleCloseNpcTab(tab.tabId);
-                      }}
-                    >
-                      ×
-                    </span>
-                  )}
+                  <span
+                    style={TAB_STYLES.close}
+                    title="Close tab"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleCloseNpcTab(tab.tabId);
+                    }}
+                  >
+                    ×
+                  </span>
                 </button>
               ))}
               <button
@@ -1965,6 +2038,100 @@ export default function CharacterPage({
           >
             Loading characters...
           </div>
+        ) : charTabs.length === 0 ? (
+          <div
+            style={{
+              ...PAGE_STYLES.content,
+              padding: "32px 24px",
+              maxWidth: 420,
+              margin: "0 auto",
+              textAlign: "center",
+            }}
+          >
+            <div
+              style={{
+                fontSize: "14px",
+                fontWeight: "bold",
+                color: "#e5e7eb",
+                marginBottom: "8px",
+                fontFamily: "monospace",
+              }}
+            >
+              Choose a character to view
+            </div>
+            <div
+              style={{
+                fontSize: "12px",
+                color: "#9ca3af",
+                marginBottom: "16px",
+                lineHeight: 1.45,
+              }}
+            >
+              Open an existing character, or start a new blank sheet.
+            </div>
+            {characters.length > 0 ? (
+              <select
+                aria-label="Choose character to view"
+                style={{
+                  ...PAGE_STYLES.modeSelect,
+                  width: "100%",
+                  marginBottom: "10px",
+                  color: "#e5e7eb",
+                }}
+                value=""
+                onChange={(e) => {
+                  const id = parseInt(e.target.value, 10);
+                  e.target.value = "";
+                  if (!Number.isFinite(id)) return;
+                  const char = characters.find((c) => Number(c.id) === id);
+                  if (!char) return;
+                  openCharacterInTab(char);
+                  if (typeof window !== "undefined") {
+                    window.location.hash = characterHashFromIdAndName(
+                      char.id,
+                      char.name,
+                    );
+                  }
+                }}
+              >
+                <option value="">Select character…</option>
+                {characters.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name || c.standName || `Character #${c.id}`}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <div
+                style={{
+                  fontSize: "12px",
+                  color: "#6b7280",
+                  marginBottom: "10px",
+                }}
+              >
+                No saved characters yet.
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                handleCreateNewCharacterTab();
+                if (typeof window !== "undefined") {
+                  window.location.hash = "character";
+                }
+              }}
+              style={{
+                ...PAGE_STYLES.modeSelect,
+                width: "100%",
+                cursor: "pointer",
+                borderStyle: "dashed",
+                color: "#93c5fd",
+                borderColor: "#1d4ed8",
+              }}
+            >
+              + New Character
+            </button>
+          </div>
         ) : (
           <CharacterSheetWrapper
             key={`${activeCharTab?.tabId ?? "new"}-${sheetResetEpoch}`}
@@ -2078,6 +2245,17 @@ export default function CharacterPage({
                   isGM={true}
                   onFactionChange={refreshCampaigns}
                   onCampaignRefresh={refreshCampaigns}
+                  onOpenNpc={handleOpenNpcFromNpcSheet}
+                  onOpenCharacter={handleOpenCharacterFromNpcSheet}
+                  onCreateCharacter={() => {
+                    void guardUnsavedCharacterNavigation(() => {
+                      setMode(MODES.CHARACTER);
+                      handleCreateNewCharacterTab();
+                      if (typeof window !== "undefined") {
+                        window.location.hash = "character";
+                      }
+                    });
+                  }}
                 />
               </div>
             ))
