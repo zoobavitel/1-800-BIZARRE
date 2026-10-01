@@ -322,7 +322,6 @@ export function SessionPcToken({
   isExpanded = false,
   onToggleExpand,
   player = null,
-  campaignCharacters = null,
 }) {
   const portraitSrc = getCharacterPortraitSrc(character);
   const { hasImage, safeSrc, onError } = useHomeCardImage(portraitSrc);
@@ -346,9 +345,7 @@ export function SessionPcToken({
           "",
       ).trim()
     : "";
-  const playerAvatarSrc = player
-    ? getUserAvatarSrc(player, { campaignCharacters })
-    : null;
+  const playerAvatarSrc = player ? getUserAvatarSrc(player) : null;
 
   const cardClasses = [
     "p-card",

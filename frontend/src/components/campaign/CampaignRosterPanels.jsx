@@ -590,7 +590,6 @@ export default function CampaignRosterPanels({
                               isExpanded={pcExpanded}
                               onToggleExpand={() => togglePcExpand(ch.id)}
                               player={charMetaById.get(ch.id)?.user || null}
-                              campaignCharacters={campaignCharacters}
                             />
                           </div>
                         );

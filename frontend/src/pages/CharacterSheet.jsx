@@ -16157,18 +16157,6 @@ const CharacterSheetWrapper = ({
                       <div
                         style={{
                           fontSize: "10px",
-                          color: "#6b7280",
-                          marginBottom: "8px",
-                          lineHeight: 1.4,
-                        }}
-                      >
-                        Types also drive Playbook-specific end-of-session XP
-                        archetypes. Forms and consciousness are personal flavor
-                        only (not advancement).
-                      </div>
-                      <div
-                        style={{
-                          fontSize: "10px",
                           color: "#9ca3af",
                           marginBottom: "4px",
                         }}

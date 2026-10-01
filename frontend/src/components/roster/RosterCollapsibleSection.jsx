@@ -14,7 +14,15 @@ export default function RosterCollapsibleSection({
   helpTip = null,
 }) {
   return (
-    <div style={{ ...S.card, marginBottom: 0, ...cardStyle }}>
+    <div
+      style={{
+        ...S.card,
+        marginBottom: 0,
+        height: "100%",
+        boxSizing: "border-box",
+        ...cardStyle,
+      }}
+    >
       <div
         style={{
           display: "flex",
