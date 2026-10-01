@@ -4685,11 +4685,11 @@ export default function SessionGMManagementPanels({
             rosterShowNpc && rosterShowPc ? "1fr 1fr" : "1fr",
           gap: 16,
           marginBottom: 12,
-          alignItems: "start",
+          alignItems: "stretch",
         }}
       >
       {rosterShowNpc ? (
-      <div style={S.card}>
+      <div style={{ ...S.card, height: "100%", boxSizing: "border-box" }}>
         <div
           style={{
             display: "flex",
@@ -5557,7 +5557,7 @@ export default function SessionGMManagementPanels({
       ) : null}
 
       {rosterShowPc ? (
-      <div style={S.card}>
+      <div style={{ ...S.card, height: "100%", boxSizing: "border-box" }}>
         <div
           style={{
             display: "flex",
@@ -5702,7 +5702,6 @@ export default function SessionGMManagementPanels({
                             toggleCollapsedCard(setCollapsedPcCards, pcCollapseKey)
                           }
                           player={resolvePcPlayer(ch)}
-                          campaignCharacters={campaignChars}
                         />
                       </div>
                     );
