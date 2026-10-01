@@ -8,6 +8,12 @@ export const PATCH_NOTES = [
     "version": null,
     "sections": [
       {
+        "title": "Fixed",
+        "items": [
+          "equal-height columns, compact tokens, avatar footer"
+        ]
+      },
+      {
         "title": "Other",
         "items": [
           "Merge pull request #188 from zoobavitel/fix/api-default-127-host"
@@ -572,12 +578,6 @@ export const PATCH_NOTES = [
         "items": [
           "B→A reward grants two unique abilities plus one standard",
           "drop the 20 XP cap on manual awards"
-        ]
-      },
-      {
-        "title": "Fixed",
-        "items": [
-          "stop apply-level-up hanging behind autosave write lock"
         ]
       }
     ]
