@@ -10,6 +10,7 @@ export const PATCH_NOTES = [
       {
         "title": "Fixed",
         "items": [
+          "drop Collapse; use Show NPC/PC only",
           "equal-height columns, compact tokens, avatar footer"
         ]
       },
@@ -576,8 +577,7 @@ export const PATCH_NOTES = [
       {
         "title": "Added",
         "items": [
-          "B→A reward grants two unique abilities plus one standard",
-          "drop the 20 XP cap on manual awards"
+          "B→A reward grants two unique abilities plus one standard"
         ]
       }
     ]

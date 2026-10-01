@@ -572,10 +572,12 @@ export default function CampaignRosterPanels({
                     <div className="home-card-grid">
                       {pcEntries.map(({ ch, name }) => {
                         const pcExpanded = expandedPcId === ch.id;
+                        const tokenChar =
+                          fullCharById.get(Number(ch.id)) || ch;
                         return (
                           <div className="session-roster-cell" key={ch.id}>
                             <SessionPcToken
-                              character={ch}
+                              character={tokenChar}
                               name={name}
                               isExpanded={pcExpanded}
                               onToggleExpand={() => togglePcExpand(ch.id)}
