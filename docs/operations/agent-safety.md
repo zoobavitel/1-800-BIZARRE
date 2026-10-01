@@ -20,11 +20,12 @@ Hooks/rules are **tripwires**. Least privilege + recoverable backups do the real
 
 ## CT 103 (bizarre-api)
 
-Run once as root:
+**Done (2026-10-01):** Cursor Host → `User agent`; ops via `~/.ssh/config.ops-human-only`; `bizarre_ro` + Vault helper; prod touch/cat denied for `agent`.
+
+Run once as root (if rebuilding):
 
 ```bash
 bash /opt/bizarre/deploy/bizarre-api/setup-agent-user.sh
-# optional RO DB:
 AGENT_RO_PASSWORD='…' bash /opt/bizarre/deploy/bizarre-api/setup-agent-user.sh
 ```
 
@@ -38,9 +39,9 @@ Expect:
 | `/opt/bizarre-prod`, `/var/lib/bizarre` | No write for agent |
 | sudoers | `systemctl status` / `journalctl` only — **no restart** |
 | Postgres `bizarre_ro` | `SELECT` only + `default_transaction_read_only` |
-| SSH key | 1Password; `authorized_keys` with `from=<madvillainy IP>`, `no-agent-forwarding` |
+| `.cursor/hooks*` | root-owned, no group/other write |
 
-**Never** give the agent SSH to **pve2** itself (`pct destroy`, host backups, `pct enter` as root).
+**Never** give the agent SSH to **pve2** itself.
 
 Before each triage session (on pve2, as you):
 
@@ -48,14 +49,14 @@ Before each triage session (on pve2, as you):
 pct snapshot 103 pre-agent-$(date +%F-%H%M)
 ```
 
-Fixes: diagnose on CT 103 → edit on madvillainy / `/opt/bizarre` → PR → deploy. No hot-edits on prod. Invasive repro: `pct clone 103` scratch CT.
+Fixes: diagnose on CT 103 → edit on madvillainy / `/opt/bizarre` → PR → deploy. No hot-edits on prod.
 
 ## madvillainy
 
-- SSH config: only `bizarre-api-agent` in the file Cursor can read — see [ssh-config.madvillainy.example](../../deploy/bizarre-api/ssh-config.madvillainy.example)
-- Turn **off** terminal auto-run (or tight allowlist)
-- 1Password SSH agent for keys
-- Project hooks deny force-push, `rm` outside workspace, Proxmox SSH, prod paths; **ask** on `ssh bizarre-api-agent`
+- SSH: `bizarre-api-agent` → `User agent` only; ops Include for root/pve2
+- Terminal **auto-run off** (or tight allowlist) in Cursor settings
+- Encrypted `~/Vault` for `prod.env` / `bizarre_ro` backups (not paid 1Password required)
+- Project hooks: write-target tripwires; Unix ownership is the wall
 
 ## GitHub
 
@@ -70,8 +71,11 @@ Assume agent goes rogue with whatever its shell can reach.
 - Acceptable: trash feature branch / `bizarre_db_dev` → restore last night
 - Not acceptable: wipe prod, delete GitHub repo, destroy CT from pve2 → fix layer 1
 
-## Hook tests
+## Cursor Run Mode (human — desktop)
 
-```bash
-python3 .cursor/hooks/test_hooks.py
-```
+On madvillainy Cursor: **Settings → Agents → Approvals & Execution**.
+
+- Prefer **Allowlist** with an empty/minimal allowlist (asks for nearly everything), or keep **Auto-review** with project [`.cursor/permissions.json`](../../.cursor/permissions.json) block instructions.
+- Do **not** use **Run Everything**.
+
+Project file [`.cursor/permissions.json`](../../.cursor/permissions.json) steers Auto-review toward asking on SSH, force-push, prod paths, and hook rewrites.
