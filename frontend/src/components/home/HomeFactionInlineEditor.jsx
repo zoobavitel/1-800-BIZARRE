@@ -6,6 +6,7 @@ import {
   resolveMediaUrl,
 } from "../../features/character-sheet";
 import AvatarCropModal from "../AvatarCropModal";
+import ConfirmDeleteModal from "../ConfirmDeleteModal";
 
 const TIER_OPTIONS = [0, 1, 2, 3, 4, 5, 6];
 const TIER_LABEL = ["—", "I", "II", "III", "IV", "V", "VI"];
@@ -66,6 +67,8 @@ const HomeFactionInlineEditor = ({
   const [newClockType, setNewClockType] = useState("CUSTOM");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   const blobPreview = useMemo(() => {
     if (!imageFile) return null;
@@ -200,14 +203,21 @@ const HomeFactionInlineEditor = ({
     }
   };
 
-  const handleDelete = async () => {
-    if (!window.confirm(`Delete faction "${faction.name}"?`)) return;
+  const handleDelete = () => {
+    setDeleteConfirmOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
     setError(null);
+    setDeleteBusy(true);
     try {
       await factionAPI.deleteFaction(faction.id);
+      setDeleteConfirmOpen(false);
       onDeleted?.(faction.id);
     } catch (e) {
       setError(e.message || "Could not delete.");
+    } finally {
+      setDeleteBusy(false);
     }
   };
 
@@ -671,11 +681,20 @@ const HomeFactionInlineEditor = ({
           type="button"
           className="f-card-btn f-card-btn-delete"
           onClick={handleDelete}
-          disabled={saving}
+          disabled={saving || deleteBusy}
         >
           Delete Faction
         </button>
       </div>
+      <ConfirmDeleteModal
+        open={deleteConfirmOpen}
+        message={`Delete faction “${faction.name || "this faction"}”?`}
+        busy={deleteBusy}
+        onCancel={() => {
+          if (!deleteBusy) setDeleteConfirmOpen(false);
+        }}
+        onConfirm={handleConfirmDelete}
+      />
     </div>
   );
 };
