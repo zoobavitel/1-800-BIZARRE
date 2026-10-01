@@ -1299,6 +1299,25 @@
   background: rgba(18, 16, 22, 0.6);
   backdrop-filter: blur(4px);
 }
+.home-poc .g-card-has-image .g-card-stats {
+  color: rgba(245, 238, 225, 0.9);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+  background: rgba(18, 16, 22, 0.62);
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  padding: 5px 9px;
+  width: fit-content;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.home-poc .g-card-has-image .g-card-stat-val {
+  color: var(--cream);
+}
+.home-poc .g-card-has-image .g-card-stat-accent {
+  color: #c4a0e8;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.75);
+}
 .home-poc .g-card-has-image .g-badge-active {
   background: rgba(18, 16, 22, 0.55);
 }
