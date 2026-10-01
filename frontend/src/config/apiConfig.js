@@ -6,20 +6,22 @@
 
 const STORAGE_KEY = "apiBaseUrl";
 
-/** Explicit REACT_APP_API_URL in .env wins. Otherwise dev uses localhost; production has no default (github.io must use Server URL / localStorage). */
+/** Explicit REACT_APP_API_URL in .env wins. Otherwise local dev uses 127.0.0.1; production has no default (github.io must use Server URL / localStorage). */
 const envApi = process.env.REACT_APP_API_URL;
 const hasEnvApi = typeof envApi === "string" && envApi.trim() !== "";
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
+/** Prefer IPv4 loopback — `localhost` often resolves to ::1, which may hit another listener (e.g. IDE) instead of Django. */
+const LOCAL_API_DEFAULT = "http://127.0.0.1:8000/api";
 
 function getRuntimeDefaultBase() {
   if (hasEnvApi) return envApi.trim().replace(/\/+$/, "");
   if (typeof window === "undefined") {
-    return process.env.NODE_ENV === "production" ? "" : "http://localhost:8000/api";
+    return process.env.NODE_ENV === "production" ? "" : LOCAL_API_DEFAULT;
   }
 
   const { protocol, hostname } = window.location;
   if (LOCAL_HOSTS.has(hostname)) {
-    return "http://localhost:8000/api";
+    return LOCAL_API_DEFAULT;
   }
 
   // GitHub Pages is static only; there is no API on :8000 on this hostname.
@@ -44,14 +46,21 @@ function ensureHttpsForNgrok(url) {
   return url;
 }
 
+/** Map loopback hostname to 127.0.0.1 so IPv6 localhost does not steal :8000. */
+function preferIpv4Loopback(url) {
+  return url.replace(
+    /^http:\/\/(localhost|\[::1\])(?=:\d+|\/|$)/i,
+    "http://127.0.0.1",
+  );
+}
+
 /** Ensure base URL ends with /api so paths like /accounts/login/ resolve correctly. */
 function normalizeBaseUrl(url) {
   let trimmed = url.trim().replace(/\/+$/, "");
   if (!trimmed) return trimmed;
-  trimmed = ensureHttpsForNgrok(trimmed);
+  trimmed = preferIpv4Loopback(ensureHttpsForNgrok(trimmed));
   const lower = trimmed.toLowerCase();
-  if (lower === "http://localhost:8000/api" || lower.endsWith("/api"))
-    return trimmed;
+  if (lower === LOCAL_API_DEFAULT || lower.endsWith("/api")) return trimmed;
   return trimmed + "/api";
 }
 
@@ -60,18 +69,20 @@ export function getApiBaseUrl() {
   if (stored && stored.trim() !== "") {
     return normalizeBaseUrl(stored);
   }
-  return getRuntimeDefaultBase();
+  const base = getRuntimeDefaultBase();
+  // Normalize env default too (e.g. .env with localhost → 127.0.0.1).
+  return base ? normalizeBaseUrl(base) : base;
 }
 
 /** Throws if no API base is configured (empty production default and no localStorage). */
 export function requireApiBaseUrl() {
   const base = getApiBaseUrl();
-  if (typeof base !== "string" || !base.trim()) {
-    throw new Error(
-      "Game server URL is not set. On github.io, expand Server URL on the login page, enter your host’s API base (e.g. https://xxxx.ngrok-free.app/api), then sign in. Local play: http://127.0.0.1:8000/api",
-    );
+  if (typeof base === "string" && base.trim()) {
+    return base.trim();
   }
-  return base.trim();
+  throw new Error(
+    "Game server URL is not set. On github.io, expand Server URL on the login page, enter your host’s API base (e.g. https://xxxx.ngrok-free.app/api), then sign in. Local play: http://127.0.0.1:8000/api",
+  );
 }
 
 export function setApiBaseUrl(url) {
