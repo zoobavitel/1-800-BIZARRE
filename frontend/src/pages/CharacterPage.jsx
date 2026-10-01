@@ -44,6 +44,7 @@ import { useAuth } from "../features/auth";
 import { CharacterSheetWrapper } from "./CharacterSheet";
 import { characterHashFromIdAndName } from "../utils/spaNavigation";
 import { NPCSheet } from "./NPCSheet";
+import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 
 const MODES = { CHARACTER: "character", NPC: "npc" };
 /** Poll open character sheets + campaigns while the tab is visible (backup if SSE disconnects). */
@@ -494,6 +495,8 @@ export default function CharacterPage({
   const [heritages, setHeritages] = useState([]);
   const [heritagesLoading, setHeritagesLoading] = useState(true);
   const [heritagesError, setHeritagesError] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [deleteConfirmBusy, setDeleteConfirmBusy] = useState(false);
   const referenceDataLoadSeqRef = useRef(0);
 
   const loadReferenceData = useCallback(async () => {
@@ -1558,7 +1561,7 @@ export default function CharacterPage({
 
   const activeNpcTab = npcTabs.find((t) => t.tabId === activeNpcTabId);
 
-  const handleDeleteActiveCharacter = useCallback(async () => {
+  const handleDeleteActiveCharacter = useCallback(() => {
     const id = activeCharTab?.characterId ?? activeCharTab?.character?.id;
     if (!id) {
       window.alert(
@@ -1566,52 +1569,18 @@ export default function CharacterPage({
       );
       return;
     }
-    if (
-      !window.confirm(
-        "Delete this character permanently? This cannot be undone.",
-      )
-    )
-      return;
-    setCharactersError(null);
-    try {
-      await characterAPI.deleteCharacter(id);
-      setCharacters((prev) => prev.filter((c) => c.id !== id));
-      setCharTabs((prev) => {
-        const filtered = prev.filter(
-          (t) => (t.characterId ?? t.character?.id) !== id,
-        );
-        if (filtered.length === 0) {
-          const blank = {
-            tabId: nextTabId++,
-            characterId: null,
-            character: createDefaultCharacter(),
-          };
-          setActiveCharTabId(blank.tabId);
-          if (typeof window !== "undefined") window.location.hash = "character";
-          return [blank];
-        }
-        const nextActive = filtered.some((t) => t.tabId === activeCharTabId)
-          ? activeCharTabId
-          : filtered[filtered.length - 1].tabId;
-        setActiveCharTabId(nextActive);
-        const nextTab = filtered.find((t) => t.tabId === nextActive);
-        const nextHashId = nextTab?.characterId ?? nextTab?.character?.id;
-        if (typeof window !== "undefined") {
-          window.location.hash = nextHashId
-            ? characterHashFromIdAndName(
-                nextHashId,
-                nextTab?.character?.name,
-              )
-            : "character";
-        }
-        return sortCharTabs(filtered);
-      });
-    } catch (e) {
-      setCharactersError(e.message || "Failed to delete character");
-    }
-  }, [activeCharTab, activeCharTabId]);
+    const name =
+      activeCharTab?.character?.name ||
+      activeCharTab?.character?.standName ||
+      `Character ${id}`;
+    setDeleteConfirm({
+      kind: "character",
+      id,
+      message: `Delete character “${name}” permanently? This cannot be undone.`,
+    });
+  }, [activeCharTab]);
 
-  const handleDeleteActiveNpc = useCallback(async () => {
+  const handleDeleteActiveNpc = useCallback(() => {
     const id = activeNpcTab?.npcId ?? activeNpcTab?.npc?.id;
     if (!id) {
       window.alert(
@@ -1619,37 +1588,103 @@ export default function CharacterPage({
       );
       return;
     }
-    if (
-      !window.confirm("Delete this NPC permanently? This cannot be undone.")
-    )
-      return;
-    const filtered = npcTabs.filter((t) => (t.npcId ?? t.npc?.id) !== id);
+    const name =
+      activeNpcTab?.npc?.name ||
+      activeNpcTab?.npc?.stand_name ||
+      `NPC ${id}`;
+    setDeleteConfirm({
+      kind: "npc",
+      id,
+      message: `Delete NPC “${name}” permanently? This cannot be undone.`,
+    });
+  }, [activeNpcTab]);
+
+  const handleConfirmEntityDelete = useCallback(async () => {
+    if (!deleteConfirm) return;
+    const pending = deleteConfirm;
+    setDeleteConfirmBusy(true);
     try {
-      await npcAPI.deleteNPC(id);
-      setNpcs((prev) => prev.filter((n) => n.id !== id));
-      if (filtered.length === 0) {
-        setNpcTabs([]);
-        setActiveNpcTabId(null);
-        seedEmptyCharacterTabs();
-        setMode(MODES.CHARACTER);
-        if (typeof window !== "undefined") window.location.hash = "character";
+      if (pending.kind === "character") {
+        const id = pending.id;
+        setCharactersError(null);
+        await characterAPI.deleteCharacter(id);
+        setCharacters((prev) => prev.filter((c) => c.id !== id));
+        setCharTabs((prev) => {
+          const filtered = prev.filter(
+            (t) => (t.characterId ?? t.character?.id) !== id,
+          );
+          if (filtered.length === 0) {
+            const blank = {
+              tabId: nextTabId++,
+              characterId: null,
+              character: createDefaultCharacter(),
+            };
+            setActiveCharTabId(blank.tabId);
+            if (typeof window !== "undefined")
+              window.location.hash = "character";
+            return [blank];
+          }
+          const nextActive = filtered.some((t) => t.tabId === activeCharTabId)
+            ? activeCharTabId
+            : filtered[filtered.length - 1].tabId;
+          setActiveCharTabId(nextActive);
+          const nextTab = filtered.find((t) => t.tabId === nextActive);
+          const nextHashId = nextTab?.characterId ?? nextTab?.character?.id;
+          if (typeof window !== "undefined") {
+            window.location.hash = nextHashId
+              ? characterHashFromIdAndName(
+                  nextHashId,
+                  nextTab?.character?.name,
+                )
+              : "character";
+          }
+          return sortCharTabs(filtered);
+        });
+        setDeleteConfirm(null);
         return;
       }
-      const nextActive = filtered.some((t) => t.tabId === activeNpcTabId)
-        ? activeNpcTabId
-        : filtered[filtered.length - 1].tabId;
-      setNpcTabs(filtered);
-      setActiveNpcTabId(nextActive);
-      const nextTab = filtered.find((t) => t.tabId === nextActive);
-      const nextHashId = nextTab?.npcId ?? nextTab?.npc?.id;
-      if (typeof window !== "undefined") {
-        window.location.hash = nextHashId ? `npcs/${nextHashId}` : "npcs";
+      if (pending.kind === "npc") {
+        const id = pending.id;
+        const filtered = npcTabs.filter((t) => (t.npcId ?? t.npc?.id) !== id);
+        await npcAPI.deleteNPC(id);
+        setNpcs((prev) => prev.filter((n) => n.id !== id));
+        setDeleteConfirm(null);
+        if (filtered.length === 0) {
+          setNpcTabs([]);
+          setActiveNpcTabId(null);
+          seedEmptyCharacterTabs();
+          setMode(MODES.CHARACTER);
+          if (typeof window !== "undefined")
+            window.location.hash = "character";
+          return;
+        }
+        const nextActive = filtered.some((t) => t.tabId === activeNpcTabId)
+          ? activeNpcTabId
+          : filtered[filtered.length - 1].tabId;
+        setNpcTabs(filtered);
+        setActiveNpcTabId(nextActive);
+        const nextTab = filtered.find((t) => t.tabId === nextActive);
+        const nextHashId = nextTab?.npcId ?? nextTab?.npc?.id;
+        if (typeof window !== "undefined") {
+          window.location.hash = nextHashId ? `npcs/${nextHashId}` : "npcs";
+        }
       }
     } catch (e) {
-      window.alert(e.message || "Failed to delete NPC");
+      if (pending.kind === "character") {
+        setCharactersError(e.message || "Failed to delete character");
+      } else {
+        window.alert(e.message || "Failed to delete NPC");
+      }
+    } finally {
+      setDeleteConfirmBusy(false);
     }
-  }, [activeNpcTab, activeNpcTabId, npcTabs, seedEmptyCharacterTabs]);
-
+  }, [
+    deleteConfirm,
+    activeCharTabId,
+    activeNpcTabId,
+    npcTabs,
+    seedEmptyCharacterTabs,
+  ]);
   const saveActiveUnsavedCharacter = useCallback(async () => {
     const tab = charTabs.find((t) => t.tabId === activeCharTabId);
     if (!isUnsavedCharacterDirty(tab)) return true;
@@ -2353,6 +2388,16 @@ export default function CharacterPage({
           )}
         </div>
       )}
+
+      <ConfirmDeleteModal
+        open={Boolean(deleteConfirm)}
+        message={deleteConfirm?.message || ""}
+        busy={deleteConfirmBusy}
+        onCancel={() => {
+          if (!deleteConfirmBusy) setDeleteConfirm(null);
+        }}
+        onConfirm={handleConfirmEntityDelete}
+      />
     </div>
   );
 }

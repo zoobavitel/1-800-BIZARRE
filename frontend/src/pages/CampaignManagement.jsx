@@ -24,6 +24,7 @@ import SessionGMManagementPanels from "../components/session/SessionGMManagement
 import { SessionHelpTip } from "../components/session/sessionShellUi";
 import ProgressClock from "../components/ProgressClock";
 import AvatarCropModal from "../components/AvatarCropModal";
+import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import CampaignRosterPanels from "../components/campaign/CampaignRosterPanels";
 import CampaignShellPanels from "../components/campaign/CampaignShellPanels";
 import HomeCardThumb from "../components/home/HomeCardThumb";
@@ -880,6 +881,8 @@ function CampaignDetail({
   const [actionError, setActionError] = useState(null);
   const [rosterActionError, setRosterActionError] = useState(null);
   const [dragOverFactionKey, setDragOverFactionKey] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [deleteConfirmBusy, setDeleteConfirmBusy] = useState(false);
 
   const rosterCharacters = useMemo(() => {
     if (!campaign?.id) return [];
@@ -984,20 +987,34 @@ function CampaignDetail({
     }
   };
 
-  const handleDeleteCampaign = async () => {
-    if (
-      !window.confirm(
-        `Permanently delete "${campaign.name}"? Sessions, clocks, and other campaign data will be removed. This cannot be undone.`,
-      )
-    ) {
-      return;
-    }
+  const handleDeleteCampaign = () => {
+    setDeleteConfirm({
+      kind: "campaign",
+      message: `Permanently delete “${campaign.name}”? Sessions, clocks, and other campaign data will be removed. This cannot be undone.`,
+    });
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirm) return;
+    const pending = deleteConfirm;
     setActionError(null);
+    setDeleteConfirmBusy(true);
     try {
-      await campaignAPI.deleteCampaign(campaign.id);
-      onCampaignDeleted?.();
+      if (pending.kind === "campaign") {
+        await campaignAPI.deleteCampaign(campaign.id);
+        setDeleteConfirm(null);
+        onCampaignDeleted?.();
+        return;
+      }
+      if (pending.kind === "faction" && pending.faction?.id) {
+        await factionAPI.deleteFaction(pending.faction.id);
+        setDeleteConfirm(null);
+        onRefresh();
+      }
     } catch (err) {
       setActionError(err.message);
+    } finally {
+      setDeleteConfirmBusy(false);
     }
   };
 
@@ -1413,18 +1430,13 @@ function CampaignDetail({
     }
   };
 
-  const handleFactionDelete = async (faction) => {
+  const handleFactionDelete = (faction) => {
     const name = faction?.name || "this faction";
-    const ok = window.confirm(
-      `Delete faction "${name}"? NPCs will become unaffiliated. This permanently deletes the faction's progress clocks, faction relationships, and crew reputation links.`,
-    );
-    if (!ok) return;
-    try {
-      await factionAPI.deleteFaction(faction.id);
-      onRefresh();
-    } catch (err) {
-      setActionError(err.message);
-    }
+    setDeleteConfirm({
+      kind: "faction",
+      faction,
+      message: `Delete faction “${name}”? NPCs will become unaffiliated. This permanently deletes the faction's progress clocks, faction relationships, and crew reputation links.`,
+    });
   };
 
   const startCrewCreate = () =>
@@ -1553,6 +1565,16 @@ function CampaignDetail({
       <button onClick={onBack} style={{ ...S.btnGhost, marginBottom: "12px" }}>
         {"< Back to Campaigns"}
       </button>
+
+      <ConfirmDeleteModal
+        open={Boolean(deleteConfirm)}
+        message={deleteConfirm?.message || ""}
+        busy={deleteConfirmBusy}
+        onCancel={() => {
+          if (!deleteConfirmBusy) setDeleteConfirm(null);
+        }}
+        onConfirm={handleConfirmDelete}
+      />
 
       {actionError && <div style={S.err}>{actionError}</div>}
 

@@ -45,6 +45,7 @@ import HomeCampaignCard from "../components/home/HomeCampaignCard";
 import HomeCharacterCard from "../components/home/HomeCharacterCard";
 import HomeNpcCard from "../components/home/HomeNpcCard";
 import HomeFactionCard from "../components/home/HomeFactionCard";
+import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import { buildRouteHref, handleSpaNavClick } from "../utils/spaNavigation";
 
 /** Hero “tradition” pills: short blurbs for home only (not rules text). */
@@ -105,6 +106,9 @@ const HomePage = ({
   const [pendingDelete, setPendingDelete] = useState(null);
   const pendingDeleteRef = useRef(null);
   const pendingDeleteTimerRef = useRef(null);
+  /** Confirm gate before PC/NPC undo-queue or faction hard delete. */
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [deleteConfirmBusy, setDeleteConfirmBusy] = useState(false);
   const [invitationsLoading, setInvitationsLoading] = useState(true);
   const [invitationBusyId, setInvitationBusyId] = useState(null);
   const [invitationError, setInvitationError] = useState(null);
@@ -422,7 +426,13 @@ const HomePage = ({
   const handleDeleteCharacter = (characterId) => {
     const item = characters.find((c) => c.id === characterId);
     if (!item) return;
-    queueHomeDelete("character", item);
+    const label = item.name || item.true_name || `Character ${item.id}`;
+    setDeleteConfirm({
+      kind: "character",
+      item,
+      label,
+      message: `Delete character “${label}”? You can undo for a short time after.`,
+    });
   };
 
   const handleManageCampaign = (campaignId) => {
@@ -465,7 +475,13 @@ const HomePage = ({
   const handleDeleteNpc = (npcId) => {
     const item = npcs.find((n) => n.id === npcId);
     if (!item) return;
-    queueHomeDelete("npc", item);
+    const label = item.name || item.stand_name || `NPC ${item.id}`;
+    setDeleteConfirm({
+      kind: "npc",
+      item,
+      label,
+      message: `Delete NPC “${label}”? You can undo for a short time after.`,
+    });
   };
 
   const refreshCampaigns = useCallback(() => {
@@ -477,16 +493,42 @@ const HomePage = ({
       .finally(() => setCampaignsLoading(false));
   }, []);
 
-  const handleDeleteFaction = async (factionId) => {
-    if (!window.confirm("Delete this faction?")) return;
-    try {
-      await factionAPI.deleteFaction(factionId);
-      if (expandedFactionId === factionId) setExpandedFactionId(null);
-      refreshCampaigns();
-    } catch (err) {
-      console.error("Failed to delete faction:", err);
-    }
+  const handleDeleteFaction = (factionId) => {
+    const faction =
+      (campaigns || [])
+        .flatMap((c) => c.factions || [])
+        .find((f) => f.id === factionId) || null;
+    const name = faction?.name || "this faction";
+    setDeleteConfirm({
+      kind: "faction",
+      factionId,
+      label: name,
+      message: `Delete faction “${name}”?`,
+    });
   };
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!deleteConfirm) return;
+    const pending = deleteConfirm;
+    if (pending.kind === "character" || pending.kind === "npc") {
+      setDeleteConfirm(null);
+      await queueHomeDelete(pending.kind, pending.item);
+      return;
+    }
+    if (pending.kind === "faction") {
+      setDeleteConfirmBusy(true);
+      try {
+        await factionAPI.deleteFaction(pending.factionId);
+        if (expandedFactionId === pending.factionId) setExpandedFactionId(null);
+        refreshCampaigns();
+        setDeleteConfirm(null);
+      } catch (err) {
+        console.error("Failed to delete faction:", err);
+      } finally {
+        setDeleteConfirmBusy(false);
+      }
+    }
+  }, [deleteConfirm, expandedFactionId, queueHomeDelete, refreshCampaigns]);
 
   const handleFactionEditorSaved = () => {
     setExpandedFactionId(null);
@@ -1160,6 +1202,15 @@ const HomePage = ({
         </div>
       </footer>
 
+      <ConfirmDeleteModal
+        open={Boolean(deleteConfirm)}
+        message={deleteConfirm?.message || ""}
+        busy={deleteConfirmBusy}
+        onCancel={() => {
+          if (!deleteConfirmBusy) setDeleteConfirm(null);
+        }}
+        onConfirm={handleConfirmDelete}
+      />
     </div>
   );
 };
