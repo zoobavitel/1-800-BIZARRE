@@ -1,0 +1,16 @@
+[Unit]
+Description=1-800-BIZARRE nightly Postgres + media backup
+After=network.target postgresql.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/bizarre/prod.env
+Environment=BACKUP_DIR=/var/backups/bizarre
+Environment=MEDIA_ROOT=/var/lib/bizarre/media
+Environment=RETENTION_DAYS=14
+Environment=DB_NAME=bizarre_db
+Environment=DB_USER=bizarre
+ExecStart=/usr/local/bin/bizarre-postgres-media-backup
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7

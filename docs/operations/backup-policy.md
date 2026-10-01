@@ -9,52 +9,35 @@ Goal: if an agent (or human) wrecks CT 103, restore is boring — not a Reddit p
 | Postgres (`bizarre_db`) | Campaign / character / session state |
 | `/var/lib/bizarre/media` | Uploads — **not** in `pg_dump` |
 | Code | Git remote + optional pull-mirror (Forgejo/Gitea) |
-| Secrets | `/etc/bizarre/prod.env` — offline / password manager, **not** in agent-reachable paths |
+| Secrets | `/etc/bizarre/prod.env` — Vault / KeePass copy, **not** in git or agent paths |
 
-## Current repo tooling
+## Installed on CT 103
 
 | Mechanism | Role |
 |-----------|------|
-| [`scripts/backup-database.sh`](../../scripts/backup-database.sh) | On-demand / pre-deploy dump (`deploy-prod.sh` aborts if this fails) |
-| [`postgres-backup-cron.example.sh`](../../deploy/bizarre-api/postgres-backup-cron.example.sh) | Example nightly `pg_dump -Fc` → `/var/backups/jojo-postgres`, delete `>14` days |
+| [`postgres-media-backup.sh`](../../deploy/bizarre-api/postgres-media-backup.sh) | Nightly `pg_dump -Fc` + media tarball → `/var/backups/bizarre` (14d retention) |
+| `bizarre-backup.timer` | systemd ~03:15 UTC |
+| [`copy-prod-env-to-vault.sh`](../../deploy/bizarre-api/copy-prod-env-to-vault.sh) | Human copies `prod.env` into encrypted `~/Vault/...` |
+| [`pbs-ct-backup.example.md`](../../deploy/bizarre-api/pbs-ct-backup.example.md) | Proxmox host backup of CT 103 → PBS **from pve2** (agent never has pve2 SSH) |
+| [`restore-drill.sh`](../../deploy/bizarre-api/restore-drill.sh) | Scratch-CT restore checklist |
 
-**Gap to close on the host:** confirm cron/timer actually runs; add **media** tarball beside DB; move retention **off-host** so the agent cannot delete backups.
+Also: [`scripts/backup-database.sh`](../../scripts/backup-database.sh) pre-deploy via `deploy-prod.sh`.
 
 ## Target policy
 
-1. **Nightly (prod host → off-host)**
-   - `pg_dump -Fc` of prod DB
-   - tarball or `restic` snapshot of `/var/lib/bizarre/media`
-   - Prefer **Proxmox Backup Server** or restic/borg with **append-only** / object-lock credentials the agent does not have
+1. **Nightly on CT** — DB dump + media tar (timer above)  
+2. **Off-host** — PBS job from pve2 and/or rsync `/var/backups/bizarre` somewhere the agent cannot delete  
+3. **Secrets** — Vault copy of `prod.env` (madvillainy `~/Vault/secrets/bizarre-api/prod.env`)  
+4. **Pre-change** — `pct snapshot 103 …` before agent triage  
+5. **Verify** — restore drill quarterly ([`restore-drill.sh`](../../deploy/bizarre-api/restore-drill.sh))
 
-2. **Retention**
-   - Daily ≥14 days on PBS/restic
-   - Optional monthly keep
-
-3. **Pre-change**
-   - `pct snapshot 103 …` before agent triage or major upgrades
-   - Snapshots live on same storage — **not** a substitute for PBS
-
-4. **Deploy**
-   - Keep `deploy-prod.sh` pre-migrate DB backup
-
-5. **Verify**
-   - Check newest dump/media backup timestamps after install
-   - Restore drill into scratch CT **now**, then quarterly
-
-6. **GitHub**
-   - Not a DB/media backup
-   - Ruleset + optional pull-mirror for code; never commit `backups/` (gitignored)
-
-## Operator check (run on CT 103 / pve2)
+## Operator check
 
 ```bash
-# Is nightly dump installed?
-crontab -l 2>/dev/null; systemctl list-timers | grep -i backup || true
-ls -lt /var/backups/jojo-postgres 2>/dev/null | head
-
-# Media included?
-# (document your restic/PBS job id here once created)
+systemctl list-timers | grep bizarre-backup
+ls -lt /var/backups/bizarre | head
+# On pve2 (ops config only):
+#   pvesm list <pbs-storage> | grep 103
 ```
 
 ## Related
