@@ -1220,10 +1220,6 @@ export default function SessionGMManagementPanels({
   /** Prefetch fuller NPC when expanding if summary thin. */
   const [npcDetailById, setNpcDetailById] = useState({});
   const [addNpcTargetFactionId, setAddNpcTargetFactionId] = useState(null);
-  const [npcRosterSectionCollapsed, setNpcRosterSectionCollapsed] =
-    useState(false);
-  const [playerRosterSectionCollapsed, setPlayerRosterSectionCollapsed] =
-    useState(false);
   /** Rosters tab: which columns are visible (cannot hide both). */
   const [rosterShowNpc, setRosterShowNpc] = useState(true);
   const [rosterShowPc, setRosterShowPc] = useState(true);
@@ -4701,21 +4697,7 @@ export default function SessionGMManagementPanels({
           <span style={{ ...S.sectionLbl, marginBottom: 0 }}>
             Session NPC roster
           </span>
-          <button
-            type="button"
-            onClick={() => setNpcRosterSectionCollapsed((v) => !v)}
-            style={{ ...S.btnGhost, fontSize: 10, padding: "2px 8px", flexShrink: 0 }}
-            title={
-              npcRosterSectionCollapsed
-                ? "Expand session NPC roster"
-                : "Collapse session NPC roster"
-            }
-          >
-            {npcRosterSectionCollapsed ? "Expand" : "Collapse"}
-          </button>
         </div>
-        {!npcRosterSectionCollapsed ? (
-          <>
             <div
               ref={sessionNpcTokensRef}
               className="home-poc session-roster-tokens"
@@ -5551,8 +5533,6 @@ export default function SessionGMManagementPanels({
             </div>
           ) : null}
         </div>
-          </>
-        ) : null}
       </div>
       ) : null}
 
@@ -5569,21 +5549,7 @@ export default function SessionGMManagementPanels({
           <span style={{ ...S.sectionLbl, marginBottom: 0 }}>
             Session player roster
           </span>
-          <button
-            type="button"
-            onClick={() => setPlayerRosterSectionCollapsed((v) => !v)}
-            style={{ ...S.btnGhost, fontSize: 10, padding: "2px 8px", flexShrink: 0 }}
-            title={
-              playerRosterSectionCollapsed
-                ? "Expand session player roster"
-                : "Collapse session player roster"
-            }
-          >
-            {playerRosterSectionCollapsed ? "Expand" : "Collapse"}
-          </button>
         </div>
-        {!playerRosterSectionCollapsed ? (
-          <>
             <RosterCrewInlineSection
               campaign={campaign}
               crews={crews || []}
@@ -7011,8 +6977,6 @@ export default function SessionGMManagementPanels({
             );
           })()}
         </div>
-        </>
-        ) : null}
       </div>
       ) : null}
 
