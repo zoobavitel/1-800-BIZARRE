@@ -1,0 +1,35 @@
+---
+description: Soft policy — catastrophic ops denied; hooks enforce. Agent triage on CT103 is read-mostly.
+alwaysApply: true
+---
+
+# Destructive ops — intent (hooks enforce)
+
+Hooks are tripwires. Real safety = least privilege + backups agent cannot delete.
+
+## Never (agent must not try)
+
+- Force-push / rewrite `master`/`main`; `git reset --hard`; `git clean -fd`
+- `rm -rf` outside workspace, `$HOME`, `/`, or with unexpanded variables
+- Touch `/opt/bizarre-prod`, `/var/lib/bizarre`, `/etc/bizarre`, or `prod.env`
+- SSH to Proxmox hosts (`pve` / `pve2`) or `root@*`
+- Edit or delete `.cursor/hooks.json` / `.cursor/hooks/**` (self-protection)
+- DROP DATABASE/SCHEMA; `mkfs`; `dd` to block devices
+
+## Prod triage (CT 103 / bizarre-api)
+
+- Diagnose as **agent user** only — logs + read-only SQL. No writes to prod tree/media/env.
+- Fixes land on **madvillainy** (or `/opt/bizarre` agent tree) → PR → deploy. Do not hot-edit prod.
+- Prefer `git worktree remove` over `rm` for worktrees.
+
+## Ask human first
+
+- `ssh`/`scp` to `bizarre-api-agent`
+- Recursive delete inside repo; `pg_restore`; `sudo`; service restart
+- `ALLOW_PROD_DB=1` (should not be needed if agent has no prod write creds)
+
+## Operator checklist (not agent work)
+
+- Off auto-run for terminal; 1Password for SSH keys
+- GitHub ruleset: no force-push / no branch delete on `master`
+- Nightly DB+media backup off-host (PBS/restic append-only); pre-session `pct snapshot`
