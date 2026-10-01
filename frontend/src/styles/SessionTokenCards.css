@@ -103,21 +103,28 @@
   color: #fff;
 }
 
-/* Session faction faces: Home uses tall 3/4 media — keep compact here */
-.session-roster-tokens .f-card-media {
+/* Session roster faces: Home uses tall 3/4 media — keep compact here */
+.session-roster-tokens .f-card-media,
+.session-roster-tokens .p-card-media {
   aspect-ratio: 5 / 4;
   max-height: 110px;
 }
 
-.session-roster-tokens .f-card-body {
+.session-roster-tokens .f-card-body,
+.session-roster-tokens .p-card-body,
+.session-roster-tokens .npc-card-body {
   padding: 8px 8px 10px;
 }
 
-.session-roster-tokens .f-card-name {
+.session-roster-tokens .f-card-name,
+.session-roster-tokens .p-card-name,
+.session-roster-tokens .npc-card-name {
   font-size: 13px;
 }
 
-.session-roster-tokens .f-card-type {
+.session-roster-tokens .f-card-type,
+.session-roster-tokens .p-card-stand,
+.session-roster-tokens .npc-card-stand {
   font-size: 10px;
 }
 

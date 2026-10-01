@@ -111,8 +111,6 @@ export default function CampaignRosterPanels({
   showNpcColumn = true,
   showPcColumn = true,
 }) {
-  const [npcRosterCollapsed, setNpcRosterCollapsed] = useState(false);
-  const [playerRosterCollapsed, setPlayerRosterCollapsed] = useState(false);
   const [expandedFactionId, setExpandedFactionId] = useState(null);
   const [expandedPcId, setExpandedPcId] = useState(null);
   const [expandedNpcId, setExpandedNpcId] = useState(null);
@@ -339,10 +337,6 @@ export default function CampaignRosterPanels({
         showRoster && showNpcColumn ? (
           <RosterCollapsibleSection
             title="Factions & NPCs"
-            collapsed={npcRosterCollapsed}
-            onToggleCollapsed={() => setNpcRosterCollapsed((v) => !v)}
-            collapseExpandLabel="Expand factions & NPCs"
-            collapseCollapseLabel="Collapse factions & NPCs"
             S={S}
             helpTip={
               isGM ? (
@@ -419,10 +413,6 @@ export default function CampaignRosterPanels({
       rightColumn={
         <RosterCollapsibleSection
           title="Players, Crew & Characters"
-          collapsed={playerRosterCollapsed}
-          onToggleCollapsed={() => setPlayerRosterCollapsed((v) => !v)}
-          collapseExpandLabel="Expand player roster"
-          collapseCollapseLabel="Collapse player roster"
           headerExtra={inviteHeaderExtra}
           S={S}
         >
@@ -582,15 +572,16 @@ export default function CampaignRosterPanels({
                     <div className="home-card-grid">
                       {pcEntries.map(({ ch, name }) => {
                         const pcExpanded = expandedPcId === ch.id;
+                        const tokenChar =
+                          fullCharById.get(Number(ch.id)) || ch;
                         return (
                           <div className="session-roster-cell" key={ch.id}>
                             <SessionPcToken
-                              character={ch}
+                              character={tokenChar}
                               name={name}
                               isExpanded={pcExpanded}
                               onToggleExpand={() => togglePcExpand(ch.id)}
                               player={charMetaById.get(ch.id)?.user || null}
-                              campaignCharacters={campaignCharacters}
                             />
                           </div>
                         );

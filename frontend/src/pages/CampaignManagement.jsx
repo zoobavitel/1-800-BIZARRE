@@ -400,9 +400,7 @@ function CampaignListCard({ campaign: c, user, onSelect }) {
           {visibleOthers.length > 0 ? (
             <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
               {visibleOthers.map((p) => {
-                const src = getUserAvatarSrc(p, {
-                  campaignCharacters: roster,
-                });
+                const src = getUserAvatarSrc(p);
                 const initial = rosterUserInitial(p);
                 return (
                   <HomeCardThumb
