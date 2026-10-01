@@ -137,3 +137,25 @@ Back up `/var/lib/bizarre/media` with the database — Postgres dumps do not con
 ## 5. Firewall / Pi-hole / Tailscale / SQLite migration / backups
 
 Unchanged in spirit — see prior sections. Postgres backups: [`postgres-backup-cron.example.sh`](postgres-backup-cron.example.sh). Include `/var/lib/bizarre/media` in host backups. Take a Proxmox snapshot before major upgrades.
+
+Full policy: [`docs/operations/backup-policy.md`](../../docs/operations/backup-policy.md).
+
+## 6. Agent triage (least privilege)
+
+Cursor may SSH into this CT for debug — as user `agent`, not as the app user and never via pve2 host SSH.
+
+- One-time: [`setup-agent-user.sh`](setup-agent-user.sh) (RO Postgres role, sudoers status/journal only, harden `prod.env`)
+- Dev box SSH fragment: [`ssh-config.madvillainy.example`](ssh-config.madvillainy.example)
+- Ops narrative: [`docs/operations/agent-safety.md`](../../docs/operations/agent-safety.md)
+- Project hooks (agent tree `/opt/bizarre` only): [`.cursor/hooks.json`](../../.cursor/hooks.json)
+
+Full policy: [`docs/operations/backup-policy.md`](../../docs/operations/backup-policy.md).
+
+## 6. Agent triage (least privilege)
+
+Cursor may SSH into this CT for debug — as user `agent`, not as the app user and never via pve2 host SSH.
+
+- One-time: [`setup-agent-user.sh`](setup-agent-user.sh) (RO Postgres role, sudoers status/journal only, harden `prod.env`)
+- Dev box SSH fragment: [`ssh-config.madvillainy.example`](ssh-config.madvillainy.example)
+- Ops narrative: [`docs/operations/agent-safety.md`](../../docs/operations/agent-safety.md)
+- Project hooks (agent tree `/opt/bizarre` only): [`.cursor/hooks.json`](../../.cursor/hooks.json)
