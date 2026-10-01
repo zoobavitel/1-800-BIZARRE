@@ -10,6 +10,7 @@ export const PATCH_NOTES = [
       {
         "title": "Fixed",
         "items": [
+          "show accurate PC heritage and level on cards",
           "drop Collapse; use Show NPC/PC only",
           "equal-height columns, compact tokens, avatar footer"
         ]
@@ -572,12 +573,6 @@ export const PATCH_NOTES = [
         "title": "Refactored",
         "items": [
           "drop archetype trigger picker from the XP panel"
-        ]
-      },
-      {
-        "title": "Added",
-        "items": [
-          "B→A reward grants two unique abilities plus one standard"
         ]
       }
     ]

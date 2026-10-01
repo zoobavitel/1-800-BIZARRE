@@ -31,9 +31,7 @@ export default function HomeCampaignCard({
   const players = Array.isArray(campaign?.players) ? campaign.players : [];
   const playerCount = players.length;
   const gmName = getUserDisplayName(campaign?.gm);
-  const gmAvatarSrc = getUserAvatarSrc(campaign?.gm, {
-    campaignCharacters: roster,
-  });
+  const gmAvatarSrc = getUserAvatarSrc(campaign?.gm);
   const myChar = roster.find((cc) => cc.user_id === user?.id);
   const playingAs = myChar?.true_name || null;
   const sessionCount = Array.isArray(campaign?.sessions)
@@ -75,11 +73,13 @@ export default function HomeCampaignCard({
           <div className="g-card-gm-row">
             <span className="g-card-gm-label">GM</span>
             <div className={`g-card-gm-chip${isGm ? " is-self" : ""}`}>
-              {gmAvatarSrc ? (
-                <span className="g-card-user-avatar" aria-hidden="true">
+              <span className="g-card-user-avatar" aria-hidden="true">
+                {gmAvatarSrc ? (
                   <img src={gmAvatarSrc} alt="" />
-                </span>
-              ) : null}
+                ) : (
+                  gmName.charAt(0).toUpperCase()
+                )}
+              </span>
               <span className="g-card-user-name">{gmName}</span>
             </div>
           </div>
@@ -108,19 +108,19 @@ export default function HomeCampaignCard({
             ) : (
               visiblePlayers.map((player) => {
                 const playerName = getUserDisplayName(player);
-                const playerAvatarSrc = getUserAvatarSrc(player, {
-                  campaignCharacters: roster,
-                });
+                const playerAvatarSrc = getUserAvatarSrc(player);
                 return (
                   <span
                     key={player.id || playerName}
                     className="g-card-player-chip"
                   >
-                    {playerAvatarSrc ? (
-                      <span className="g-card-user-avatar" aria-hidden="true">
+                    <span className="g-card-user-avatar" aria-hidden="true">
+                      {playerAvatarSrc ? (
                         <img src={playerAvatarSrc} alt="" />
-                      </span>
-                    ) : null}
+                      ) : (
+                        playerName.charAt(0).toUpperCase()
+                      )}
+                    </span>
                     <span className="g-card-user-name">{playerName}</span>
                   </span>
                 );
