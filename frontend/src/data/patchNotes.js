@@ -4,18 +4,76 @@
  */
 export const PATCH_NOTES = [
   {
-    "date": "2026-09-29",
+    "date": "2026-10-01",
     "version": null,
     "sections": [
       {
-        "title": "Added",
+        "title": "Fixed",
         "items": [
-          "player access, PC Info, campaign shell ledgers"
+          "show accurate PC heritage and level on cards",
+          "drop Collapse; use Show NPC/PC only",
+          "equal-height columns, compact tokens, avatar footer"
         ]
       },
       {
         "title": "Other",
         "items": [
+          "Merge pull request #188 from zoobavitel/fix/api-default-127-host"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-09-30",
+    "version": null,
+    "sections": [
+      {
+        "title": "Fixed",
+        "items": [
+          "prefer 127.0.0.1 over localhost for local API",
+          "persist NPC −/+ without flicker after save refresh",
+          "split prod tree from agent workspace",
+          "stop tab clobber; close last tabs; contact pickers",
+          "show newest campaign session first in list"
+        ]
+      },
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #187 from zoobavitel/feature/npc-standing-open-sheet",
+          "Merge pull request #186 from zoobavitel/fix/npc-standing-autosave",
+          "Merge pull request #185 from zoobavitel/feature/standing-display-clarity",
+          "Merge pull request #184 from zoobavitel/fix/deploy-prod-tree-split",
+          "Merge pull request #183 from zoobavitel/feature/npc-standing-visibility",
+          "Merge pull request #182 from zoobavitel/fix/faction-member-visibility",
+          "Fix See checkbox snapping back after toggle.",
+          "Fix GM hide/show of faction NPCs for players.",
+          "Merge pull request #181 from zoobavitel/feature/npc-sheet-restructure",
+          "Merge pull request #180 from zoobavitel/fix/session-list-newest-first"
+        ]
+      },
+      {
+        "title": "Added",
+        "items": [
+          "open See-on standing/strip NPCs as read-only sheets",
+          "sync faction↔faction status both ways",
+          "show NPCs without revealing faction",
+          "restructure layout, PC/NPC standing, XP collapse"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-09-29",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #179 from zoobavitel/chore/dedupe-resistance-stress-dead-dice-rolling",
+          "Merge pull request #178 from zoobavitel/feature/campaign-shell-pc-columns",
+          "Merge pull request #177 from zoobavitel/feature/campaign-roster-ui-parity",
+          "Merge pull request #176 from zoobavitel/feature/campaign-roster-ui-parity",
           "Align campaign/session roster expands with full-width expand-slot parity.",
           "Merge pull request #175 from zoobavitel/fix/session-faction-npc-count",
           "Remove unused CampaignManagement imports after roster extract.",
@@ -28,6 +86,21 @@ export const PATCH_NOTES = [
           "Fix crew-linked stash disappearing on autosave.",
           "Fix Train phase lock when no completed session exists.",
           "Add change-password flow for logged-in users."
+        ]
+      },
+      {
+        "title": "Maintenance",
+        "items": [
+          "dedupe resistance stress cost, remove dead dice-rolling"
+        ]
+      },
+      {
+        "title": "Added",
+        "items": [
+          "per-PC shell columns and own-character Harm edits",
+          "fill campaign PC expand tabs",
+          "sheet fixes, per-NPC visibility, overlay expand, home undo delete",
+          "player access, PC Info, campaign shell ledgers"
         ]
       },
       {
@@ -493,112 +566,13 @@ export const PATCH_NOTES = [
       {
         "title": "Other",
         "items": [
-          "Merge pull request #118 from zoobavitel/feature/srd-equipment-templates",
-          "Merge pull request #117 from zoobavitel/cursor/plan-a-pending-advance-5176",
-          "Sync standard abilities catalog to SRD_DEV."
+          "Merge pull request #118 from zoobavitel/feature/srd-equipment-templates"
         ]
       },
       {
         "title": "Refactored",
         "items": [
-          "drop archetype trigger picker from the XP panel",
-          "rename Arcane Implements to Bizarre Implements"
-        ]
-      },
-      {
-        "title": "Added",
-        "items": [
-          "B→A reward grants two unique abilities plus one standard",
-          "drop the 20 XP cap on manual awards",
-          "show the signed-in username in the user menu drawer",
-          "scope catalog per campaign and stop double-saving base kit",
-          "sync SRD equipment TEMPLATEs from fixture",
-          "Plan A fill-clear PendingAdvance and single-playbook cutover",
-          "add loadout, inventory, and armor"
-        ]
-      },
-      {
-        "title": "Fixed",
-        "items": [
-          "stop apply-level-up hanging behind autosave write lock",
-          "stable PendingAdvance index name + ESLint hook deps",
-          "align Plan A tests and player loadout PATCH permission"
-        ]
-      },
-      {
-        "title": "Tests",
-        "items": [
-          "align XP allocation suites with Plan A pending redeem",
-          "cover resolveCrewFromCampaign helpers"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-09-01",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #115 from zoobavitel/fix/advance-autosave-revert",
-          "Fix exhaustive-deps on allocation XP callbacks.",
-          "Fix advance autosave reverting allocation-owned character state.",
-          "Merge pull request #114 from zoobavitel/fix/stale-player-stress-sync"
-        ]
-      },
-      {
-        "title": "Added",
-        "items": [
-          "use the cracked-hand mark as the site favicon"
-        ]
-      },
-      {
-        "title": "Fixed",
-        "items": [
-          "run gunicorn gthread so SSE cannot starve the API",
-          "keep server stress visible on a dirty PC tab"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-08-30",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #113 from zoobavitel/fix/playbook-ability-level-gate"
-        ]
-      },
-      {
-        "title": "Tests",
-        "items": [
-          "expect seeded Spin/Hamon foundations"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-08-29",
-    "version": null,
-    "sections": [
-      {
-        "title": "Fixed",
-        "items": [
-          "upsert Spin/Hamon abilities from SRD fixtures",
-          "gate Spin/Hamon abilities by character level",
-          "hide L1 ability add buttons when quota full",
-          "keep Stand unique ability package on save"
-        ]
-      },
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #112 from zoobavitel/fix/custom-stand-ability-persist",
-          "Merge pull request #111 from zoobavitel/fix/custom-stand-ability-persist",
-          "Merge pull request #110 from zoobavitel/feature/reset-character-sheet"
+          "drop archetype trigger picker from the XP panel"
         ]
       }
     ]

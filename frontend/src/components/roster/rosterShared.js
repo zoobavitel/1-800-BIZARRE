@@ -14,7 +14,7 @@ export const rosterTwoColumnGridStyle = (showSecondColumn) => ({
   gridTemplateColumns: showSecondColumn ? "1fr 1fr" : "1fr",
   gap: 16,
   marginBottom: 12,
-  alignItems: "start",
+  alignItems: "stretch",
 });
 
 /**

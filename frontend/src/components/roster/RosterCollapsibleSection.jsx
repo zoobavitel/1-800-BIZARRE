@@ -1,12 +1,8 @@
 import React from "react";
 
-/** Card section with title + collapse toggle (session/campaign rosters). */
+/** Card section with title (campaign/session rosters). Column show/hide via Show NPC/PC. */
 export default function RosterCollapsibleSection({
   title,
-  collapsed,
-  onToggleCollapsed,
-  collapseExpandLabel = "Expand",
-  collapseCollapseLabel = "Collapse",
   cardStyle = {},
   S,
   children,
@@ -14,7 +10,15 @@ export default function RosterCollapsibleSection({
   helpTip = null,
 }) {
   return (
-    <div style={{ ...S.card, marginBottom: 0, ...cardStyle }}>
+    <div
+      style={{
+        ...S.card,
+        marginBottom: 0,
+        height: "100%",
+        boxSizing: "border-box",
+        ...cardStyle,
+      }}
+    >
       <div
         style={{
           display: "flex",
@@ -28,32 +32,21 @@ export default function RosterCollapsibleSection({
           {title}
         </span>
         {headerExtra}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            flexShrink: 0,
-            marginLeft: headerExtra ? 0 : "auto",
-          }}
-        >
-          {helpTip}
-          <button
-            type="button"
-            onClick={onToggleCollapsed}
+        {helpTip ? (
+          <div
             style={{
-              ...S.btnGhost,
-              fontSize: 10,
-              padding: "2px 8px",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
               flexShrink: 0,
+              marginLeft: headerExtra ? 0 : "auto",
             }}
-            title={collapsed ? collapseExpandLabel : collapseCollapseLabel}
           >
-            {collapsed ? "Expand" : "Collapse"}
-          </button>
-        </div>
+            {helpTip}
+          </div>
+        ) : null}
       </div>
-      {!collapsed ? children : null}
+      {children}
     </div>
   );
 }

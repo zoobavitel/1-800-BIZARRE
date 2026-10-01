@@ -322,7 +322,6 @@ export function SessionPcToken({
   isExpanded = false,
   onToggleExpand,
   player = null,
-  campaignCharacters = null,
 }) {
   const portraitSrc = getCharacterPortraitSrc(character);
   const { hasImage, safeSrc, onError } = useHomeCardImage(portraitSrc);
@@ -333,11 +332,18 @@ export function SessionPcToken({
     character?.standName ||
     character?.stand?.name ||
     "—";
-  const heritage =
+  const heritageRaw =
     character?.heritage_name ||
     character?.heritageName ||
-    character?.heritage ||
-    "—";
+    character?.heritage_details?.name ||
+    (typeof character?.heritage === "object" && character?.heritage?.name) ||
+    (typeof character?.heritage === "string" ? character.heritage : null);
+  const heritage = String(heritageRaw || "").trim() || "—";
+  const levelRaw = character?.level;
+  const level =
+    levelRaw != null && levelRaw !== "" && Number.isFinite(Number(levelRaw))
+      ? Number(levelRaw)
+      : null;
   const playerName = player
     ? String(
         player.username ||
@@ -346,9 +352,7 @@ export function SessionPcToken({
           "",
       ).trim()
     : "";
-  const playerAvatarSrc = player
-    ? getUserAvatarSrc(player, { campaignCharacters })
-    : null;
+  const playerAvatarSrc = player ? getUserAvatarSrc(player) : null;
 
   const cardClasses = [
     "p-card",
@@ -389,7 +393,7 @@ export function SessionPcToken({
           <div className="p-card-stand">「{standLabel}」</div>
           <div className="p-card-tags">
             <span className="p-tag">{heritage}</span>
-            <span className="p-tag">Lv {character?.level ?? "—"}</span>
+            <span className="p-tag">Lv {level != null ? level : "—"}</span>
           </div>
           {playerName ? (
             <div className="p-card-player" title={playerName}>

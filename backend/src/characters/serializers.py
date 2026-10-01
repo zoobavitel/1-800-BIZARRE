@@ -2842,6 +2842,7 @@ class CharacterSummarySerializer(serializers.ModelSerializer):
             "secondary_playbook",
             "playbook_xp_archetypes",
             "heritage_name",
+            "level",
             "user_id",
             "username",
             "crew_id",
