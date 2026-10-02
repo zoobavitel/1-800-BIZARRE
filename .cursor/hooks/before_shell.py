@@ -13,7 +13,9 @@ def main() -> None:
     command = data.get("command") or data.get("cmd") or ""
     if not command:
         allow()
-    permission, message = shell_policy(command)
+    permission, message = shell_policy(
+        command, data.get("cwd") or data.get("working_directory")
+    )
     if permission == "deny":
         deny(message, f"Hook denied shell: {message}")
     if permission == "ask":
