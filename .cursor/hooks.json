@@ -3,31 +3,31 @@
   "hooks": {
     "beforeShellExecution": [
       {
-        "command": ".cursor/hooks/before-shell.sh",
+        "command": "bash .cursor/hooks/before-shell.sh",
         "failClosed": true
       }
     ],
     "beforeReadFile": [
       {
-        "command": ".cursor/hooks/before-read-file.sh",
+        "command": "bash .cursor/hooks/before-read-file.sh",
         "failClosed": true
       }
     ],
     "preToolUse": [
       {
-        "command": ".cursor/hooks/pre-tool-use.sh",
+        "command": "bash .cursor/hooks/pre-tool-use.sh",
         "failClosed": true
       }
     ],
     "beforeMCPExecution": [
       {
-        "command": ".cursor/hooks/before-mcp.sh",
+        "command": "bash .cursor/hooks/before-mcp.sh",
         "failClosed": true
       }
     ],
     "subagentStart": [
       {
-        "command": ".cursor/hooks/subagent-start.sh",
+        "command": "bash .cursor/hooks/subagent-start.sh",
         "failClosed": true
       }
     ]

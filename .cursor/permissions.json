@@ -1,0 +1,16 @@
+{
+  "autoRun": {
+    "allow_instructions": [
+      "Allow read-only git status, diff, and log.",
+      "Allow running the project hook unit tests with unittest discover under .cursor/hooks/tests."
+    ],
+    "block_instructions": [
+      "Every recursive rm, git reset --hard, git clean -f, or force-push must go through approval first.",
+      "Every ssh, scp, or rsync to a remote host must go through approval first.",
+      "Every command that writes under .cursor/hooks or .cursor/hooks.json must go through approval first.",
+      "Every command that touches /opt/bizarre-prod, /var/lib/bizarre, or /etc/bizarre must go through approval first.",
+      "Every DROP, TRUNCATE, pg_restore, or dropdb must go through approval first.",
+      "Do not auto-run sudo, systemctl restart/stop, or curl|sh / wget|sh patterns."
+    ]
+  }
+}

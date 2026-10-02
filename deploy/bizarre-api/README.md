@@ -136,7 +136,10 @@ Back up `/var/lib/bizarre/media` with the database — Postgres dumps do not con
 
 ## 5. Firewall / Pi-hole / Tailscale / SQLite migration / backups
 
-Unchanged in spirit — see prior sections. Postgres backups: [`postgres-backup-cron.example.sh`](postgres-backup-cron.example.sh). Include `/var/lib/bizarre/media` in host backups. Take a Proxmox snapshot before major upgrades.
+Nightly DB+media: [`postgres-media-backup.sh`](postgres-media-backup.sh) + `bizarre-backup.timer` → `/var/backups/bizarre`.
+PBS host backup (on pve2): [`pbs-ct-backup.example.md`](pbs-ct-backup.example.md).
+Restore drill: [`restore-drill.sh`](restore-drill.sh).
+Vault copy of `prod.env`: [`copy-prod-env-to-vault.sh`](copy-prod-env-to-vault.sh).
 
 Full policy: [`docs/operations/backup-policy.md`](../../docs/operations/backup-policy.md).
 
@@ -148,14 +151,4 @@ Cursor may SSH into this CT for debug — as user `agent`, not as the app user a
 - Dev box SSH fragment: [`ssh-config.madvillainy.example`](ssh-config.madvillainy.example)
 - Ops narrative: [`docs/operations/agent-safety.md`](../../docs/operations/agent-safety.md)
 - Project hooks (agent tree `/opt/bizarre` only): [`.cursor/hooks.json`](../../.cursor/hooks.json)
-
-Full policy: [`docs/operations/backup-policy.md`](../../docs/operations/backup-policy.md).
-
-## 6. Agent triage (least privilege)
-
-Cursor may SSH into this CT for debug — as user `agent`, not as the app user and never via pve2 host SSH.
-
-- One-time: [`setup-agent-user.sh`](setup-agent-user.sh) (RO Postgres role, sudoers status/journal only, harden `prod.env`)
-- Dev box SSH fragment: [`ssh-config.madvillainy.example`](ssh-config.madvillainy.example)
-- Ops narrative: [`docs/operations/agent-safety.md`](../../docs/operations/agent-safety.md)
-- Project hooks (agent tree `/opt/bizarre` only): [`.cursor/hooks.json`](../../.cursor/hooks.json)
+- Hooks must be `root`-owned with no group/other write so `agent` cannot rewrite tripwires
