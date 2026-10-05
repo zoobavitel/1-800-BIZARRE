@@ -1,11 +1,14 @@
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { buildRouteHref, handleSpaNavClick } from "../../utils/spaNavigation";
 import CampaignFactionEditor from "../campaign/CampaignFactionEditor";
 import {
   SessionFactionToken,
   SessionNpcToken,
 } from "../session/SessionTokenFaces";
-import { NO_FACTION_DROP_KEY } from "../session/sessionShellUi";
+import {
+  NO_FACTION_DROP_KEY,
+  NPC_PLAYBOOK_OPTIONS,
+} from "../session/sessionShellUi";
 import { rosterExpandPanelChrome } from "./rosterShared";
 import NpcCampaignExpandPanel from "./NpcCampaignExpandPanel";
 import useRosterExpandAnchor from "./useRosterExpandAnchor";
@@ -66,6 +69,64 @@ export default function RosterNpcColumn({
   onError,
   readOnly = false,
 }) {
+  const [stripAddFactionId, setStripAddFactionId] = useState(null);
+  const [stripAddMode, setStripAddMode] = useState("pick");
+  const [stripCreateName, setStripCreateName] = useState("");
+  const [stripCreatePlaybook, setStripCreatePlaybook] = useState("STAND");
+  const [stripCreateBusy, setStripCreateBusy] = useState(false);
+  const stripChooserRef = useRef(null);
+
+  useEffect(() => {
+    if (stripAddFactionId == null) return undefined;
+    const onDoc = (e) => {
+      if (stripChooserRef.current?.contains(e.target)) return;
+      setStripAddFactionId(null);
+      setStripAddMode("pick");
+    };
+    const onKey = (e) => {
+      if (e.key === "Escape") {
+        setStripAddFactionId(null);
+        setStripAddMode("pick");
+      }
+    };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [stripAddFactionId]);
+
+  const closeStripChooser = () => {
+    setStripAddFactionId(null);
+    setStripAddMode("pick");
+    setStripCreateName("");
+    setStripCreatePlaybook("STAND");
+    setStripCreateBusy(false);
+  };
+
+  const handleEditorCreateNpc = async ({ name, playbook }) => {
+    if (typeof onCreateNpcForFaction !== "function" || !factionForm?.id) {
+      return null;
+    }
+    return onCreateNpcForFaction(factionForm.id, { name, playbook });
+  };
+
+  const addableForFaction = (memberNpcs) => {
+    const memberIds = new Set(
+      (memberNpcs || []).map((n) => Number(n.id)).filter((id) => Number.isFinite(id)),
+    );
+    const seen = new Set();
+    const out = [];
+    for (const n of [...(campaignNPCs || []), ...(npcsThatCanBeAdded || [])]) {
+      const id = Number(n?.id);
+      if (!Number.isFinite(id) || memberIds.has(id) || seen.has(id)) continue;
+      seen.add(id);
+      out.push(n);
+    }
+    return out;
+  };
+
   const expandedFactionNpc =
     expandedNpcId != null
       ? factionGroups
@@ -126,8 +187,15 @@ export default function RosterNpcColumn({
           {factionGroups.map(({ faction, npcs }) => {
             const dropKey = String(faction.id);
             const isExpanded = expandedFactionId === faction.id;
+            const chooserOpen = stripAddFactionId === faction.id;
+            const addable = addableForFaction(npcs);
             return (
-              <div className="session-roster-cell" key={`faction-${faction.id}`}>
+              <div
+                className="session-roster-cell"
+                key={`faction-${faction.id}`}
+                style={{ position: "relative" }}
+                ref={chooserOpen ? stripChooserRef : undefined}
+              >
                 <SessionFactionToken
                   faction={faction}
                   npcList={npcs}
@@ -144,16 +212,15 @@ export default function RosterNpcColumn({
                   onAddNpc={
                     readOnly
                       ? undefined
-                      : async () => {
-                          if (typeof onCreateNpcForFaction !== "function")
+                      : () => {
+                          if (chooserOpen) {
+                            closeStripChooser();
                             return;
-                          const newId = await onCreateNpcForFaction(
-                            faction.id,
-                          );
-                          if (newId != null) {
-                            setExpandedNpcId(newId);
-                            setExpandedPcId(null);
                           }
+                          setStripAddFactionId(faction.id);
+                          setStripAddMode("pick");
+                          setStripCreateName("");
+                          setStripCreatePlaybook("STAND");
                         }
                   }
                   onDelete={
@@ -184,6 +251,220 @@ export default function RosterNpcColumn({
                   }
                   onNpcDragEnd={readOnly ? undefined : clearNpcDrag}
                 />
+                {!readOnly && chooserOpen ? (
+                  <div
+                    role="menu"
+                    className="session-add-npc-chooser-menu"
+                    style={{
+                      position: "absolute",
+                      top: "calc(100% + 4px)",
+                      left: 0,
+                      right: 0,
+                      zIndex: 50,
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 2,
+                      padding: 6,
+                      background: "#111827",
+                      border: "1px solid #4b5563",
+                      borderRadius: 6,
+                      boxShadow: "0 8px 24px rgba(0,0,0,0.45)",
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => e.stopPropagation()}
+                  >
+                    {stripAddMode === "pick" ? (
+                      <>
+                        {addable.length === 0 ? (
+                          <div
+                            style={{
+                              fontSize: 10,
+                              color: "#6b7280",
+                              padding: "6px 8px",
+                            }}
+                          >
+                            No other campaign NPCs — create one instead.
+                          </div>
+                        ) : (
+                          addable.map((n) => (
+                            <button
+                              key={n.id}
+                              type="button"
+                              role="menuitem"
+                              onClick={async () => {
+                                if (typeof onMoveNpcToFaction !== "function")
+                                  return;
+                                await onMoveNpcToFaction(n.id, faction.id);
+                                closeStripChooser();
+                              }}
+                              style={{
+                                ...S.btnGhost,
+                                width: "100%",
+                                textAlign: "left",
+                                fontSize: 11,
+                                padding: "8px 10px",
+                                border: "1px solid transparent",
+                                borderRadius: 4,
+                              }}
+                            >
+                              {n.name || n.stand_name || `NPC ${n.id}`}
+                            </button>
+                          ))
+                        )}
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => setStripAddMode("create")}
+                          style={{
+                            ...S.btnGhost,
+                            width: "100%",
+                            textAlign: "left",
+                            fontSize: 11,
+                            padding: "8px 10px",
+                            border: "1px dashed #4b5563",
+                            borderRadius: 4,
+                            color: "#86efac",
+                            marginTop: 4,
+                          }}
+                        >
+                          Create new…
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <div
+                          style={{
+                            fontSize: 10,
+                            color: "#9ca3af",
+                            padding: "4px 6px 6px",
+                          }}
+                        >
+                          New NPC in {faction.name || "faction"}
+                        </div>
+                        <label
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 4,
+                            padding: "0 4px 6px",
+                            fontSize: 10,
+                            color: "#9ca3af",
+                          }}
+                        >
+                          Name
+                          <input
+                            type="text"
+                            value={stripCreateName}
+                            onChange={(e) => setStripCreateName(e.target.value)}
+                            placeholder="e.g. Highway Star"
+                            disabled={stripCreateBusy}
+                            style={{
+                              ...S.inp,
+                              width: "100%",
+                              boxSizing: "border-box",
+                              fontSize: 11,
+                            }}
+                            autoFocus
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                e.currentTarget
+                                  .closest("[role=menu]")
+                                  ?.querySelector("[data-strip-create-submit]")
+                                  ?.click();
+                              }
+                            }}
+                          />
+                        </label>
+                        <label
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 4,
+                            padding: "0 4px 8px",
+                            fontSize: 10,
+                            color: "#9ca3af",
+                          }}
+                        >
+                          Playbook
+                          <select
+                            value={stripCreatePlaybook}
+                            onChange={(e) =>
+                              setStripCreatePlaybook(e.target.value)
+                            }
+                            disabled={stripCreateBusy}
+                            style={{
+                              ...S.select,
+                              width: "100%",
+                              fontSize: 11,
+                            }}
+                          >
+                            {NPC_PLAYBOOK_OPTIONS.map((o) => (
+                              <option key={o.value} value={o.value}>
+                                {o.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: 6,
+                            padding: "0 4px 4px",
+                          }}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => setStripAddMode("pick")}
+                            disabled={stripCreateBusy}
+                            style={{
+                              ...S.btnGhost,
+                              fontSize: 10,
+                              flex: 1,
+                            }}
+                          >
+                            ← Back
+                          </button>
+                          <button
+                            type="button"
+                            data-strip-create-submit
+                            disabled={
+                              stripCreateBusy || !stripCreateName.trim()
+                            }
+                            onClick={async () => {
+                              if (typeof onCreateNpcForFaction !== "function")
+                                return;
+                              setStripCreateBusy(true);
+                              try {
+                                const newId = await onCreateNpcForFaction(
+                                  faction.id,
+                                  {
+                                    name: stripCreateName.trim(),
+                                    playbook: stripCreatePlaybook,
+                                  },
+                                );
+                                if (newId != null) {
+                                  setExpandedNpcId(newId);
+                                  setExpandedPcId(null);
+                                  closeStripChooser();
+                                }
+                              } finally {
+                                setStripCreateBusy(false);
+                              }
+                            }}
+                            style={{
+                              ...S.btnPrimary,
+                              fontSize: 10,
+                              flex: 1,
+                            }}
+                          >
+                            {stripCreateBusy ? "Creating…" : "Create"}
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ) : null}
               </div>
             );
           })}
@@ -406,6 +687,12 @@ export default function RosterNpcColumn({
                 onBulkSetNpcVisibleToPlayers={
                   handleBulkSetFactionNpcsVisibleToPlayers
                 }
+                onCreateNpc={
+                  typeof onCreateNpcForFaction === "function"
+                    ? handleEditorCreateNpc
+                    : undefined
+                }
+                onNavigateToNPC={onNavigateToNPC}
                 embedded
                 S={S}
               />
@@ -499,6 +786,12 @@ export default function RosterNpcColumn({
             onBulkSetNpcVisibleToPlayers={
               handleBulkSetFactionNpcsVisibleToPlayers
             }
+            onCreateNpc={
+              typeof onCreateNpcForFaction === "function" && factionForm?.id
+                ? handleEditorCreateNpc
+                : undefined
+            }
+            onNavigateToNPC={onNavigateToNPC}
             S={S}
           />
         </div>

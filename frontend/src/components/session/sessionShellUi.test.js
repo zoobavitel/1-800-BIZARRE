@@ -1,4 +1,5 @@
 import {
+  groupCampaignNpcsByFaction,
   groupSessionNpcsByFaction,
   npcIdsEqual,
   resolveNpcFactionId,
@@ -50,5 +51,46 @@ describe("sessionShellUi npc roster helpers", () => {
       [2, [11]],
     ]);
     expect(ungrouped).toEqual([]);
+  });
+
+  it("groupCampaignNpcsByFaction keeps nested faction.npcs even if missing from campaign_npcs", () => {
+    const campaign = {
+      factions: [
+        {
+          id: 1,
+          name: "Alpha",
+          npcs: [{ id: 10, name: "NestedOnly" }],
+        },
+        { id: 2, name: "Beta", npcs: [] },
+      ],
+      campaign_npcs: [{ id: 11, name: "Unaffiliated" }],
+    };
+    const { factionGroups, unaffiliated } = groupCampaignNpcsByFaction(campaign);
+    expect(
+      factionGroups.map(({ faction, npcs }) => [
+        Number(faction.id),
+        npcs.map((n) => Number(n.id)),
+      ]),
+    ).toEqual([
+      [1, [10]],
+      [2, []],
+    ]);
+    expect(unaffiliated.map((n) => Number(n.id))).toEqual([11]);
+  });
+
+  it("groupCampaignNpcsByFaction merges campaign_npcs by resolveNpcFactionId", () => {
+    const campaign = {
+      factions: [{ id: 1, name: "Alpha", npcs: [{ id: 10, name: "A" }] }],
+      campaign_npcs: [
+        { id: 10, name: "A", faction: 1 },
+        { id: 12, name: "RosterOnly", faction: 1 },
+        { id: 13, name: "Free" },
+      ],
+    };
+    const { factionGroups, unaffiliated } = groupCampaignNpcsByFaction(campaign);
+    expect(factionGroups[0].npcs.map((n) => Number(n.id)).sort()).toEqual([
+      10, 12,
+    ]);
+    expect(unaffiliated.map((n) => Number(n.id))).toEqual([13]);
   });
 });

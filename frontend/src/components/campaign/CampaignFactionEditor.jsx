@@ -1,5 +1,7 @@
-import React from "react";
+import React, { useState } from "react";
+import { buildRouteHref, handleSpaNavClick } from "../../utils/spaNavigation";
 import AvatarCropModal from "../AvatarCropModal";
+import { NPC_PLAYBOOK_OPTIONS } from "../session/sessionShellUi";
 
 /**
  * Inline faction create/edit form for Campaign Management.
@@ -24,10 +26,24 @@ const CampaignFactionEditor = ({
   onRemoveNpc,
   onToggleNpcVisibleToPlayers,
   onBulkSetNpcVisibleToPlayers,
+  onCreateNpc,
+  onNavigateToNPC,
   embedded = false,
   S,
 }) => {
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createName, setCreateName] = useState("");
+  const [createPlaybook, setCreatePlaybook] = useState("STAND");
+  const [createBusy, setCreateBusy] = useState(false);
+
   if (!factionForm) return null;
+
+  const resetCreate = () => {
+    setCreateOpen(false);
+    setCreateName("");
+    setCreatePlaybook("STAND");
+    setCreateBusy(false);
+  };
 
   const editorId = factionForm.id
     ? `faction-editor-${factionForm.id}`
@@ -461,9 +477,29 @@ const CampaignFactionEditor = ({
                 fontSize: "12px",
               }}
             >
-              <span style={{ minWidth: 0, flex: 1 }}>
-                {n.name || n.stand_name || `NPC ${n.id}`}
-              </span>
+              {typeof onNavigateToNPC === "function" && n?.id != null ? (
+                <a
+                  href={buildRouteHref("npcs", { npcId: n.id })}
+                  onClick={(e) =>
+                    handleSpaNavClick(e, () => onNavigateToNPC(n.id))
+                  }
+                  style={{
+                    minWidth: 0,
+                    flex: 1,
+                    color: "var(--hftf-text-cream, #e5e7eb)",
+                    textDecoration: "underline",
+                    textUnderlineOffset: 2,
+                    cursor: "pointer",
+                  }}
+                  title="Open NPC sheet"
+                >
+                  {n.name || n.stand_name || `NPC ${n.id}`}
+                </a>
+              ) : (
+                <span style={{ minWidth: 0, flex: 1 }}>
+                  {n.name || n.stand_name || `NPC ${n.id}`}
+                </span>
+              )}
               {typeof onToggleNpcVisibleToPlayers === "function" ? (
                 <label
                   style={{
@@ -506,39 +542,147 @@ const CampaignFactionEditor = ({
               </button>
             </div>
           ))}
-          <div
-            style={{
-              display: "flex",
-              gap: "8px",
-              marginTop: "8px",
-              alignItems: "center",
-            }}
-          >
-            <select
-              style={{ ...S.select, flex: 1 }}
-              value={factionAddNpcId}
-              onChange={(e) => setFactionAddNpcId(e.target.value)}
+          {createOpen && typeof onCreateNpc === "function" ? (
+            <div
+              style={{
+                marginTop: "8px",
+                padding: "8px",
+                border: "1px dashed var(--border)",
+                borderRadius: "4px",
+                display: "flex",
+                flexDirection: "column",
+                gap: 8,
+              }}
             >
-              <option value="">Add an NPC...</option>
-              {campaignNPCs
-                .filter(
-                  (n) =>
-                    !(factionForm.npcs || []).some((fn) => fn.id === n.id),
-                )
-                .map((n) => (
-                  <option key={n.id} value={n.id}>
-                    {n.name || n.stand_name || `NPC ${n.id}`}
-                  </option>
-                ))}
-            </select>
-            <button
-              onClick={onAddNpc}
-              style={S.btnPrimary}
-              disabled={!factionAddNpcId}
+              <span
+                style={{
+                  fontSize: "11px",
+                  color: "var(--text-muted)",
+                }}
+              >
+                Create new NPC
+              </span>
+              <div>
+                <span
+                  style={{
+                    fontSize: "11px",
+                    color: "var(--text-muted)",
+                    display: "block",
+                    marginBottom: 2,
+                  }}
+                >
+                  Name
+                </span>
+                <input
+                  style={{ ...S.inp, width: "100%", boxSizing: "border-box" }}
+                  value={createName}
+                  onChange={(e) => setCreateName(e.target.value)}
+                  placeholder="e.g. Highway Star"
+                  disabled={createBusy}
+                  autoFocus
+                />
+              </div>
+              <div>
+                <span
+                  style={{
+                    fontSize: "11px",
+                    color: "var(--text-muted)",
+                    display: "block",
+                    marginBottom: 2,
+                  }}
+                >
+                  Playbook
+                </span>
+                <select
+                  style={{ ...S.select, width: "100%" }}
+                  value={createPlaybook}
+                  onChange={(e) => setCreatePlaybook(e.target.value)}
+                  disabled={createBusy}
+                >
+                  {NPC_PLAYBOOK_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  type="button"
+                  style={S.btnPrimary}
+                  disabled={createBusy || !createName.trim()}
+                  onClick={async () => {
+                    setCreateBusy(true);
+                    try {
+                      const created = await onCreateNpc({
+                        name: createName.trim(),
+                        playbook: createPlaybook,
+                      });
+                      if (created != null) resetCreate();
+                    } finally {
+                      setCreateBusy(false);
+                    }
+                  }}
+                >
+                  {createBusy ? "Creating…" : "Create"}
+                </button>
+                <button
+                  type="button"
+                  style={S.btnGhost}
+                  disabled={createBusy}
+                  onClick={resetCreate}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div
+              style={{
+                display: "flex",
+                gap: "8px",
+                marginTop: "8px",
+                alignItems: "center",
+                flexWrap: "wrap",
+              }}
             >
-              Add
-            </button>
-          </div>
+              <select
+                style={{ ...S.select, flex: 1, minWidth: 120 }}
+                value={factionAddNpcId}
+                onChange={(e) => setFactionAddNpcId(e.target.value)}
+              >
+                <option value="">Add an NPC...</option>
+                {campaignNPCs
+                  .filter(
+                    (n) =>
+                      !(factionForm.npcs || []).some((fn) => fn.id === n.id),
+                  )
+                  .map((n) => (
+                    <option key={n.id} value={n.id}>
+                      {n.name || n.stand_name || `NPC ${n.id}`}
+                    </option>
+                  ))}
+              </select>
+              <button
+                type="button"
+                onClick={onAddNpc}
+                style={S.btnPrimary}
+                disabled={!factionAddNpcId}
+              >
+                Add
+              </button>
+              {typeof onCreateNpc === "function" ? (
+                <button
+                  type="button"
+                  onClick={() => setCreateOpen(true)}
+                  style={S.btnGhost}
+                  title="Create a new NPC in this faction"
+                >
+                  Create new
+                </button>
+              ) : null}
+            </div>
+          )}
         </div>
       )}
       <div style={S.row}>
