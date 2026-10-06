@@ -35,7 +35,7 @@ Expect:
 |---------|--------|
 | User `agent` | Not root, not app user |
 | `systemd-journal` / `adm` | Read logs |
-| `prod.env` mode `600` | Agent cannot read secrets |
+| `prod.env` `640 root:bizarre` | Deploy group can read; agent (not in `bizarre`) cannot |
 | `/opt/bizarre-prod`, `/var/lib/bizarre` | No write for agent |
 | sudoers | `systemctl status` / `journalctl` only — **no restart** |
 | Postgres `bizarre_ro` | `SELECT` only + `default_transaction_read_only` |
