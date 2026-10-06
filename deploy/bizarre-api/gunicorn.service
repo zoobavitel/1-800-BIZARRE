@@ -11,7 +11,7 @@ Environment="PATH=/opt/bizarre-prod/.venv/bin"
 Environment="DJANGO_SETTINGS_MODULE=app.settings_prod"
 # Single prod secrets path — Django/decouple reads the file (no EnvironmentFile).
 # systemd must not inject the file into os.environ or mangled $ values win over
-# RepositoryEnv. Install as root:root mode 0640 (or root:<service-user>).
+# RepositoryEnv. Install as root:bizarre mode 0640 (deploy group read; not world).
 Environment="BIZARRE_ENV_FILE=/etc/bizarre/prod.env"
 # Prod tree is /opt/bizarre-prod (detached origin/master). Agent workspace
 # /opt/bizarre must NOT be the WorkingDirectory — unfinished agent edits must
