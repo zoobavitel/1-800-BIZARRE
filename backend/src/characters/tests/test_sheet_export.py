@@ -8,7 +8,7 @@ from pypdf import PdfReader
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from characters.models import Campaign, Character, Heritage, NPC
+from characters.models import Campaign, Character, Crew, Heritage, NPC
 from characters.services.sheet_export import export_npc_pdf, export_pc_pdf
 from characters.services.sheet_export.pc_builder import (
     CHECKBOX_OFF,
@@ -129,7 +129,7 @@ class SheetExportServiceTests(TestCase):
         self.assertIn("Hat", values["pc_inventory"])
         self.assertIn("lucky", values["pc_inventory"])
         self.assertNotIn("{", values["pc_inventory"])
-        self.assertIn("Speedwagon Foundation: 2", values["pc_reputation"])
+        self.assertEqual(values["pc_reputation"], "")  # Standing/faction on append pages
         self.assertIn("[Stand unique] Ora Rush", values["pc_abilities"])
         self.assertIn("[Standard] Guardian Angel", values["pc_abilities"])
         self.assertEqual(values["pc_armor_stand"], "0/5")  # Durability A → 5
@@ -140,6 +140,11 @@ class SheetExportServiceTests(TestCase):
         self.assertIn("pc_reputation", fields)
         self.assertEqual(fields["pc_playbook"].get("/V"), "Stand")
         self.assertEqual(fields["pc_stand_forms"].get("/V"), "Phenomenon, Mist-form")
+        # Append pages: faction reputation + standing section headers
+        text = "".join((page.extract_text() or "") for page in PdfReader(io.BytesIO(pdf_bytes)).pages)
+        self.assertIn("NPC Standing", text)
+        self.assertIn("Speedwagon Foundation", text)
+        self.assertIn("Crew Sheet", text)
 
     def test_spin_armor_exports_when_spin_playbook(self):
         self.character.playbook = "SPIN"
@@ -157,7 +162,8 @@ class SheetExportServiceTests(TestCase):
         self.assertIn("pc_name", fields)
         self.assertEqual(fields["pc_name"].get("/V"), "Jotaro Kujo")
 
-    def test_stress_track_exports_nine_boxes(self):
+    def test_stress_track_exports_durability_length(self):
+        # No Durability grade → default 9-box track in field values.
         self.character.stress = 4
         self.character.save(update_fields=["stress"])
 
@@ -169,8 +175,49 @@ class SheetExportServiceTests(TestCase):
 
         pdf_bytes, _ = export_pc_pdf(self.character)
         fields = PdfReader(io.BytesIO(pdf_bytes)).get_fields() or {}
+        # Template always exposes 12 stress slots (A/S max).
         self.assertIn("pc_stress_8", fields)
-        self.assertNotIn("pc_stress_9", fields)
+        self.assertIn("pc_stress_11", fields)
+
+    def test_export_appends_npc_standing_and_crew(self):
+        campaign = Campaign.objects.create(
+            name="Export Camp",
+            gm=self.user,
+        )
+        crew = Crew.objects.create(
+            name="Speedwagon Foundation",
+            campaign=campaign,
+            description="Do-gooders",
+            rep=3,
+            turf=2,
+            level=1,
+            wanted_level=0,
+            coin=2,
+            hold="strong",
+            notes="Watch the hat.",
+        )
+        npc = NPC.objects.create(
+            creator=self.user,
+            campaign=campaign,
+            name="Noriaki Kakyoin",
+        )
+        self.character.campaign = campaign
+        self.character.crew = crew
+        self.character.npc_standing = {str(npc.id): 2}
+        self.character.save(
+            update_fields=["campaign", "crew", "npc_standing"]
+        )
+
+        pdf_bytes, _ = export_pc_pdf(self.character)
+        text = "".join(
+            (page.extract_text() or "")
+            for page in PdfReader(io.BytesIO(pdf_bytes)).pages
+        )
+        self.assertIn("Noriaki Kakyoin", text)
+        self.assertIn("standing +2", text)
+        self.assertIn("Speedwagon Foundation", text)
+        self.assertIn("HOLD STRONG", text)
+        self.assertIn("Watch the hat.", text)
 
     def test_healing_clock_exports_four_segments(self):
         self.character.healing_clock_filled = 3

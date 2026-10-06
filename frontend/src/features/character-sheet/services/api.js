@@ -9,6 +9,7 @@ import {
   TRAUMA_PK_TO_KEY,
   MAX_CREATION_DOTS,
   standPathArmorMaxFromDurabilityIndex,
+  stressMaxFromCharacter,
 } from "../constants/srd";
 import {
   normalizeSheetProgressClock,
@@ -1314,7 +1315,7 @@ export const transformBackendToFrontend = (backendCharacter) => {
     // Stress: backend integer; frontend uses filled count + array for compatibility
     stressFilled: Math.max(0, backendCharacter.stress ?? 0),
     stress: (() => {
-      const maxStress = 9;
+      const maxStress = stressMaxFromCharacter(backendCharacter);
       const filled = Math.min(backendCharacter.stress ?? 0, maxStress);
       return Array(maxStress)
         .fill(false)

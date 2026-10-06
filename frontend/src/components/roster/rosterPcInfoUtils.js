@@ -1,10 +1,16 @@
 import React, { useEffect, useState } from "react";
 import { referenceAPI } from "../../features/character-sheet/services/api";
+import {
+  STRESS_TRACK_ABS_MAX,
+  stressMaxFromCharacter,
+} from "../../features/character-sheet/constants/srd";
 import { viceOptions } from "../../data/data";
 
 /** Shared PC expand Info / stress helpers (API-shaped + camelCase). */
 
-export const ROSTER_STRESS_MAX = 9;
+/** Absolute cap (A/S). Prefer stressMaxFromCharacter(ch) for per-PC track length. */
+export const ROSTER_STRESS_MAX = STRESS_TRACK_ABS_MAX;
+export { stressMaxFromCharacter };
 
 const lbl = { fontSize: 10, color: "#9ca3af", textTransform: "uppercase" };
 
@@ -104,23 +110,18 @@ export function rosterPcInfoPayloadEqual(a, b) {
   return true;
 }
 
-/** Integer stress 0–9 from API int or frontend stressFilled / boolean array. */
+/** Integer filled stress from API int or frontend stressFilled / boolean array. */
 export function rosterPcStressCount(ch) {
   const o = ch || {};
+  const max = stressMaxFromCharacter(o);
   if (o.stressFilled != null && Number.isFinite(Number(o.stressFilled))) {
-    return Math.max(
-      0,
-      Math.min(ROSTER_STRESS_MAX, Math.floor(Number(o.stressFilled))),
-    );
+    return Math.max(0, Math.min(max, Math.floor(Number(o.stressFilled))));
   }
   if (typeof o.stress === "number" && Number.isFinite(o.stress)) {
-    return Math.max(0, Math.min(ROSTER_STRESS_MAX, Math.floor(o.stress)));
+    return Math.max(0, Math.min(max, Math.floor(o.stress)));
   }
   if (Array.isArray(o.stress)) {
-    return Math.max(
-      0,
-      Math.min(ROSTER_STRESS_MAX, o.stress.filter(Boolean).length),
-    );
+    return Math.max(0, Math.min(max, o.stress.filter(Boolean).length));
   }
   return 0;
 }
@@ -362,16 +363,18 @@ export function RosterPcInfoFields({
 
 export function RosterPcStressTraumaStrip({
   stress,
+  stressMax = ROSTER_STRESS_MAX,
   traumaLabel,
   readOnly = false,
   busy = false,
   onStressChange,
   S,
 }) {
-  const n = Math.max(
-    0,
-    Math.min(ROSTER_STRESS_MAX, Math.floor(Number(stress) || 0)),
+  const trackMax = Math.max(
+    1,
+    Math.min(ROSTER_STRESS_MAX, Math.floor(Number(stressMax) || ROSTER_STRESS_MAX)),
   );
+  const n = Math.max(0, Math.min(trackMax, Math.floor(Number(stress) || 0)));
   return (
     <div style={{ marginBottom: 10 }}>
       <div
@@ -385,7 +388,7 @@ export function RosterPcStressTraumaStrip({
       >
         <div style={{ ...lbl, marginBottom: 0 }}>Stress</div>
         <span style={{ fontSize: 12, color: "#e5e7eb", fontWeight: 600 }}>
-          {n} / {ROSTER_STRESS_MAX}
+          {n} / {trackMax}
         </span>
         {!readOnly ? (
           <span style={{ display: "flex", gap: 4 }}>
@@ -401,11 +404,9 @@ export function RosterPcStressTraumaStrip({
             <button
               type="button"
               style={{ ...S.btnGhost, fontSize: 10, padding: "1px 8px" }}
-              disabled={busy || n >= ROSTER_STRESS_MAX}
+              disabled={busy || n >= trackMax}
               title="Raise stress"
-              onClick={() =>
-                onStressChange?.(Math.min(ROSTER_STRESS_MAX, n + 1))
-              }
+              onClick={() => onStressChange?.(Math.min(trackMax, n + 1))}
             >
               +
             </button>
