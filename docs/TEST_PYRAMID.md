@@ -56,7 +56,7 @@ PERF_SEED_JSON=/tmp/bizarre-perf-seed-target.json npm run test:load:saturday
 PERF_LOAD_TIER=stretch PERF_SEED_JSON=/tmp/bizarre-perf-seed-stretch.json npm run test:load:saturday:stretch
 ```
 
-**Hard ceiling:** each SSE pins one gunicorn gthread. With `--workers 2 --threads 32`, ten open streams leave ~54 threads for HTTP across both workers (Redis pub/sub fans SSE across workers). If **target** fails under prod-like gunicorn, add workers/threads or split SSE to a dedicated process before a third table.
+**Hard ceiling:** each open SSE still pins one gunicorn gthread. Streams now cap at ~45s (`SSE_STREAM_MAX_SECONDS`) so worker recycles (`--max-requests` + jitter, `--graceful-timeout 60`) can drain. Ten simultaneous sheets still leave ~54 threads for HTTP across 2×32 until those streams close. If **target** fails under prod-like gunicorn, split SSE to a dedicated ASGI process before a third table.
 
 Harnesses refuse known prod / Pages hosts unless `PERF_ALLOW_REMOTE=1` (staging only).
 

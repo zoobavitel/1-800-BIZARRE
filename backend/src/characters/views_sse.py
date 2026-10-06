@@ -6,7 +6,10 @@ Clients authenticate with ?token=<DRF token> because EventSource cannot set Auth
 
 import json
 import queue as queue_module
+import random
+import time
 
+from django.conf import settings
 from django.http import HttpResponse, StreamingHttpResponse
 from rest_framework.authtoken.models import Token
 
@@ -42,11 +45,27 @@ def campaign_events_stream(request, campaign_id):
     q = subscribe_campaign(int(campaign_id))
 
     def event_stream():
+        retry_ms = int(getattr(settings, "SSE_CLIENT_RETRY_MS", 2000))
+        max_seconds = float(getattr(settings, "SSE_STREAM_MAX_SECONDS", 45))
+        heartbeat = float(getattr(settings, "SSE_HEARTBEAT_SECONDS", 15))
         try:
+            yield f"retry: {retry_ms}\n\n"
             yield f"data: {json.dumps({'type': 'connected'})}\n\n"
-            while True:
+            # Prod: jitter ~30–55s so tabs do not reconnect as one herd. Tests use tiny max.
+            if max_seconds <= 1:
+                lifetime = max_seconds
+            else:
+                lifetime = random.uniform(
+                    max(5.0, max_seconds - 15.0),
+                    max_seconds + 10.0,
+                )
+            deadline = time.monotonic() + lifetime
+            while time.monotonic() < deadline:
+                wait = min(heartbeat, deadline - time.monotonic())
+                if wait <= 0:
+                    break
                 try:
-                    msg = q.get(timeout=25)
+                    msg = q.get(timeout=wait)
                     yield f"data: {json.dumps(msg)}\n\n"
                 except queue_module.Empty:
                     yield f"data: {json.dumps({'type': 'heartbeat'})}\n\n"

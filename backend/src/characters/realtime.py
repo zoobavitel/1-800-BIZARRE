@@ -222,6 +222,14 @@ def subscribe_campaign(campaign_id: int) -> queue.Queue:
     q: queue.Queue = queue.Queue()
     with _lock:
         _subscribers[campaign_id].append(q)
+        n = sum(len(qs) for qs in _subscribers.values())
+        n_c = len(_subscribers[campaign_id])
+    logger.info(
+        "sse subscribe campaign=%s campaign_queues=%s local_subscribers=%s",
+        campaign_id,
+        n_c,
+        n,
+    )
     # Also subscribe Redis → local queue in a background thread when configured.
     if get_redis_client() is not None:
         _ensure_redis_listener(campaign_id, q)
@@ -249,6 +257,14 @@ def unsubscribe_campaign(campaign_id: int, q: queue.Queue) -> None:
                 stop = _listener_stop.get(campaign_id)
                 if stop is not None:
                     stop.set()
+        n = sum(len(qs) for qs in _subscribers.values())
+        n_c = len(_subscribers.get(campaign_id, []))
+    logger.info(
+        "sse unsubscribe campaign=%s campaign_queues=%s local_subscribers=%s",
+        campaign_id,
+        n_c,
+        n,
+    )
 
 
 def broadcast_campaign_update(campaign_id: int, reason: str = "") -> None:
