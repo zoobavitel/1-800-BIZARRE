@@ -27,6 +27,7 @@ import {
   rosterPcInfoPayloadEqual,
   rosterPcStressCount,
   rosterPcTraumaLabel,
+  stressMaxFromCharacter,
 } from "./rosterPcInfoUtils";
 import { rosterExpandPanelChrome } from "./rosterShared";
 import SessionPcActionDotsReadout from "./SessionPcActionDotsReadout";
@@ -190,10 +191,14 @@ export default function RosterPcExpandPanel({
     ],
   );
 
+  const stressTrackMax = stressMaxFromCharacter(full);
   const handleStressChange = useCallback(
     async (nextStress) => {
       if (readOnly || !charId) return;
-      const n = Math.max(0, Math.min(9, Math.floor(Number(nextStress) || 0)));
+      const n = Math.max(
+        0,
+        Math.min(stressTrackMax, Math.floor(Number(nextStress) || 0)),
+      );
       setBusy(true);
       onError?.(null);
       try {
@@ -206,7 +211,7 @@ export default function RosterPcExpandPanel({
         setBusy(false);
       }
     },
-    [charId, onCharactersRefresh, onRefresh, onError, readOnly],
+    [charId, onCharactersRefresh, onRefresh, onError, readOnly, stressTrackMax],
   );
 
   const saveNotes = useCallback(async () => {
@@ -402,6 +407,7 @@ export default function RosterPcExpandPanel({
         <>
           <RosterPcStressTraumaStrip
             stress={stressCount}
+            stressMax={stressTrackMax}
             traumaLabel={traumaLabel}
             readOnly={readOnly}
             busy={busy}

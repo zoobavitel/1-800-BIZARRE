@@ -478,11 +478,33 @@ def outcome_from_dice_results(results):
     return "FAILURE"
 
 
+# SRD_DEV Durability → stress track length (Stand Armor table).
+_DURABILITY_GRADE_TO_STRESS = {
+    "F": 8,
+    "D": 9,
+    "C": 10,
+    "B": 11,
+    "A": 12,
+    "S": 12,  # no S stress row in table; match A
+}
+
+
+def stress_slots_from_durability_grade(letter):
+    """Stress track length from a Durability grade letter. Default D baseline (9)."""
+    g = str(letter or "").strip().upper()[:1]
+    if not g:
+        return 9
+    return _DURABILITY_GRADE_TO_STRESS.get(g, 9)
+
+
 def max_stress_slots_for_character(character):
     """
-    Stress track length on the sheet (SRD_DEV: 9 for PCs; Stand Durability affects armor, not this count).
+    Stress track length on the sheet (SRD_DEV: Durability grade → F=8 … A=12).
+
+    No Stand / no Durability grade → 9 (D baseline). Grade S → 12.
 
     Character.stress in the API is the **filled / marked** count on that track
     (same as the sheet's stressFilled), not "remaining budget."
     """
-    return 9
+    grade = _stand_grade_from_character(character, "durability")
+    return stress_slots_from_durability_grade(grade)

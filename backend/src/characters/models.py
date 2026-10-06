@@ -1148,12 +1148,18 @@ class Character(models.Model):
             )
 
     def _validate_stress_based_on_durability(self):
-        # SRD_DEV: Level-1 stress boxes are always 9. Stand Durability gates armor / resist fiction, not stress length.
-        expected_stress = 9
-        if self.level == 1 and self.stress != expected_stress:
+        # SRD_DEV: filled stress must fit Durability-derived track (F=8 … A=12; default 9).
+        from .roll_helpers import max_stress_slots_for_character
+
+        max_slots = max_stress_slots_for_character(self)
+        filled = max(0, int(self.stress or 0))
+        if filled > max_slots:
             raise ValidationError(
                 {
-                    "stress": f"Stress must be {expected_stress} for a level 1 character."
+                    "stress": (
+                        f"Stress marked ({filled}) cannot exceed track length "
+                        f"({max_slots}) for this character's Durability."
+                    )
                 }
             )
 

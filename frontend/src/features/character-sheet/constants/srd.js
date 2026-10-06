@@ -152,16 +152,22 @@ export const TRAUMA_KEY_TO_PK = Object.fromEntries(
   TRAUMA_KEYS.map((k, i) => [k, i + 1]),
 );
 
-// Durability → Stand armor charges (+ resist tiers). SRD_DEV: durability does **not** change stress track length (baseline 9).
-// SRD `docs/1-(800)-BIZARRE SRD.md` Stand Armor table: F:1, D:2, C:3, B:4, A:5, S:6.
+// Durability → Stand armor charges + stress track (+ resist tiers).
+// SRD_DEV Stand Armor table: F:1/8, D:2/9, C:3/10, B:4/11, A:5/12 (S:6 armor / 12 stress).
 export const DUR_TABLE = [
-  { armorCharges: 1, resistanceReduceLevels: 1 }, // F(0)
-  { armorCharges: 2, resistanceReduceLevels: 1 }, // D(1)
-  { armorCharges: 3, resistanceReduceLevels: 1 }, // C(2)
-  { armorCharges: 4, resistanceReduceLevels: 1 }, // B(3)
-  { armorCharges: 5, resistanceReduceLevels: 1 }, // A(4)
-  { armorCharges: 6, resistanceReduceLevels: 2 }, // S(5)
+  { armorCharges: 1, stressCount: 8, resistanceReduceLevels: 1 }, // F(0)
+  { armorCharges: 2, stressCount: 9, resistanceReduceLevels: 1 }, // D(1)
+  { armorCharges: 3, stressCount: 10, resistanceReduceLevels: 1 }, // C(2)
+  { armorCharges: 4, stressCount: 11, resistanceReduceLevels: 1 }, // B(3)
+  { armorCharges: 5, stressCount: 12, resistanceReduceLevels: 1 }, // A(4)
+  { armorCharges: 6, stressCount: 12, resistanceReduceLevels: 2 }, // S(5)
 ];
+
+/** Absolute max stress boxes any PC track can have (A/S). */
+export const STRESS_TRACK_ABS_MAX = 12;
+
+/** Default stress track when no Durability grade (Hamon/Spin without Stand). */
+export const STRESS_TRACK_DEFAULT = 9;
 
 /**
  * Stand / path armor pool (when the Stand takes the hit) — matches NPC
@@ -180,6 +186,46 @@ export const STAND_PATH_ARMOR_CHARGES_BY_GRADE = {
 export function standPathArmorMaxFromDurabilityIndex(durabilityIdx) {
   const g = INDEX_TO_GRADE(durabilityIdx);
   return STAND_PATH_ARMOR_CHARGES_BY_GRADE[g] ?? 0;
+}
+
+/** @param {number} durabilityIdx Stand Coin durability index 0–5 (F…S) */
+export function stressMaxFromDurabilityIndex(durabilityIdx) {
+  const idx = Math.min(
+    DUR_TABLE.length - 1,
+    Math.max(0, Math.floor(Number(durabilityIdx) || 0)),
+  );
+  return DUR_TABLE[idx]?.stressCount ?? STRESS_TRACK_DEFAULT;
+}
+
+/** @param {string|null|undefined} letter Durability grade F…S */
+export function stressMaxFromGrade(letter) {
+  const g = String(letter || "")
+    .trim()
+    .toUpperCase()
+    .slice(0, 1);
+  if (!g || GRADE_INDEX[g] == null) return STRESS_TRACK_DEFAULT;
+  return stressMaxFromDurabilityIndex(GRADE_INDEX[g]);
+}
+
+/**
+ * Resolve stress track max from a character-like object (API or sheet).
+ * Reads stand.durability / coin_stats.durability / standStats.durability.
+ */
+export function stressMaxFromCharacter(ch) {
+  const o = ch || {};
+  const stand = o.stand || {};
+  const coin = o.coin_stats || o.coinStats || {};
+  const stats = o.standStats || o.stand_stats || {};
+  const raw =
+    stand.durability ??
+    coin.durability ??
+    coin.DURABILITY ??
+    stats.durability;
+  if (raw == null || raw === "") return STRESS_TRACK_DEFAULT;
+  if (typeof raw === "number" || /^\d+$/.test(String(raw))) {
+    return stressMaxFromDurabilityIndex(Number(raw));
+  }
+  return stressMaxFromGrade(raw);
 }
 
 // Development → session XP bonus per grade (index = stat value 0–5, F…S)
@@ -209,11 +255,11 @@ export const PC_STAT_DESC = {
     "100(200) ft · Push to extend",
   ],
   durability: [
-    "1 Stand armor charge (stress track stays 9 — durability does not add boxes)",
-    "2 Stand armor charges",
-    "3 Stand armor charges",
-    "4 Stand armor charges",
-    "5 Stand armor charges",
+    "1 Stand armor charge · 8 stress boxes",
+    "2 Stand armor charges · 9 stress boxes",
+    "3 Stand armor charges · 10 stress boxes",
+    "4 Stand armor charges · 11 stress boxes",
+    "5 Stand armor charges · 12 stress boxes",
     "6 Stand armor charges · Durability resist may reduce harm by two levels",
   ],
   precision: [

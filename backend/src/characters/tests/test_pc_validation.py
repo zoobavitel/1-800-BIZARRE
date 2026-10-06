@@ -101,13 +101,14 @@ class CharacterValidationTests(TestCase):
 
     def test_invalid_stress_value(self):
         character = self._create_valid_level_1_character()
-        character.stress = 8
+        character.stress = 10
         with self.assertRaisesMessage(
-            ValidationError, "Stress must be 9 for a level 1 character."
+            ValidationError,
+            "Stress marked (10) cannot exceed track length (9)",
         ):
             character.full_clean()
 
-        # F durability — stress baseline still 9 (SRD_DEV: armor only from Durability).
+        # F durability — 8-box track; 8 marked is legal, 9 is not.
         character_f_durability = self._create_valid_level_1_character()
         character_f_durability.stand.power = 'A'
         character_f_durability.stand.speed = 'C'
@@ -117,8 +118,11 @@ class CharacterValidationTests(TestCase):
         character_f_durability.stand.development = 'F'
         character_f_durability.stand.save()
         character_f_durability.stress = 8
+        character_f_durability.full_clean()
+        character_f_durability.stress = 9
         with self.assertRaisesMessage(
-            ValidationError, "Stress must be 9 for a level 1 character."
+            ValidationError,
+            "Stress marked (9) cannot exceed track length (8)",
         ):
             character_f_durability.full_clean()
 
@@ -132,11 +136,12 @@ class CharacterValidationTests(TestCase):
         character_s.stand.precision = "F"
         character_s.stand.development = "F"
         character_s.stand.save()
-        character_s.stress = 9
+        character_s.stress = 12
         character_s.full_clean()
-        character_s.stress = 8
+        character_s.stress = 13
         with self.assertRaisesMessage(
-            ValidationError, "Stress must be 9 for a level 1 character."
+            ValidationError,
+            "Stress marked (13) cannot exceed track length (12)",
         ):
             character_s.full_clean()
 
@@ -206,7 +211,7 @@ class CharacterValidationTests(TestCase):
                 'finesse': 1, 'prowl': 1, 'skirmish': 1, 'wreck': 0,
                 'bizarre': 0, 'command': 0, 'consort': 0, 'sway': 0,
             },
-            stress=9,
+            stress=8,
             coin_stats={},
             custom_ability_type='single_with_3_uses',
             custom_ability_description='A-rank unique package.',
@@ -243,7 +248,7 @@ class CharacterValidationTests(TestCase):
         character.stand.precision = 'F'
         character.stand.development = 'F'
         character.stand.save()
-        character.stress = 9
+        character.stress = 8
         character.standard_abilities.add(self.ability3, self.ability4)
         # ability1 + ability2 + ability3 + ability4 = 4 ok; need one more
         extra = Ability.objects.create(
@@ -274,13 +279,14 @@ class CharacterValidationTests(TestCase):
         character.stand.precision = 'F'
         character.stand.development = 'F'
         character.stand.save()
+        character.stress = 8
         with self.assertRaisesMessage(ValidationError, 'Player characters cannot have S-rank'):
             character.full_clean()
 
     def test_s_rank_stand_stat_validation_allowed_by_gm(self):
         character = self._create_valid_level_1_character()
         character.gm_can_have_s_rank_stand_stats = True
-        character.stress = 9
+        character.stress = 8
         character.stand.power = 'S'
         character.stand.speed = 'D'
         character.stand.range = 'F'

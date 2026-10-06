@@ -6,7 +6,7 @@ from pathlib import Path
 
 from .deps import ensure_pdf_dependencies
 from .field_maps import (
-    ACTION_KEYS,
+    ACTION_ATTR_GROUPS,
     MAX_CLOCK_SEGMENTS,
     MAX_COIN_BOXES,
     MAX_HEALING_SEGMENTS,
@@ -125,39 +125,46 @@ def build_pc_template(output_path: Path) -> None:
     _add_text_field(form, "pc_vice_details", MARGIN + 4.95 * inch, y - 2, 1.3 * inch)
     c.drawString(MARGIN + 4.95 * inch, y - 12, "Vice details")
 
-    col2 = MARGIN + 4.0 * inch
-    col3 = MARGIN + 5.4 * inch
-    y_top = PAGE_H - MARGIN - 22 - 155
-
-    _section_title(c, "Stand Coin", col2, y_top)
+    # Dice band under Identity (full width — not the portrait rail).
+    y -= 30
+    _section_title(c, "Stand Coin", MARGIN, y)
+    _section_title(c, "Action Ratings", MARGIN + 2.55 * inch, y)
+    coin_x = MARGIN
+    act_base_x = MARGIN + 2.55 * inch
+    meta_y = y - 14
     c.setFont("Helvetica", 7)
-    _add_text_field(form, "pc_stand_type", col2, y_top - 16, 1.2 * inch, 12)
-    c.drawString(col2, y_top - 26, "Type")
-    _add_text_field(form, "pc_stand_type_custom", col2, y_top - 38, 1.2 * inch, 12)
-    c.drawString(col2, y_top - 48, "Subtype")
-    _add_text_field(form, "pc_stand_forms", col2, y_top - 60, 1.2 * inch, 12)
-    c.drawString(col2, y_top - 70, "Forms")
-    _add_text_field(form, "pc_stand_consciousness", col2, y_top - 82, 0.4 * inch, 12)
-    c.drawString(col2, y_top - 92, "Mind")
-    stat_y = y_top - 108
+    _add_text_field(form, "pc_stand_type", coin_x, meta_y - 2, 1.1 * inch, 12)
+    c.drawString(coin_x, meta_y - 12, "Type")
+    _add_text_field(form, "pc_stand_type_custom", coin_x + 1.2 * inch, meta_y - 2, 1.1 * inch, 12)
+    c.drawString(coin_x + 1.2 * inch, meta_y - 12, "Subtype")
+    meta_y -= 26
+    _add_text_field(form, "pc_stand_forms", coin_x, meta_y - 2, 1.5 * inch, 12)
+    c.drawString(coin_x, meta_y - 12, "Forms")
+    _add_text_field(form, "pc_stand_consciousness", coin_x + 1.65 * inch, meta_y - 2, 0.45 * inch, 12)
+    c.drawString(coin_x + 1.65 * inch, meta_y - 12, "Mind")
+    stat_y = meta_y - 26
     for stat in ("power", "speed", "range", "durability", "precision", "development"):
         c.setFont("Helvetica", 7)
-        c.drawString(col2, stat_y, stat.title())
-        _add_text_field(form, f"pc_stand_{stat}", col2 + 0.75 * inch, stat_y - 2, 0.35 * inch, 12)
-        stat_y -= 14
+        c.drawString(coin_x, stat_y, stat.title())
+        _add_text_field(form, f"pc_stand_{stat}", coin_x + 0.85 * inch, stat_y - 2, 0.35 * inch, 12)
+        stat_y -= 13
 
-    _section_title(c, "Action Ratings", col3, y_top)
-    act_y = y_top - 14
-    for action in ACTION_KEYS:
-        c.setFont("Helvetica", 7)
-        c.drawString(col3, act_y, action.upper())
-        _add_text_field(form, f"pc_action_{action}", col3 + 0.85 * inch, act_y - 2, 0.25 * inch, 12)
-        act_y -= 13
+    col_w = 1.35 * inch
+    for gi, (attr_label, actions) in enumerate(ACTION_ATTR_GROUPS):
+        ax = act_base_x + gi * col_w
+        c.setFont("Helvetica-Bold", 7)
+        c.drawString(ax, y - 12, attr_label)
+        ay = y - 26
+        for action in actions:
+            c.setFont("Helvetica", 7)
+            c.drawString(ax, ay, action.upper())
+            _add_text_field(form, f"pc_action_{action}", ax + 0.7 * inch, ay - 2, 0.28 * inch, 12)
+            ay -= 13
 
-    y = PAGE_H - MARGIN - 250
+    y = min(stat_y, y - 26 - 13 * 4) - 16
     _section_title(c, "Stress", MARGIN, y)
     _checkbox_row(form, "pc_stress_", MAX_STRESS_SLOTS, MARGIN, y - 14)
-    y -= 32
+    y -= 30
     _section_title(c, "Trauma", MARGIN, y)
     tx = MARGIN
     for key in TRAUMA_KEYS:
@@ -166,7 +173,7 @@ def build_pc_template(output_path: Path) -> None:
         _add_checkbox(form, f"pc_trauma_{key}", tx, y - 24)
         tx += 0.75 * inch
 
-    y -= 42
+    y -= 40
     _section_title(c, "Harm", MARGIN, y)
     harm_y = y - 14
     for level, field in (
@@ -180,9 +187,9 @@ def build_pc_template(output_path: Path) -> None:
         c.setFont("Helvetica", 7)
         c.drawString(MARGIN, harm_y, f"Level {level}")
         _add_text_field(form, field, MARGIN + 0.55 * inch, harm_y - 2, 5.5 * inch)
-        harm_y -= 16
+        harm_y -= 15
 
-    y -= 110
+    y = harm_y - 8
     _section_title(c, "Healing Clock", MARGIN, y)
     _checkbox_row(form, "pc_healing_", MAX_HEALING_SEGMENTS, MARGIN, y - 14, spacing=14)
 
@@ -197,13 +204,13 @@ def build_pc_template(output_path: Path) -> None:
     _add_text_field(form, "pc_armor_hamon", MARGIN + 5.5 * inch, y - 16, 0.85 * inch)
     c.drawString(MARGIN + 5.5 * inch, y - 28, "Hamon")
 
-    y -= 48
+    y -= 44
     _section_title(c, "Coin", MARGIN, y)
     _checkbox_row(form, "pc_coin_", MAX_COIN_BOXES, MARGIN, y - 14, spacing=14)
     _section_title(c, "Stash", MARGIN + 1.2 * inch, y)
     _checkbox_row(form, "pc_stash_", MAX_STASH_SLOTS, MARGIN + 1.2 * inch, y - 14, spacing=10)
 
-    y -= 36
+    y -= 34
     _section_title(c, "XP Tracks", MARGIN, y)
     xp_x = MARGIN
     for track in XP_TRACK_KEYS:
@@ -224,7 +231,7 @@ def build_pc_template(output_path: Path) -> None:
     _add_text_field(form, "pc_unallocated_xp", MARGIN + 5.8 * inch, y - 18, 0.8 * inch, 12)
     c.drawString(MARGIN + 5.8 * inch, y - 10, "Pool")
 
-    y -= 52
+    y -= 48
     _section_title(c, "Progress Clocks (fill blank rows in play)", MARGIN, y)
     clock_y = y - 14
     for idx in range(1, 5):
@@ -237,11 +244,12 @@ def build_pc_template(output_path: Path) -> None:
             clock_y - 2,
             spacing=12,
         )
-        clock_y -= 18
+        clock_y -= 16
 
-    y -= 90
+    y = clock_y - 10
     _section_title(c, "Abilities (core)", MARGIN, y)
-    _add_text_field(form, "pc_abilities", MARGIN, y - 70, 6.2 * inch, 68)
+    # Shorter core box — overflow continues on page 2.
+    _add_text_field(form, "pc_abilities", MARGIN, y - 48, 6.2 * inch, 46)
 
     c.showPage()
 
@@ -258,9 +266,10 @@ def build_pc_template(output_path: Path) -> None:
     _section_title(c, "Inventory", MARGIN, y2)
     _add_text_field(form, "pc_inventory", MARGIN, y2 - 80, 6.5 * inch, 78)
     y2 -= 100
-    _section_title(c, "Reputation / Faction Status", MARGIN, y2)
-    _add_text_field(form, "pc_reputation", MARGIN, y2 - 50, 6.5 * inch, 48)
-    y2 -= 70
+    # Faction reputation lives on the Standing append page; keep field for compatibility.
+    _section_title(c, "Faction Reputation (see Standing page)", MARGIN, y2)
+    _add_text_field(form, "pc_reputation", MARGIN, y2 - 40, 6.5 * inch, 38)
+    y2 -= 60
     _section_title(c, "Notes", MARGIN, y2)
     _add_text_field(form, "pc_notes", MARGIN, y2 - 100, 6.5 * inch, 98)
 
