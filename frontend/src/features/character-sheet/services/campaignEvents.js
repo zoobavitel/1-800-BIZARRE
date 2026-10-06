@@ -6,7 +6,9 @@
  * Firefox / extensions can drop the stream; permanent close left panels stale until reload.
  *
  * Returns an unsubscribe function with `getLastEventAt()` attached so callers can skip
- * redundant poll sync while the stream is healthy (server sends heartbeat data events ~25s).
+ * redundant poll sync while the stream is healthy (server sends heartbeat data events ~15s
+ * and closes the stream after ~30–55s). We reconnect ourselves: a completed HTTP
+ * response does not always trigger native EventSource retry.
  */
 import { getApiBaseUrl } from "../../../config/apiConfig";
 
@@ -36,6 +38,7 @@ export function subscribeCampaignEvents(campaignId, { onUpdate } = {}) {
   let attempt = 0;
   let closed = false;
   let lastEventAt = 0;
+  let sawConnected = false;
 
   const touchTraffic = () => {
     lastEventAt = Date.now();
@@ -91,6 +94,13 @@ export function subscribeCampaignEvents(campaignId, { onUpdate } = {}) {
         ) {
           touchTraffic();
         }
+        if (data && data.type === "connected") {
+          // Catch events lost in the reconnect gap (poll is skipped while SSE looks healthy).
+          if (sawConnected) {
+            onUpdate?.("update");
+          }
+          sawConnected = true;
+        }
         if (data && data.type === "campaign_update") {
           onUpdate?.(data.reason || "update");
         }
@@ -114,6 +124,18 @@ export function subscribeCampaignEvents(campaignId, { onUpdate } = {}) {
         /* ignore */
       }
       if (es === next) es = null;
+      const healthy = lastEventAt > 0 && Date.now() - lastEventAt < 60000;
+      if (healthy) {
+        // Do not trust native retry after a clean HTTP end (Firefox often stays CLOSED).
+        attempt = 0;
+        if (closed) return;
+        clearReconnect();
+        reconnectTimer = setTimeout(() => {
+          reconnectTimer = null;
+          connect();
+        }, 0);
+        return;
+      }
       scheduleReconnect();
     };
   };
