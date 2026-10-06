@@ -1083,28 +1083,49 @@ function CampaignDetail({
     }
   };
 
-  /** Faction card +: create NPC into this faction (prompt when campaign empty / always create). */
-  const handleCreateNpcForFaction = async (factionId) => {
+  const reloadAllNpcs = useCallback(() => {
+    if (!isGM) return;
+    npcAPI
+      .getNPCs()
+      .then(setAllNPCs)
+      .catch(() => {});
+  }, [isGM]);
+
+  /**
+   * Create NPC into a faction.
+   * @param {number} factionId
+   * @param {{ name?: string, playbook?: string } | undefined} opts
+   *   When name omitted, falls back to window.prompt (legacy).
+   */
+  const handleCreateNpcForFaction = async (factionId, opts) => {
     if (!campaign?.id || factionId == null) return null;
     setActionError(null);
-    const emptyCampaign = !(campaignNPCs && campaignNPCs.length);
-    const name = window.prompt(
-      emptyCampaign
-        ? "No NPCs in this campaign yet. Name for a new NPC in this faction?"
-        : "Name for a new NPC in this faction?",
-    );
-    if (name == null) return null;
-    const trimmed = String(name).trim();
+    let trimmed =
+      opts && typeof opts.name === "string" ? String(opts.name).trim() : "";
+    if (!trimmed) {
+      const emptyCampaign = !(campaignNPCs && campaignNPCs.length);
+      const name = window.prompt(
+        emptyCampaign
+          ? "No NPCs in this campaign yet. Name for a new NPC in this faction?"
+          : "Name for a new NPC in this faction?",
+      );
+      if (name == null) return null;
+      trimmed = String(name).trim();
+    }
     if (!trimmed) {
       setActionError("NPC name is required.");
       return null;
     }
+    const playbook =
+      opts?.playbook && typeof opts.playbook === "string"
+        ? opts.playbook
+        : "STAND";
     try {
       const created = await npcAPI.createNPC({
         name: trimmed,
         campaign: campaign.id,
         faction: factionId,
-        playbook: "STAND",
+        playbook,
         stand_coin_stats: {
           POWER: "D",
           SPEED: "D",
@@ -1116,7 +1137,24 @@ function CampaignDetail({
         notes: "",
         inventory_notes: "",
       });
+      if (created?.id != null) {
+        setFactionForm((p) => {
+          if (!p?.id || Number(p.id) !== Number(factionId)) return p;
+          const row = {
+            id: created.id,
+            name: created.name || trimmed,
+            visible_to_players: created.visible_to_players !== false,
+          };
+          return {
+            ...p,
+            npcs: [...(p.npcs || []), row].filter(
+              (n, i, a) => a.findIndex((x) => x.id === n.id) === i,
+            ),
+          };
+        });
+      }
       await onRefresh?.();
+      reloadAllNpcs();
       return created?.id ?? null;
     } catch (err) {
       const msg =
@@ -1228,7 +1266,10 @@ function CampaignDetail({
     const npcId = parseInt(factionAddNpcId, 10);
     const npc = campaignNPCs.find((n) => n.id === npcId);
     try {
-      await npcAPI.patchNPC(factionAddNpcId, { faction: factionForm.id });
+      await npcAPI.patchNPC(factionAddNpcId, {
+        faction: factionForm.id,
+        campaign: campaign.id,
+      });
       setFactionAddNpcId("");
       setFactionForm((p) => ({
         ...p,
@@ -1237,6 +1278,7 @@ function CampaignDetail({
         ),
       }));
       onRefresh();
+      reloadAllNpcs();
     } catch (err) {
       setFactionError(err.message);
     }
@@ -1349,11 +1391,14 @@ function CampaignDetail({
   const handleMoveNpcToFaction = async (npcId, targetFactionId) => {
     setActionError(null);
     try {
-      await npcAPI.patchNPC(npcId, {
-        faction: targetFactionId == null ? null : targetFactionId,
-      });
+      const payload =
+        targetFactionId == null
+          ? { faction: null }
+          : { faction: targetFactionId, campaign: campaign.id };
+      await npcAPI.patchNPC(npcId, payload);
       applyFactionFormNpcMove(npcId, targetFactionId);
       onRefresh();
+      reloadAllNpcs();
     } catch (err) {
       setActionError(err.message);
     }
@@ -5509,7 +5554,12 @@ export default function CampaignManagement({
             campaign={selectedCampaign}
             isGM={isGM}
             user={user}
-            onBack={() => window.history.back()}
+            onBack={() => {
+              setSelectedCampaignId(null);
+              setSessionView(null);
+              setSelectedSession(null);
+              onCampaignSelect?.(null);
+            }}
             onRefresh={refreshSelected}
             onOpenSession={(session) => {
               setSelectedSession(session);

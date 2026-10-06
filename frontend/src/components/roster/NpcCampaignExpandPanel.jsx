@@ -5,7 +5,11 @@ import {
 } from "../../features/character-sheet/services/api";
 import { buildRouteHref, handleSpaNavClick } from "../../utils/spaNavigation";
 import NpcsStandCoin from "../NpcsStandCoin";
-import { NestedTabBar, NPC_NESTED_TABS } from "../session/sessionShellUi";
+import {
+  NestedTabBar,
+  NPC_NESTED_TABS,
+  NPC_PLAYBOOK_OPTIONS,
+} from "../session/sessionShellUi";
 import { rosterExpandPanelChrome } from "./rosterShared";
 import RosterNpcExpandEditableTabs from "./RosterNpcExpandEditableTabs";
 
@@ -373,6 +377,25 @@ export default function NpcCampaignExpandPanel({
 
       {activeTab === "more" ? (
         <div>
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ ...lbl, marginBottom: 4 }}>Playbook</div>
+            <select
+              value={npc.playbook || "STAND"}
+              onChange={(e) => {
+                const next = e.target.value;
+                if (next === (npc.playbook || "STAND")) return;
+                void patchNpc({ playbook: next });
+              }}
+              disabled={busy || readOnly}
+              style={{ ...S.select, width: "100%", fontSize: 11 }}
+            >
+              {NPC_PLAYBOOK_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </div>
           <div style={{ ...lbl, marginBottom: 6 }}>Stand coin</div>
           <div style={{ display: "flex", justifyContent: "center" }}>
             <NpcsStandCoin
