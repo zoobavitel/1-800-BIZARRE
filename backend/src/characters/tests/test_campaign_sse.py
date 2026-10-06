@@ -1,5 +1,5 @@
 """Campaign SSE endpoint: token auth and GM/player access."""
-from django.test import Client, TestCase
+from django.test import Client, TestCase, override_settings
 from django.contrib.auth.models import User
 from rest_framework.authtoken.models import Token
 
@@ -33,3 +33,17 @@ class CampaignSSEViewTests(TestCase):
         )
         self.assertEqual(r.status_code, 200)
         self.assertIn("text/event-stream", r.get("Content-Type", ""))
+
+    @override_settings(
+        SSE_STREAM_MAX_SECONDS=0.05,
+        SSE_HEARTBEAT_SECONDS=0.01,
+        SSE_CLIENT_RETRY_MS=2000,
+    )
+    def test_stream_sends_retry_and_closes(self):
+        r = self.client.get(
+            f"/api/campaigns/{self.campaign.id}/events/?token={self.player_token.key}"
+        )
+        self.assertEqual(r.status_code, 200)
+        body = b"".join(r.streaming_content).decode()
+        self.assertIn("retry: 2000", body)
+        self.assertIn('"type": "connected"', body)
