@@ -118,8 +118,8 @@ XP_TRACK_KEYS = ("insight", "prowess", "resolve", "heritage", "playbook")
 STAND_PATH_ARMOR_BY_GRADE = {"F": 1, "D": 2, "C": 3, "B": 4, "A": 5, "S": 6}
 SPIN_HAMON_ARMOR_MAX = 3
 
-# SRD / SRD_DEV: PC stress track is always 9 boxes; Stand Durability gates armor, not stress length.
-MAX_STRESS_SLOTS = 9
+# SRD_DEV: stress track length follows Durability (F=8 … A=12). Template always has 12 boxes.
+MAX_STRESS_SLOTS = 12
 MAX_COIN_BOXES = 4
 MAX_STASH_SLOTS = 40
 MAX_HEALING_SEGMENTS = 5
@@ -128,7 +128,13 @@ MAX_XP_PER_TRACK = 8
 MAX_XP_PLAYBOOK_TRACK = 10
 
 # Bump when AcroForm field layout changes so ensure_templates rebuilds PDFs.
-TEMPLATE_REVISION = 3
+TEMPLATE_REVISION = 5
+
+ACTION_ATTR_GROUPS = (
+    ("Insight", ("hunt", "study", "survey", "tinker")),
+    ("Prowess", ("finesse", "prowl", "skirmish", "wreck")),
+    ("Resolve", ("bizarre", "command", "consort", "sway")),
+)
 
 
 def xp_track_max_segments(track: str) -> int:

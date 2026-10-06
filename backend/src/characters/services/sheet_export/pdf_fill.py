@@ -117,14 +117,40 @@ def fill_pdf(
 
 
 def export_pc_pdf(character) -> tuple[bytes, str]:
+    from characters.models import Character
+
     from .pc_builder import build_pc_field_values
+    from .standing_crew_pages import (
+        build_standing_crew_pdf_bytes,
+        merge_pdf_bytes,
+    )
     from .template_builder import ensure_templates
 
     ensure_pdf_dependencies()
+    character = (
+        Character.objects.select_related(
+            "campaign", "crew", "crew__playbook", "heritage", "vice", "stand"
+        )
+        .prefetch_related(
+            "standard_abilities",
+            "hamon_abilities__hamon_ability",
+            "spin_abilities__spin_ability",
+            "selected_benefits",
+            "selected_detriments",
+            "progress_clocks",
+            "stand__abilities",
+            "crew__special_abilities",
+            "crew__claims",
+            "crew__faction_relationships__faction",
+        )
+        .get(pk=character.pk)
+    )
     pc_path, _ = ensure_templates()
     field_values = build_pc_field_values(character)
     portrait = load_portrait_bytes(character.image, character.image_url)
     pdf_bytes = fill_pdf(pc_path, field_values, portrait_bytes=portrait)
+    append_bytes = build_standing_crew_pdf_bytes(character)
+    pdf_bytes = merge_pdf_bytes(pdf_bytes, append_bytes)
     filename = f"{sanitize_filename(character.true_name, 'character')}-character-sheet.pdf"
     return pdf_bytes, filename
 

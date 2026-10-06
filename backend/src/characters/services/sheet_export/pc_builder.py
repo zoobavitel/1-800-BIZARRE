@@ -449,9 +449,8 @@ def build_pc_field_values(character: Character) -> dict[str, str]:
     values["pc_notes"] = character.background_note2 or ""
     values["pc_inventory"] = _format_inventory(character.inventory)
     values["pc_heritage_picks"] = _heritage_picks(character)
-    values["pc_reputation"] = _format_mapping(
-        character.reputation_status
-    ) or _format_mapping(character.faction_reputation)
+    # Faction / NPC standing rendered on append pages (standing_crew_pages).
+    values["pc_reputation"] = ""
 
     clocks = list(character.progress_clocks.all().order_by("id")[:4])
     for idx in range(4):

@@ -632,13 +632,13 @@ Three conditions must hold:
 
 **Stand Armor:** Durability determines your Stand's armor charges. Mark a charge to reduce a consequence by 1 level against your Stand, your user, or anyone else your Stand is in position to shield. Protecting anyone other than your Stand requires the target to be within your Range grade and your Stand available to act.
 
-| Grade | Stand Armor Charges |
-| ----- | ----- |
-| **A** | **5** |
-| **B** | **4** |
-| **C** | **3** |
-| **D** | **2** |
-| **F** | **1** |
+| Grade | Stand Armor Charges | Stress Count |
+| ----- | ----- | ----- |
+| **A** | **5** | **12** |
+| **B** | **4** | **11** |
+| **C** | **3** | **10** |
+| **D** | **2** | **9** |
+| **F** | **1** | **8** |
 
 User Armor is physical armor worn by the user. It is acquired through buying it via coin or crafting it or from a heritage ability and can be checked to reduce a consequence against the user by 1 level. It is entirely separate from Stand Armor.
 

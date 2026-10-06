@@ -89,6 +89,7 @@ import {
   rosterPcInfoPayloadEqual,
   rosterPcStressCount,
   rosterPcTraumaLabel,
+  stressMaxFromCharacter,
 } from "../roster/rosterPcInfoUtils";
 import {
   canEditRosterPc,
@@ -3240,8 +3241,9 @@ export default function SessionGMManagementPanels({
   );
 
   const handlePcRosterStressChange = useCallback(
-    async (characterId, nextStress) => {
-      const n = Math.max(0, Math.min(9, Math.floor(Number(nextStress) || 0)));
+    async (characterId, nextStress, trackMax = 12) => {
+      const cap = Math.max(1, Math.min(12, Math.floor(Number(trackMax) || 12)));
+      const n = Math.max(0, Math.min(cap, Math.floor(Number(nextStress) || 0)));
       setPcRosterSheetBusyId(characterId);
       setError(null);
       try {
@@ -5980,6 +5982,7 @@ export default function SessionGMManagementPanels({
                     <div style={{ display: pcNested === "harm" ? "block" : "none" }}>
                     <RosterPcStressTraumaStrip
                       stress={stressCount}
+                      stressMax={stressMaxFromCharacter(full)}
                       traumaLabel={traumaLabel}
                       readOnly={!pcCanEdit}
                       busy={
@@ -5988,7 +5991,11 @@ export default function SessionGMManagementPanels({
                         pcRosterSheetBusyId === full.id
                       }
                       onStressChange={(n) =>
-                        handlePcRosterStressChange(full.id, n)
+                        handlePcRosterStressChange(
+                          full.id,
+                          n,
+                          stressMaxFromCharacter(full),
+                        )
                       }
                       S={S}
                     />
@@ -9107,6 +9114,7 @@ export default function SessionGMManagementPanels({
                     <div style={{ minWidth: 220, display: "grid", gap: 10 }}>
                       <RosterPcStressTraumaStrip
                         stress={rosterPcStressCount(fullCharacter)}
+                        stressMax={stressMaxFromCharacter(fullCharacter)}
                         traumaLabel={rosterPcTraumaLabel(fullCharacter)}
                         readOnly={
                           !canEditRosterPc(fullCharacter, user, isGmUser)
@@ -9117,7 +9125,11 @@ export default function SessionGMManagementPanels({
                           pcRosterSheetBusyId === id
                         }
                         onStressChange={(n) =>
-                          handlePcRosterStressChange(id, n)
+                          handlePcRosterStressChange(
+                            id,
+                            n,
+                            stressMaxFromCharacter(fullCharacter),
+                          )
                         }
                         S={S}
                       />
