@@ -150,6 +150,11 @@ CORS_ALLOW_HEADERS = list(default_headers) + [
 # Dev-only: allow all origins (optional fallback, comment out in production)
 # CORS_ALLOW_ALL_ORIGINS = True
 
+# Bound campaign SSE so gthread workers can recycle / drain. EventSource reconnects.
+SSE_STREAM_MAX_SECONDS = float(os.environ.get("SSE_STREAM_MAX_SECONDS", "45"))
+SSE_HEARTBEAT_SECONDS = float(os.environ.get("SSE_HEARTBEAT_SECONDS", "15"))
+SSE_CLIENT_RETRY_MS = int(os.environ.get("SSE_CLIENT_RETRY_MS", "2000"))
+
 # Celery (used when worker runs; dev uses eager mode — see CELERY_TASK_ALWAYS_EAGER)
 CELERY_BROKER_URL = os.environ.get("REDIS_URL", "redis://127.0.0.1:6379/0")
 CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", CELERY_BROKER_URL)

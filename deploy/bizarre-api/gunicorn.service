@@ -23,10 +23,13 @@ ExecStart=/opt/bizarre-prod/.venv/bin/gunicorn app.wsgi:application \
   --workers 2 \
   --threads 32 \
   --timeout 120 \
-  --graceful-timeout 30 \
-  --max-requests 2000 \
-  --max-requests-jitter 200
-TimeoutStopSec=30
+  --graceful-timeout 60 \
+  --max-requests 5000 \
+  --max-requests-jitter 500
+# graceful-timeout > SSE_STREAM_MAX_SECONDS so recycles drain instead of SIGKILL.
+# TimeoutStopSec > graceful-timeout so systemd does not shoot the master mid-drain.
+TimeoutStopSec=90
+KillMode=mixed
 Restart=on-failure
 
 [Install]
