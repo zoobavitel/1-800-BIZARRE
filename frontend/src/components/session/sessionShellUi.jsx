@@ -23,6 +23,14 @@ export const NPC_NESTED_TABS = [
   { id: "more", label: "More" },
 ];
 
+/** NPC playbook API values + labels (roster create / expand / session quick-create). */
+export const NPC_PLAYBOOK_OPTIONS = [
+  { value: "STAND", label: "Stand User" },
+  { value: "HAMON", label: "Hamon User" },
+  { value: "SPIN", label: "Spin User" },
+  { value: "NON_BIZARRE", label: "Non-Bizarre" },
+];
+
 export const PC_NESTED_TABS = [
   { id: "info", label: "Info" },
   { id: "harm", label: "Harm" },
@@ -419,12 +427,21 @@ export function groupCampaignNpcsByFaction(campaign) {
       sensitivity: "base",
     }),
   );
-  const allCampaignNpcIds = new Set(
-    (campaign?.campaign_npcs || []).map((n) => Number(n.id)),
-  );
   const assignedIds = new Set();
   const factionGroups = factions.map((f) => {
-    const npcs = (f.npcs || []).filter((n) => allCampaignNpcIds.has(Number(n.id)));
+    const fid = Number(f?.id);
+    const byId = new Map();
+    for (const n of f.npcs || []) {
+      const nid = Number(n?.id);
+      if (!Number.isFinite(nid)) continue;
+      byId.set(nid, n);
+    }
+    for (const n of campaign?.campaign_npcs || []) {
+      const nid = Number(n?.id);
+      if (!Number.isFinite(nid) || byId.has(nid)) continue;
+      if (resolveNpcFactionId(n) === fid) byId.set(nid, n);
+    }
+    const npcs = [...byId.values()];
     npcs.forEach((n) => assignedIds.add(Number(n.id)));
     return { faction: f, npcs };
   });

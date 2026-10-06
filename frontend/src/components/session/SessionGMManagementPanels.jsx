@@ -52,6 +52,7 @@ import {
   NPC_DRAG_SOURCE_MIME,
   NO_FACTION_DROP_KEY,
   NPC_NESTED_TABS,
+  NPC_PLAYBOOK_OPTIONS,
   PC_NESTED_TABS,
   SessionShellTabBar,
   NestedTabBar,
@@ -814,13 +815,6 @@ function rosterStandArmorMaxFromDurabilityGrade(letter) {
 }
 
 const lbl = { fontSize: 10, color: "#9ca3af", textTransform: "uppercase" };
-
-const NPC_QUICK_PLAYBOOK_OPTIONS = [
-  { value: "STAND", label: "Stand User" },
-  { value: "HAMON", label: "Hamon User" },
-  { value: "SPIN", label: "Spin User" },
-  { value: "NON_BIZARRE", label: "Non-Bizarre" },
-];
 
 const NPC_QUICK_STAT_PRESETS = [
   { value: "balanced", label: "Standard (all grade D)" },
@@ -4110,6 +4104,26 @@ export default function SessionGMManagementPanels({
         ) : null}
         {nestedTab === "more" ? (
           <div>
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ ...lbl, marginBottom: 4 }}>Playbook</div>
+              <select
+                value={npc.playbook || "STAND"}
+                onChange={(e) => {
+                  if (!isGmUser) return;
+                  const next = e.target.value;
+                  if (next === (npc.playbook || "STAND")) return;
+                  patchNpcExpandFields(npc.id, { playbook: next });
+                }}
+                style={{ ...S.select, width: "100%", fontSize: 11 }}
+                disabled={!isGmUser || saving || busy}
+              >
+                {NPC_PLAYBOOK_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </div>
             <div
               style={{
                 display: "flex",
@@ -7055,7 +7069,7 @@ export default function SessionGMManagementPanels({
                       style={QUICK_NPC_SELECT_STYLE}
                       disabled={quickNpcCreateBusy || saving}
                     >
-                      {NPC_QUICK_PLAYBOOK_OPTIONS.map((o) => (
+                      {NPC_PLAYBOOK_OPTIONS.map((o) => (
                         <option
                           key={o.value}
                           value={o.value}
