@@ -29,6 +29,6 @@ Matches SRD_DEV table: A=4d, B=3d, C=2d, D=1d, **F=0d (gated / use 2d keep lower
 
 | Before | After |
 |--------|--------|
-| Stand stats UI for armor/stress/session XP blurbs | Same grades drive stand **action** pools + **durability resist** previews; **PC stress stays 9 boxes** — Durability only adjusts **Stand armor** (+ resist depth), not stress length. |
+| Stand stats UI for armor/stress/session XP blurbs | Same grades drive stand **action** pools + **durability resist** previews; **PC stress track length follows Durability grade** (F=8 … A=12) and Stand armor charges follow the same table. |
 | `roll-action` reads only `action_dots` | Optionally reads **Stand / `coin_stats`** when `pool_source=stand_coin`. |
 | Resistance only Insight/Prowess/Resolve | Add **Durability** path when resisting **Stand** consequences. |

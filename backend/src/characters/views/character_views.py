@@ -521,7 +521,10 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 crit_rec,
                 band_rec,
             ) = recovery_healing_clock_segments(pool_rec, dice_for_seg)
-            stress_recovery = 2
+            # Downtime self-recover: healing-clock pool only (action rating + bonus).
+            # No harm L1/L2/L3 penalties and no stress (table house rule; SRD self-treat is 2).
+            # Mid-action self-recover still costs 2 stress to push through treatment.
+            stress_recovery = 0 if recovery_ctx_sheet == "self_downtime" else 2
             max_slots = max_stress_slots_for_character(character)
             stress_marked = max(
                 0,
@@ -553,8 +556,9 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 f"→ +{seg} healing clock segments"
             )
             with transaction.atomic():
-                character.stress = min(max_slots, stress_marked + stress_recovery)
-                character.save(update_fields=["stress"])
+                if stress_recovery:
+                    character.stress = min(max_slots, stress_marked + stress_recovery)
+                    character.save(update_fields=["stress"])
                 rh_roll = Roll.objects.create(
                     character=character,
                     session=session,

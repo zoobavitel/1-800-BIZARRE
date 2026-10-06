@@ -19,6 +19,7 @@ import {
   RosterPcStressTraumaStrip,
   rosterPcStressCount,
   rosterPcTraumaLabel,
+  stressMaxFromCharacter,
 } from "../roster/rosterPcInfoUtils";
 
 const lbl = { fontSize: 10, color: "#9ca3af", textTransform: "uppercase" };
@@ -62,8 +63,11 @@ function CampaignPcHarmCard({
   const name =
     character?.true_name || character?.name || character?.alias || `PC ${charId}`;
   const stress = rosterPcStressCount(character);
+  const stressMax = stressMaxFromCharacter(character);
   const traumaLabel = rosterPcTraumaLabel(character);
-  const grades = rawStandToGrades(character?.stand_coin_stats);
+  const grades = rawStandToGrades(
+    character?.stand || character?.stand_coin_stats || character?.coin_stats,
+  );
   const standArmorMax = rosterStandArmorMaxFromDurabilityGrade(grades.durability);
   const standArmorUsed = Math.max(
     0,
@@ -133,7 +137,7 @@ function CampaignPcHarmCard({
       onError?.(null);
       try {
         await characterAPI.patchCharacter(charId, {
-          stress: Math.max(0, Math.min(9, Math.floor(Number(n) || 0))),
+          stress: Math.max(0, Math.min(stressMax, Math.floor(Number(n) || 0))),
         });
         await onRefresh?.();
       } catch (e) {
@@ -142,7 +146,7 @@ function CampaignPcHarmCard({
         setBusy(false);
       }
     },
-    [charId, onRefresh, onError, readOnly],
+    [charId, onRefresh, onError, readOnly, stressMax],
   );
 
   const patchArmor = useCallback(
@@ -226,6 +230,7 @@ function CampaignPcHarmCard({
         <>
           <RosterPcStressTraumaStrip
             stress={stress}
+            stressMax={stressMax}
             traumaLabel={traumaLabel}
             readOnly={readOnly}
             busy={busy}

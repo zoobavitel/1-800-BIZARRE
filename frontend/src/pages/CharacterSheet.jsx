@@ -19,6 +19,8 @@ import {
   STAND_COLUMN_ROLL_ORDER,
   STAND_PASSIVE_KEYS,
   standPathArmorMaxFromDurabilityIndex,
+  stressMaxFromDurabilityIndex,
+  STRESS_TRACK_DEFAULT,
   DEV_SESSION_XP,
   ACTION_ATTR,
   ACTION_DESC,
@@ -3751,8 +3753,22 @@ const CharacterSheetWrapper = ({
         : 0,
     ),
   );
-  /** SRD_DEV: stress track fixed at 9; Stand Durability only affects armor (+ resist tiers). */
-  const maxStress = 9;
+  /** SRD_DEV: stress track length follows Durability (F=8 … A=12; default 9). */
+  const maxStress = useMemo(() => {
+    if (!hasStandPlaybook) return STRESS_TRACK_DEFAULT;
+    const idx = Number(standStats?.durability);
+    if (!Number.isFinite(idx)) return STRESS_TRACK_DEFAULT;
+    return stressMaxFromDurabilityIndex(idx);
+  }, [hasStandPlaybook, standStats?.durability]);
+
+  // Clamp filled stress when Durability (track max) shrinks.
+  useEffect(() => {
+    setStressFilled((prev) => {
+      const n = Math.max(0, Math.floor(Number(prev) || 0));
+      return n > maxStress ? maxStress : n;
+    });
+  }, [maxStress]);
+
   const applyStressCost = useCallback(
     (cost) => {
       const spend = Number(cost) || 0;
@@ -6196,8 +6212,11 @@ const CharacterSheetWrapper = ({
           return;
         }
 
-        // SRD: 2 stress; no session-linked log when there is nowhere to persist a Roll.
-        applyStressCost(2);
+        // Offline fallback: mid-action still costs 2 stress; downtime recover costs none.
+        // Pool is raw action rating + Invigorated only (no harm L1/L2 −1d / less effect).
+        if (isMidAction) {
+          applyStressCost(2);
+        }
         const roll = rollRecoveryTreatment(healingDiceCount);
         advanceHealingClockBySegments(roll.segments);
 
@@ -15075,7 +15094,7 @@ const CharacterSheetWrapper = ({
                             opacity:
                               healingRecoverBusy || !canEditSheet ? 0.6 : 1,
                           }}
-                          title={`Downtime recover: treat yourself when you have downtime or an equivalent pause—even during a gaming session—when GM/table agrees. SRD stress: 2. Roll ${pickHealClockAction(selfHealingRecoverAction)} for healing clock segments (1-3:+1, 4/5:+2, 6:+3, critical:+5).${
+                          title={`Downtime recover: treat yourself when you have downtime or an equivalent pause—even during a gaming session—when GM/table agrees. No stress; harm penalties do not apply. Roll ${pickHealClockAction(selfHealingRecoverAction)} for healing clock segments (1-3:+1, 4/5:+2, 6:+3, critical:+5).${
                             selfRecoverInvigoratedDice
                               ? " Pool includes +1d Invigorated when that ability appears on your sheet or heritage."
                               : ""
