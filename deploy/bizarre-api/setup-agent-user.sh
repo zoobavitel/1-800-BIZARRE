@@ -37,6 +37,16 @@ if ! id -u "$AGENT_USER" >/dev/null 2>&1; then
   useradd --create-home --shell /bin/bash "$AGENT_USER"
 fi
 
+echo "==> Ensure deploy group ${DEPLOY_GROUP} and add ${DEPLOY_USER}"
+if ! getent group "$DEPLOY_GROUP" >/dev/null; then
+  groupadd "$DEPLOY_GROUP"
+fi
+if id -u "$DEPLOY_USER" >/dev/null 2>&1; then
+  usermod -aG "$DEPLOY_GROUP" "$DEPLOY_USER"
+else
+  echo "WARNING: ${DEPLOY_USER} missing — create CI deploy user before next deploy" >&2
+fi
+
 echo "==> Groups for log reading (never add ${AGENT_USER} to ${DEPLOY_GROUP})"
 getent group systemd-journal >/dev/null && usermod -aG systemd-journal "$AGENT_USER" || true
 getent group adm >/dev/null && usermod -aG adm "$AGENT_USER" || true
@@ -47,6 +57,9 @@ fi
 
 echo "==> Harden prod paths (deploy owns tree; agent no write; env 0640 root:bizarre)"
 mkdir -p /etc/bizarre "$MEDIA_ROOT" "$PROD_TREE"
+# Dir 0750 root:bizarre — CI deploy (group member) can traverse; agent cannot.
+chown "root:${DEPLOY_GROUP}" /etc/bizarre
+chmod 750 /etc/bizarre
 if [[ -f "$PROD_ENV" ]]; then
   # 0640 root:bizarre — deploy (group bizarre) can read for migrate; agent not in
   # that group so still cannot read secrets. Matches gunicorn.service install note.
@@ -133,8 +146,9 @@ cat <<EOF
 
 Done. Accounts:
   Unix triage:  ${AGENT_USER}  (no write on ${PROD_TREE}; no read ${PROD_ENV})
-  Unix deploy:   ${DEPLOY_USER} (owns ${PROD_TREE}; CI LXC_SSH_USER)
+  Unix deploy:   ${DEPLOY_USER} (owns ${PROD_TREE}; in group ${DEPLOY_GROUP}; CI LXC_SSH_USER)
   Postgres RO:   ${DB_RO_USER}  (LOGIN/SELECT only — not a shell user)
+  Env ACL:       /etc/bizarre 0750 root:${DEPLOY_GROUP}; ${PROD_ENV} 0640 root:${DEPLOY_GROUP}
 
 Next:
   1. Add agent pubkey to $AUTH with from= + no-agent-forwarding
