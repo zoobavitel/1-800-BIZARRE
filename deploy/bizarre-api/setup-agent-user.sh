@@ -10,8 +10,9 @@
 #   bash /opt/bizarre/deploy/bizarre-api/setup-agent-user.sh
 #   AGENT_RO_PASSWORD='…' bash /opt/bizarre/deploy/bizarre-api/setup-agent-user.sh
 #
-# Then install the agent's public key (from 1Password) into ~agent/.ssh/authorized_keys
-# with from="<madvillainy-tailscale-ip>",no-agent-forwarding,no-port-forwarding,no-X11-forwarding
+# Then install the agent's public key (local ed25519 on madvillainy) into
+# ~agent/.ssh/authorized_keys with from="<madvillainy-tailscale-ip>",
+# no-agent-forwarding,no-port-forwarding,no-X11-forwarding
 #
 # This script does NOT give write access to prod code, media, or prod.env.
 # Fixes go through git → PR → deploy on madvillainy / agent tree.
@@ -126,7 +127,7 @@ if [[ ! -f "$AUTH" ]]; then
 EOF
   chown "$AGENT_USER:$AGENT_USER" "$AUTH"
   chmod 600 "$AUTH"
-  echo "Edit $AUTH with the 1Password-backed agent key + from= restriction"
+  echo "Edit $AUTH with the madvillainy agent pubkey + from= restriction"
 fi
 
 cat <<EOF
