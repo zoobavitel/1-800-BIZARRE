@@ -382,8 +382,14 @@ jobs:
               echo "Deploy aborted: missing $PROD_ROOT — run deploy/bizarre-api/bootstrap-prod-tree.sh once"
               exit 1
             fi
-            if [ ! -f /etc/bizarre/prod.env ]; then
-              echo "Deploy aborted: missing /etc/bizarre/prod.env"
+            # Need read (not mere exists): 640 root:bizarre + deploy user in group
+            # bizarre; /etc/bizarre must be 750 root:bizarre so group can traverse.
+            if [ ! -r /etc/bizarre/prod.env ]; then
+              echo "Deploy aborted: /etc/bizarre/prod.env not readable by $(id -un)"
+              echo "Expect: /etc/bizarre 0750 root:bizarre, prod.env 0640 root:bizarre,"
+              echo "and LXC_SSH_USER in group bizarre (re-run setup-agent-user.sh as root)."
+              id
+              ls -la /etc/bizarre /etc/bizarre/prod.env 2>&1 || true
               exit 1
             fi
             cd "$PROD_ROOT"

@@ -93,7 +93,7 @@ Rollback of live code: `cd /opt/bizarre-prod && git fetch origin && git checkout
 | [`env.example`](env.example) → `/etc/bizarre/prod.env` | Production only (mode `0640`) |
 | [`agent.env.example`](agent.env.example) → `/opt/bizarre/backend/src/.env` | Agent Postgres clone |
 
-Do **not** keep a second `.env` under `/opt/bizarre-prod`. Units set **only** `BIZARRE_ENV_FILE=/etc/bizarre/prod.env` (no `EnvironmentFile=` — that would inject values into `os.environ` and let systemd-mangled `$` override decouple). Install the file `0640 root:root` (or `root:<service-user>`). Missing file → Django/decouple fail at startup rather than silently using empty defaults.
+Do **not** keep a second `.env` under `/opt/bizarre-prod`. Units set **only** `BIZARRE_ENV_FILE=/etc/bizarre/prod.env` (no `EnvironmentFile=` — that would inject values into `os.environ` and let systemd-mangled `$` override decouple). Install `/etc/bizarre` as `0750 root:bizarre` and `prod.env` as `0640 root:bizarre`, and ensure CI deploy user (`bizarre-deploy` / `LXC_SSH_USER`) is in group `bizarre` so migrate can read secrets (gunicorn as root still works; triage `agent` must stay out of that group). Missing or unreadable file → Django/decouple fail at startup rather than silently using empty defaults.
 
 ## 2. Django (check, migrate, static, superuser)
 

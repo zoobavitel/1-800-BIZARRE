@@ -36,6 +36,7 @@ Expect:
 | User `agent` | Not root, not app user |
 | `systemd-journal` / `adm` | Read logs |
 | `prod.env` `640 root:bizarre` | Deploy group can read; agent (not in `bizarre`) cannot |
+| `bizarre-deploy` in group `bizarre` | CI `LXC_SSH_USER` must be in `bizarre` or migrate cannot read `prod.env` |
 | `/opt/bizarre-prod`, `/var/lib/bizarre` | No write for agent |
 | sudoers | `systemctl status` / `journalctl` only — **no restart** |
 | Postgres `bizarre_ro` | `SELECT` only + `default_transaction_read_only` |
