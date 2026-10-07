@@ -56,7 +56,7 @@ Fixes: diagnose on CT 103 → edit on madvillainy / `/opt/bizarre` → PR → de
 
 - SSH: `bizarre-api-agent` → `User agent` only; ops Include for root/pve2
 - Terminal **auto-run off** (or tight allowlist) in Cursor settings
-- Encrypted `~/Vault` for `prod.env` / `bizarre_ro` backups (not paid 1Password required)
+- Encrypted `~/Vault` (or disk encryption) for `prod.env` / `bizarre_ro` backups; dedicated local ed25519 agent key on madvillainy
 - Project hooks: write-target tripwires; Unix ownership is the wall
 
 ## GitHub
