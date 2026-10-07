@@ -74,7 +74,9 @@ import {
   mergePlaybookFoundationAbilities,
   abilitiesMissingPlaybookFoundations,
   isPlaybookFoundationAbility,
+  shouldSkipSheetDraftHydration,
   shouldSkipServerOwnedFieldHydration,
+  applyHarmSlotTextChange,
   computeHealingClockAfterSegments,
   normalizeCrewFromCharacter,
   resolveCrewFromCampaign,
@@ -1065,6 +1067,14 @@ const CharacterSheetWrapper = ({
       onDraftMetaChange?.(cleared);
     }, 500);
   }, [onDraftMetaChange]);
+  /** Always mark dirtyIntent before local setState so poll/SSE cannot win the gap. */
+  const editField = useCallback(
+    (apply) => {
+      markDirtyIntent();
+      if (typeof apply === "function") apply();
+    },
+    [markDirtyIntent],
+  );
   const markFieldTouch = useCallback(
     (field) => {
       if (!field || !Object.prototype.hasOwnProperty.call(fieldTouchRef.current, field)) {
@@ -1680,6 +1690,7 @@ const CharacterSheetWrapper = ({
       shouldSkipServerOwnedFieldHydration("heritage", {
         fieldTouches: fieldTouchRef.current,
         sheetDraftIsDirty,
+        dirtyIntent: dirtyIntentRef.current,
       })
     ) {
       return;
@@ -2066,7 +2077,16 @@ const CharacterSheetWrapper = ({
   }, [character?.id, character?.stressFilled, character?.trauma, sheetDraftIsDirty]);
 
   useEffect(() => {
-    if (sheetDraftIsDirty) return;
+    // Parent sheetDraftIsDirty folds dirtyIntent after re-render; also check
+    // dirtyIntentRef for the same-tick gap (markDirtyIntent → parent prop).
+    if (
+      shouldSkipSheetDraftHydration({
+        sheetDraftIsDirty,
+        dirtyIntent: dirtyIntentRef.current,
+      })
+    ) {
+      return;
+    }
     const h = character?.harm || character?.harmEntries;
     if (!h || typeof h !== "object") return;
     setHarm((prev) => {
@@ -2089,6 +2109,7 @@ const CharacterSheetWrapper = ({
       shouldSkipServerOwnedFieldHydration("healingClock", {
         fieldTouches: fieldTouchRef.current,
         sheetDraftIsDirty,
+        dirtyIntent: dirtyIntentRef.current,
       })
     ) {
       return;
@@ -2199,6 +2220,7 @@ const CharacterSheetWrapper = ({
       shouldSkipServerOwnedFieldHydration("coin", {
         fieldTouches: fieldTouchRef.current,
         sheetDraftIsDirty,
+        dirtyIntent: dirtyIntentRef.current,
       })
     ) {
       return;
@@ -2228,6 +2250,7 @@ const CharacterSheetWrapper = ({
       shouldSkipServerOwnedFieldHydration("stash", {
         fieldTouches: fieldTouchRef.current,
         sheetDraftIsDirty,
+        dirtyIntent: dirtyIntentRef.current,
       })
     ) {
       return;
@@ -6432,25 +6455,30 @@ const CharacterSheetWrapper = ({
     }
   }, [characterId]);
 
-  const togglePlaybookXpArchetypeKey = useCallback((key) => {
-    setPlaybookXpArchetypes((prev) => {
-      const had = prev.includes(key);
-      const nextSet = new Set(prev);
-      if (had) nextSet.delete(key);
-      else nextSet.add(key);
-      const order = archetypeRowsForCharacterPlaybook(playbook).map(
-        (r) => r.key,
-      );
-      const next = order.filter((k) => nextSet.has(k));
-      if (
-        normalizePlaybookPathKey(playbook) === "STAND" &&
-        next.length > 0
-      ) {
-        setStandType(next[0]);
-      }
-      return next;
-    });
-  }, [playbook]);
+  const togglePlaybookXpArchetypeKey = useCallback(
+    (key) => {
+      editField(() => {
+        setPlaybookXpArchetypes((prev) => {
+          const had = prev.includes(key);
+          const nextSet = new Set(prev);
+          if (had) nextSet.delete(key);
+          else nextSet.add(key);
+          const order = archetypeRowsForCharacterPlaybook(playbook).map(
+            (r) => r.key,
+          );
+          const next = order.filter((k) => nextSet.has(k));
+          if (
+            normalizePlaybookPathKey(playbook) === "STAND" &&
+            next.length > 0
+          ) {
+            setStandType(next[0]);
+          }
+          return next;
+        });
+      });
+    },
+    [playbook, editField],
+  );
 
   /**
    * Toggle an end-of-session XP trigger (BELIEFS / STRUGGLE / playbook-specific)
@@ -12858,11 +12886,10 @@ const CharacterSheetWrapper = ({
                             style={S.inp}
                             value={charData.name}
                             onChange={(e) => {
-                              markDirtyIntent();
-                              setCharData((p) => ({
-                                ...p,
-                                name: e.target.value,
-                              }));
+                              const name = e.target.value;
+                              editField(() =>
+                                setCharData((p) => ({ ...p, name })),
+                              );
                             }}
                             placeholder="Character Name"
                           />
@@ -12872,12 +12899,12 @@ const CharacterSheetWrapper = ({
                           <input
                             style={S.inp}
                             value={charData.crew}
-                            onChange={(e) =>
-                              setCharData((p) => ({
-                                ...p,
-                                crew: e.target.value,
-                              }))
-                            }
+                            onChange={(e) => {
+                              const crew = e.target.value;
+                              editField(() =>
+                                setCharData((p) => ({ ...p, crew })),
+                              );
+                            }}
                             onBlur={commitCrewName}
                             placeholder="Crew name (shared in campaign when you are in one)"
                           />
@@ -12888,12 +12915,12 @@ const CharacterSheetWrapper = ({
                         <input
                           style={S.inp}
                           value={charData.standName}
-                          onChange={(e) =>
-                            setCharData((p) => ({
-                              ...p,
-                              standName: e.target.value,
-                            }))
-                          }
+                          onChange={(e) => {
+                            const standName = e.target.value;
+                            editField(() =>
+                              setCharData((p) => ({ ...p, standName })),
+                            );
+                          }}
                           placeholder="「Stand Name」"
                         />
                       </div>
@@ -12902,9 +12929,12 @@ const CharacterSheetWrapper = ({
                         <input
                           style={S.inp}
                           value={charData.look}
-                          onChange={(e) =>
-                            setCharData((p) => ({ ...p, look: e.target.value }))
-                          }
+                          onChange={(e) => {
+                            const look = e.target.value;
+                            editField(() =>
+                              setCharData((p) => ({ ...p, look })),
+                            );
+                          }}
                           placeholder="Appearance and style"
                         />
                       </div>
@@ -12943,28 +12973,31 @@ const CharacterSheetWrapper = ({
                                 const newHeritageId = val
                                   ? parseInt(val, 10)
                                   : null;
-                                setCharData((p) => ({
-                                  ...p,
-                                  heritage: newHeritageId,
-                                }));
-                                if (newHeritageId && heritages.length) {
-                                  const h = heritages.find(
-                                    (x) => x.id === newHeritageId,
-                                  );
-                                  if (h) {
-                                    const reqB = (h.benefits || [])
-                                      .filter((b) => b.required)
-                                      .map((b) => b.id);
-                                    const reqD = (h.detriments || [])
-                                      .filter((d) => d.required)
-                                      .map((d) => d.id);
-                                    setSelectedBenefits(reqB);
-                                    setSelectedDetriments(reqD);
+                                editField(() => {
+                                  markFieldTouch("heritage");
+                                  setCharData((p) => ({
+                                    ...p,
+                                    heritage: newHeritageId,
+                                  }));
+                                  if (newHeritageId && heritages.length) {
+                                    const h = heritages.find(
+                                      (x) => x.id === newHeritageId,
+                                    );
+                                    if (h) {
+                                      const reqB = (h.benefits || [])
+                                        .filter((b) => b.required)
+                                        .map((b) => b.id);
+                                      const reqD = (h.detriments || [])
+                                        .filter((d) => d.required)
+                                        .map((d) => d.id);
+                                      setSelectedBenefits(reqB);
+                                      setSelectedDetriments(reqD);
+                                    }
+                                  } else {
+                                    setSelectedBenefits([]);
+                                    setSelectedDetriments([]);
                                   }
-                                } else {
-                                  setSelectedBenefits([]);
-                                  setSelectedDetriments([]);
-                                }
+                                });
                               }}
                             >
                               {heritagesLoading ? (
@@ -13014,12 +13047,12 @@ const CharacterSheetWrapper = ({
                           <input
                             style={S.inp}
                             value={charData.background}
-                            onChange={(e) =>
-                              setCharData((p) => ({
-                                ...p,
-                                background: e.target.value,
-                              }))
-                            }
+                            onChange={(e) => {
+                              const background = e.target.value;
+                              editField(() =>
+                                setCharData((p) => ({ ...p, background })),
+                              );
+                            }}
                             placeholder="Background"
                           />
                         </div>
@@ -13094,12 +13127,12 @@ const CharacterSheetWrapper = ({
                         >
                           <select
                             value={charData.vice}
-                            onChange={(e) =>
-                              setCharData((p) => ({
-                                ...p,
-                                vice: e.target.value,
-                              }))
-                            }
+                            onChange={(e) => {
+                              const vice = e.target.value;
+                              editField(() =>
+                                setCharData((p) => ({ ...p, vice })),
+                              );
+                            }}
                             style={S.sel}
                           >
                             <option value="">Select Vice</option>
@@ -13111,12 +13144,12 @@ const CharacterSheetWrapper = ({
                             style={{ ...S.inp, flex: 1 }}
                             placeholder="Purveyor details"
                             value={charData.viceDetails ?? ""}
-                            onChange={(e) =>
-                              setCharData((p) => ({
-                                ...p,
-                                viceDetails: e.target.value,
-                              }))
-                            }
+                            onChange={(e) => {
+                              const viceDetails = e.target.value;
+                              editField(() =>
+                                setCharData((p) => ({ ...p, viceDetails })),
+                              );
+                            }}
                           />
                         </div>
                       </div>
@@ -13134,12 +13167,12 @@ const CharacterSheetWrapper = ({
                             style={S.inp}
                             placeholder="Close friend"
                             value={charData.closeFriend ?? ""}
-                            onChange={(e) =>
-                              setCharData((p) => ({
-                                ...p,
-                                closeFriend: e.target.value,
-                              }))
-                            }
+                            onChange={(e) => {
+                              const closeFriend = e.target.value;
+                              editField(() =>
+                                setCharData((p) => ({ ...p, closeFriend })),
+                              );
+                            }}
                           />
                         </div>
                         <div>
@@ -13148,12 +13181,12 @@ const CharacterSheetWrapper = ({
                             style={S.inp}
                             placeholder="Rival"
                             value={charData.rival ?? ""}
-                            onChange={(e) =>
-                              setCharData((p) => ({
-                                ...p,
-                                rival: e.target.value,
-                              }))
-                            }
+                            onChange={(e) => {
+                              const rival = e.target.value;
+                              editField(() =>
+                                setCharData((p) => ({ ...p, rival })),
+                              );
+                            }}
                           />
                         </div>
                       </div>
@@ -14812,19 +14845,30 @@ const CharacterSheetWrapper = ({
                             }}
                             placeholder={`Lv${key.slice(-1)} harm`}
                             value={harm[key]?.[0] ?? ""}
-                            onChange={(e) =>
-                              setHarm((p) => {
-                                const row = Array.isArray(p[key])
-                                  ? [...p[key]]
-                                  : Array(count).fill("");
-                                const hadValue = String(row[0] || "").trim().length > 0;
-                                row[0] = e.target.value;
-                                const hasNewValue =
-                                  String(e.target.value || "").trim().length > 0;
-                                if (!hadValue && hasNewValue) setHealingClock(0);
-                                return { ...p, [key]: row };
-                              })
-                            }
+                            onChange={(e) => {
+                              const nextText = e.target.value;
+                              editField(() => {
+                                const resetHealingClock =
+                                  applyHarmSlotTextChange(
+                                    harm,
+                                    key,
+                                    0,
+                                    nextText,
+                                  ).resetHealingClock;
+                                setHarm((prev) =>
+                                  applyHarmSlotTextChange(
+                                    prev,
+                                    key,
+                                    0,
+                                    nextText,
+                                  ).nextHarm,
+                                );
+                                if (resetHealingClock) {
+                                  markFieldTouch("healingClock");
+                                  setHealingClock(0);
+                                }
+                              });
+                            }}
                           />
                         </div>
                       ))}
@@ -14896,20 +14940,30 @@ const CharacterSheetWrapper = ({
                                 }}
                                 placeholder={`Lv${key.slice(-1)} harm`}
                                 value={harm[key]?.[idx] ?? ""}
-                                onChange={(e) =>
-                                  setHarm((p) => {
-                                    const row = Array.isArray(p[key])
-                                      ? [...p[key]]
-                                      : Array(count).fill("");
-                                    const hadValue =
-                                      String(row[idx] || "").trim().length > 0;
-                                    row[idx] = e.target.value;
-                                    const hasNewValue =
-                                      String(e.target.value || "").trim().length > 0;
-                                    if (!hadValue && hasNewValue) setHealingClock(0);
-                                    return { ...p, [key]: row };
-                                  })
-                                }
+                                onChange={(e) => {
+                                  const nextText = e.target.value;
+                                  editField(() => {
+                                    const resetHealingClock =
+                                      applyHarmSlotTextChange(
+                                        harm,
+                                        key,
+                                        idx,
+                                        nextText,
+                                      ).resetHealingClock;
+                                    setHarm((prev) =>
+                                      applyHarmSlotTextChange(
+                                        prev,
+                                        key,
+                                        idx,
+                                        nextText,
+                                      ).nextHarm,
+                                    );
+                                    if (resetHealingClock) {
+                                      markFieldTouch("healingClock");
+                                      setHealingClock(0);
+                                    }
+                                  });
+                                }}
                               />
                             ))}
                           </div>
@@ -16140,7 +16194,10 @@ const CharacterSheetWrapper = ({
                     >
                       <select
                         value={playbook}
-                        onChange={(e) => setPlaybook(e.target.value)}
+                        onChange={(e) => {
+                          const next = e.target.value;
+                          editField(() => setPlaybook(next));
+                        }}
                         style={S.sel}
                         aria-label="Playbook"
                       >
@@ -16227,7 +16284,10 @@ const CharacterSheetWrapper = ({
                           type="text"
                           value={standTypeCustom}
                           disabled={!canEditSheet}
-                          onChange={(e) => setStandTypeCustom(e.target.value)}
+                          onChange={(e) => {
+                            const next = e.target.value;
+                            editField(() => setStandTypeCustom(next));
+                          }}
                           placeholder="Fiction subtype name"
                           style={{
                             ...S.inp,
@@ -16274,17 +16334,21 @@ const CharacterSheetWrapper = ({
                                 checked={checked}
                                 disabled={!canEditSheet}
                                 onChange={() => {
-                                  setStandForms((prev) => {
-                                    const next = new Set(prev);
-                                    if (next.has(formLabel)) next.delete(formLabel);
-                                    else next.add(formLabel);
-                                    return STAND_FORM_PRESETS.filter((f) =>
-                                      next.has(f),
-                                    ).concat(
-                                      prev.filter(
-                                        (f) => !STAND_FORM_PRESETS.includes(f),
-                                      ),
-                                    );
+                                  editField(() => {
+                                    setStandForms((prev) => {
+                                      const next = new Set(prev);
+                                      if (next.has(formLabel))
+                                        next.delete(formLabel);
+                                      else next.add(formLabel);
+                                      return STAND_FORM_PRESETS.filter((f) =>
+                                        next.has(f),
+                                      ).concat(
+                                        prev.filter(
+                                          (f) =>
+                                            !STAND_FORM_PRESETS.includes(f),
+                                        ),
+                                      );
+                                    });
                                   });
                                 }}
                               />
@@ -16322,10 +16386,12 @@ const CharacterSheetWrapper = ({
                           onClick={() => {
                             const custom = standFormCustomDraft.trim();
                             if (!custom) return;
-                            setStandForms((prev) =>
-                              normalizeStandFormsList([...prev, custom]),
-                            );
-                            setStandFormCustomDraft("");
+                            editField(() => {
+                              setStandForms((prev) =>
+                                normalizeStandFormsList([...prev, custom]),
+                              );
+                              setStandFormCustomDraft("");
+                            });
                           }}
                           style={{
                             ...S.btn,
@@ -16353,8 +16419,10 @@ const CharacterSheetWrapper = ({
                                 type="button"
                                 disabled={!canEditSheet}
                                 onClick={() =>
-                                  setStandForms((prev) =>
-                                    prev.filter((x) => x !== f),
+                                  editField(() =>
+                                    setStandForms((prev) =>
+                                      prev.filter((x) => x !== f),
+                                    ),
                                   )
                                 }
                                 title="Remove custom form"
@@ -16384,9 +16452,10 @@ const CharacterSheetWrapper = ({
                         <select
                           value={standConsciousness}
                           disabled={!canEditSheet}
-                          onChange={(e) =>
-                            setStandConsciousness(e.target.value)
-                          }
+                          onChange={(e) => {
+                            const next = e.target.value;
+                            editField(() => setStandConsciousness(next));
+                          }}
                           style={{
                             ...S.sel,
                             display: "block",
