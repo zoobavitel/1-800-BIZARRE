@@ -41,7 +41,10 @@ pip install -q -r "$PROD_ROOT/backend/requirements.txt"
 pip install -q -r "$PROD_ROOT/backend/requirements-prod.txt"
 
 # --- single prod env (not under either git tree) ---
-install -d -m 0750 /etc/bizarre
+# 0750 / 0640 root:bizarre — CI deploy user (group bizarre) can traverse + read;
+# agent triage user must NOT be in bizarre. Gunicorn as root still works.
+DEPLOY_GROUP="${DEPLOY_GROUP:-bizarre}"
+install -d -m 0750 -o root -g "$DEPLOY_GROUP" /etc/bizarre
 if [ ! -f "$PROD_ENV_FILE" ]; then
   LEGACY_ENV="$AGENT_ROOT/backend/src/.env"
   if [ -f "$LEGACY_ENV" ]; then
@@ -58,11 +61,12 @@ if [ ! -f "$PROD_ENV_FILE" ]; then
     # Rewrite in-tree media paths to the external host path
     sed -i "s|^MEDIA_ROOT=.*|MEDIA_ROOT=${MEDIA_ROOT_HOST}|" "$PROD_ENV_FILE"
   fi
-  chmod 0640 "$PROD_ENV_FILE"
-  chown root:root "$PROD_ENV_FILE" 2>/dev/null || true
 else
   echo "Prod env already at $PROD_ENV_FILE"
 fi
+chmod 0640 "$PROD_ENV_FILE" 2>/dev/null || true
+chown "root:${DEPLOY_GROUP}" /etc/bizarre "$PROD_ENV_FILE" 2>/dev/null || true
+chmod 0750 /etc/bizarre 2>/dev/null || true
 
 # Do NOT leave a second copy under the prod git tree (drift risk).
 rm -f "$PROD_ROOT/backend/src/.env"
