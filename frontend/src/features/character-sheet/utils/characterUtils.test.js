@@ -317,6 +317,52 @@ describe("mergeServerOwnedCharacterFields", () => {
 });
 
 describe("server-owned field hydration guards", () => {
+  test("shouldSkipSheetDraftHydration blocks same-tick dirtyIntent before parent dirty prop", () => {
+    const { shouldSkipSheetDraftHydration } = require("./characterUtils");
+    // Simulates: typed harm, markDirtyIntent sync, SSE character echo with old harm
+    // before parent re-renders sheetDraftIsDirty=true.
+    expect(
+      shouldSkipSheetDraftHydration({
+        sheetDraftIsDirty: false,
+        dirtyIntent: true,
+      }),
+    ).toBe(true);
+    expect(
+      shouldSkipSheetDraftHydration({
+        sheetDraftIsDirty: true,
+        dirtyIntent: false,
+      }),
+    ).toBe(true);
+    expect(
+      shouldSkipSheetDraftHydration({
+        sheetDraftIsDirty: false,
+        dirtyIntent: false,
+      }),
+    ).toBe(false);
+  });
+
+  test("applyHarmSlotTextChange keeps typed text and flags empty→filled clock reset", () => {
+    const { applyHarmSlotTextChange } = require("./characterUtils");
+    const empty = {
+      level4: [""],
+      level3: [""],
+      level2: ["", ""],
+      level1: ["", ""],
+    };
+    const first = applyHarmSlotTextChange(empty, "level3", 0, "x");
+    expect(first.nextHarm.level3[0]).toBe("x");
+    expect(first.resetHealingClock).toBe(true);
+    // Stale server echo must not win over local draft (caller skips hydrate).
+    const serverStale = applyHarmSlotTextChange(empty, "level3", 0, "");
+    expect(serverStale.nextHarm.level3[0]).toBe("");
+    const typed = applyHarmSlotTextChange(first.nextHarm, "level3", 0, "xx");
+    expect(typed.nextHarm.level3[0]).toBe("xx");
+    expect(typed.resetHealingClock).toBe(false);
+    const slot2 = applyHarmSlotTextChange(empty, "level1", 1, "bruise");
+    expect(slot2.nextHarm.level1).toEqual(["", "bruise"]);
+    expect(slot2.resetHealingClock).toBe(true);
+  });
+
   test("shouldSkipServerOwnedFieldHydration blocks poll overwrite when field touched", () => {
     const { shouldSkipServerOwnedFieldHydration, SERVER_OWNED_FIELD_TOUCH_KEYS } =
       require("./characterUtils");
@@ -332,6 +378,13 @@ describe("server-owned field hydration guards", () => {
       shouldSkipServerOwnedFieldHydration("healingClock", {
         fieldTouches: {},
         sheetDraftIsDirty: true,
+      }),
+    ).toBe(true);
+    expect(
+      shouldSkipServerOwnedFieldHydration("healingClock", {
+        fieldTouches: {},
+        sheetDraftIsDirty: false,
+        dirtyIntent: true,
       }),
     ).toBe(true);
     expect(
