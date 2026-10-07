@@ -700,16 +700,58 @@ export function canAddNonFoundationPlaybookAbility({
 }
 
 /**
+ * Skip merging a server character snapshot into local draft state.
+ * `sheetDraftIsDirty` (parent) already folds dirtyIntent||isDirty||isSaving after
+ * re-render; pass `dirtyIntent` from the local ref to cover the same-tick gap
+ * between markDirtyIntent() and the parent prop update.
+ */
+export function shouldSkipSheetDraftHydration({
+  sheetDraftIsDirty = false,
+  dirtyIntent = false,
+} = {}) {
+  return Boolean(sheetDraftIsDirty || dirtyIntent);
+}
+
+/**
  * Overlay server-owned stress/trauma/healing clock onto a dirty local sheet draft.
  * Skip a field when the player touched that control this draft so a poll/SSE
  * cannot clobber an in-progress edit.
  */
 export function shouldSkipServerOwnedFieldHydration(
   fieldKey,
-  { fieldTouches = {}, sheetDraftIsDirty = false } = {},
+  { fieldTouches = {}, sheetDraftIsDirty = false, dirtyIntent = false } = {},
 ) {
-  if (sheetDraftIsDirty) return true;
+  if (shouldSkipSheetDraftHydration({ sheetDraftIsDirty, dirtyIntent })) {
+    return true;
+  }
   return Boolean(fieldTouches?.[fieldKey]);
+}
+
+/**
+ * Pure harm-slot text edit for CharacterSheet inputs.
+ * Returns next harm object and whether empty→filled should reset the healing clock.
+ */
+export function applyHarmSlotTextChange(
+  harm,
+  levelKey,
+  slotIndex,
+  nextText,
+) {
+  const counts = { level4: 1, level3: 1, level2: 2, level1: 2 };
+  const count = counts[levelKey] || 1;
+  const idx = Math.max(0, Math.min(count - 1, Math.floor(Number(slotIndex) || 0)));
+  const prev = harm && typeof harm === "object" ? harm : {};
+  const row = Array.isArray(prev[levelKey])
+    ? [...prev[levelKey]]
+    : Array(count).fill("");
+  while (row.length < count) row.push("");
+  const hadValue = String(row[idx] || "").trim().length > 0;
+  row[idx] = nextText;
+  const hasNewValue = String(nextText || "").trim().length > 0;
+  return {
+    nextHarm: { ...prev, [levelKey]: row },
+    resetHealingClock: !hadValue && hasNewValue,
+  };
 }
 
 /** Keys mirrored on buildPayload `_fieldTouches` and mergeServerOwnedCharacterFields. */
