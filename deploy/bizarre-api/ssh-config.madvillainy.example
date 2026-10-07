@@ -1,15 +1,13 @@
 # Example ~/.ssh/config fragment for madvillainy (dev box).
 # Keep Proxmox hosts (pve / pve2) OUT of the config Cursor's agent can read.
-# Use a dedicated agent key in 1Password SSH agent — not your personal deploy key.
+# Use a dedicated local ed25519 agent key — not your personal deploy key.
 
 Host bizarre-api-agent
   HostName 100.x.x.x
   User agent
-  IdentityAgent ~/.1password/agent.sock
   IdentitiesOnly yes
+  IdentityFile ~/.ssh/bizarre-api-agent
   ForwardAgent no
-  # Optional: pin key file that 1Password unlocks
-  # IdentityFile ~/.ssh/bizarre-api-agent.pub
 
 # Do NOT add:
 #   Host pve2 / pve / root@*

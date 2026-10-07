@@ -30,6 +30,6 @@ Hooks are tripwires. Real safety = least privilege + backups agent cannot delete
 
 ## Operator checklist (not agent work)
 
-- Off auto-run for terminal; 1Password for SSH keys
+- Off auto-run for terminal; dedicated local ed25519 agent key on madvillainy
 - GitHub ruleset: no force-push / no branch delete on `master`
 - Nightly DB+media backup off-host (PBS/restic append-only); pre-session `pct snapshot`
