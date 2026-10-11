@@ -375,6 +375,13 @@ export const characterAPI = {
       body: JSON.stringify(body),
     }),
 
+  /** Cancel one open pending advance: +(cap-1) Available XP, +1 on track. */
+  cancelPendingAdvance: (id, body) =>
+    apiRequest(`/characters/${id}/cancel-pending-advance/`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
   allocatePoolXp: (id, body) =>
     apiRequest(`/characters/${id}/allocate-pool-xp/`, {
       method: "POST",
