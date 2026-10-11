@@ -1019,6 +1019,7 @@ const HomePage = ({
                               onCancel={() => setExpandedFactionId(null)}
                               onSaved={handleFactionEditorSaved}
                               onDeleted={handleFactionEditorDeleted}
+                              onNavigateToNPC={onNavigateToNPC}
                             />
                           </div>
                         ) : null}

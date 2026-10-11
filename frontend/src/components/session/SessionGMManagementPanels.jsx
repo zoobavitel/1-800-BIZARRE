@@ -66,9 +66,11 @@ import {
   SessionNpcToken,
   SessionPcToken,
 } from "./SessionTokenFaces";
+import ReputationStandingPanel from "../campaign/ReputationStandingPanel";
 import RosterCrewInlineSection from "../roster/RosterCrewInlineSection";
 import RosterPcExpandPanel from "../roster/RosterPcExpandPanel";
 import RosterNpcExpandEditableTabs from "../roster/RosterNpcExpandEditableTabs";
+import NpcExpandRepTab from "../standing/NpcExpandRepTab";
 import SessionPcActionDotsReadout from "../roster/SessionPcActionDotsReadout";
 import {
   stepGrade,
@@ -4128,6 +4130,27 @@ export default function SessionGMManagementPanels({
           ) : null}
           </>
         ) : null}
+        {nestedTab === "rep" ? (
+          <NpcExpandRepTab
+            npc={npc}
+            characters={campaignChars || characters || []}
+            crews={crews || campaign?.crews || []}
+            campaignFactions={campaign?.factions || []}
+            readOnly={!isGmUser}
+            busy={
+              saving ||
+              busy ||
+              npcUiBusyKey === `edit:${npc.id}`
+            }
+            onPatchNpc={
+              isGmUser
+                ? (partial) => patchNpcExpandFields(npc.id, partial)
+                : undefined
+            }
+            onRefresh={onRefresh}
+            onError={setError}
+          />
+        ) : null}
         {nestedTab === "more" ? (
           <div>
             <div style={{ marginBottom: 10 }}>
@@ -4663,56 +4686,17 @@ export default function SessionGMManagementPanels({
     );
   };
 
-  const campaignCharsForTabs = campaignChars || [];
-
-  const renderLedgerFilterTab = (kind) => {
-    const rows = campaignCharsForTabs.map((full) => {
-      const name = full.true_name || full.name || `PC ${full.id}`;
-      // rep — crew + personal notes if any
-      const crewId = full.crew ?? full.crew_id;
-      const crew = (crews || []).find((c) => Number(c.id) === Number(crewId));
-      const rels = Array.isArray(crew?.faction_relationships)
-        ? crew.faction_relationships
-            .map((r) => `${r.faction_name || r.faction_id}: ${r.reputation_value}`)
-            .join(" · ")
-        : "";
-      return {
-        id: full.id,
-        name,
-        body: rels || (crew ? `Crew: ${crew.name || crew.id}` : "—"),
-      };
-    });
-    const title = "Reputation";
-    return (
-      <div style={S.card}>
-        <span style={S.sectionLbl}>{title}</span>
-        <p style={{ fontSize: 11, color: "#6b7280", margin: "4px 0 10px" }}>
-          Session ledger snapshot from current PC sheets / crew faction standing.
-        </p>
-        <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: 8 }}>
-          {rows.length === 0 ? (
-            <li style={{ color: "#6b7280", fontSize: 12 }}>No PCs.</li>
-          ) : (
-            rows.map((r) => (
-              <li
-                key={`${kind}-${r.id}`}
-                style={{
-                  border: "1px solid #374151",
-                  borderRadius: 6,
-                  padding: "8px 10px",
-                  background: "#0b1220",
-                  fontSize: 11,
-                }}
-              >
-                <div style={{ fontWeight: 700, marginBottom: 4 }}>{r.name}</div>
-                <div style={{ color: "#9ca3af", lineHeight: 1.4 }}>{r.body}</div>
-              </li>
-            ))
-          )}
-        </ul>
-      </div>
-    );
-  };
+  const renderLedgerFilterTab = (_kind) => (
+    <ReputationStandingPanel
+      S={S}
+      crews={crews || campaign?.crews || []}
+      characters={campaignChars || characters || []}
+      npcs={campaignNPCs || []}
+      factions={campaign?.factions || []}
+      isGM={!!isGmUser}
+      onRefresh={onRefresh}
+    />
+  );
 
   return (
     <>

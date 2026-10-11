@@ -10,6 +10,7 @@ import {
   NPC_NESTED_TABS,
   NPC_PLAYBOOK_OPTIONS,
 } from "../session/sessionShellUi";
+import NpcExpandRepTab from "../standing/NpcExpandRepTab";
 import { rosterExpandPanelChrome } from "./rosterShared";
 import RosterNpcExpandEditableTabs from "./RosterNpcExpandEditableTabs";
 
@@ -55,6 +56,8 @@ export default function NpcCampaignExpandPanel({
   npc: npcIn,
   S,
   campaign,
+  characters = [],
+  crews = null,
   onNavigateToNPC,
   onLeaveFaction,
   onRemoveFromCampaign,
@@ -314,6 +317,28 @@ export default function NpcCampaignExpandPanel({
             </div>
           ) : null}
         </>
+      ) : null}
+
+      {activeTab === "rep" ? (
+        <NpcExpandRepTab
+          npc={npc}
+          characters={
+            characters.length
+              ? characters
+              : campaign?.campaign_characters || []
+          }
+          crews={
+            Array.isArray(crews)
+              ? crews
+              : campaign?.crews || []
+          }
+          campaignFactions={campaign?.factions || []}
+          readOnly={readOnly}
+          busy={busy}
+          onPatchNpc={readOnly ? undefined : patchNpc}
+          onRefresh={onRefresh}
+          onError={onError}
+        />
       ) : null}
 
       {activeTab === "clocks" ? (

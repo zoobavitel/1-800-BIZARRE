@@ -5,6 +5,7 @@ import {
   progressClockAPI,
   resolveMediaUrl,
 } from "../../features/character-sheet";
+import { buildRouteHref, handleSpaNavClick } from "../../utils/spaNavigation";
 import AvatarCropModal from "../AvatarCropModal";
 import ConfirmDeleteModal from "../ConfirmDeleteModal";
 
@@ -33,6 +34,7 @@ const HomeFactionInlineEditor = ({
   onCancel,
   onSaved,
   onDeleted,
+  onNavigateToNPC,
 }) => {
   const [form, setForm] = useState({
     name: faction.name || "",
@@ -505,11 +507,23 @@ const HomeFactionInlineEditor = ({
           <div className="f-edit-empty">No NPCs in this faction.</div>
         ) : (
           <ul className="f-edit-npc-list">
-            {npcList.map((n) => (
+            {npcList.map((n) => {
+              const label = n.name || n.stand_name || `NPC ${n.id}`;
+              return (
               <li key={n.id} className="f-edit-npc-row">
-                <span className="f-edit-npc-name">
-                  {n.name || n.stand_name || `NPC ${n.id}`}
-                </span>
+                {typeof onNavigateToNPC === "function" && n.id != null ? (
+                  <a
+                    className="f-edit-npc-name f-edit-npc-name-link"
+                    href={buildRouteHref("npcs", { npcId: n.id })}
+                    onClick={(e) =>
+                      handleSpaNavClick(e, () => onNavigateToNPC(n.id))
+                    }
+                  >
+                    {label}
+                  </a>
+                ) : (
+                  <span className="f-edit-npc-name">{label}</span>
+                )}
                 <button
                   type="button"
                   className="f-card-btn f-card-btn-delete"
@@ -518,7 +532,8 @@ const HomeFactionInlineEditor = ({
                   Remove
                 </button>
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
         {unaffiliatedNpcs.length > 0 && (

@@ -2087,6 +2087,15 @@
   color: var(--cream);
   font-size: 12px;
 }
+.home-poc a.f-edit-npc-name-link {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  color: var(--cream);
+}
+.home-poc a.f-edit-npc-name-link:hover {
+  color: #e9d5ff;
+}
 .home-poc .f-edit-npc-add,
 .home-poc .f-edit-clock-create {
   display: flex;
