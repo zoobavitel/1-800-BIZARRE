@@ -67,6 +67,18 @@ class StandingDisplayPayloadTests(TestCase):
         self.assertEqual(by_name.get("Dirty Deeds"), -3)
         self.assertEqual(by_name.get("Secret Cabal"), 2)
 
+    def test_gm_campaign_crews_include_portrait_fields(self):
+        self.crew.image_url = "https://example.com/crew-portrait.jpg"
+        self.crew.save(update_fields=["image_url"])
+        client = APIClient()
+        client.force_authenticate(self.gm)
+        r = client.get(self.campaign_url)
+        self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
+        crew = (r.data.get("crews") or [{}])[0]
+        self.assertIn("image", crew)
+        self.assertIn("image_url", crew)
+        self.assertEqual(crew.get("image_url"), "https://example.com/crew-portrait.jpg")
+
     def test_player_campaign_crews_omit_hidden_faction_relationships(self):
         client = APIClient()
         client.force_authenticate(self.player)
