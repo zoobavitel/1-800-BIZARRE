@@ -141,6 +141,14 @@ class Faction(models.Model):
         blank=True,
         help_text="This faction's standing towards other factions (-3 to +3).",
     )
+    faction_status_visibility = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=(
+            "Peer faction name → bool. When false, players do not see that "
+            "standing edge. Missing key means visible."
+        ),
+    )
     crew_notes = models.TextField(
         blank=True, help_text="Operational notes shared across all faction members."
     )

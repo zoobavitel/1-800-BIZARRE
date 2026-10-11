@@ -37,6 +37,17 @@ import { SessionNpcToken } from "../components/session/SessionTokenFaces";
 import AdvancementPlanStrip from "../features/character-sheet/components/AdvancementPlanStrip";
 import AdvancementPlanPanel from "../features/character-sheet/components/AdvancementPlanPanel";
 import { buildRouteHref, handleSpaNavClick } from "../utils/spaNavigation";
+import StandingStepperRow from "../components/standing/StandingStepperRow";
+import useOptimisticStandingMap from "../hooks/useOptimisticStandingMap";
+import {
+  applySymmetricFactionStatus,
+  normalizeFactionStatusMap,
+  patchFactionPeerVisibility,
+  peerStandingVisible,
+  seedFactionStatusFromCampaign,
+  syncReverseFactionStatuses,
+} from "../utils/factionStatus";
+import { clampStandingValue } from "../utils/standingMaps";
 import "../styles/SessionTokenCards.css";
 import {
   characterAPI,
@@ -3127,6 +3138,110 @@ const CharacterSheetWrapper = ({
   const [crewFactionAddRep, setCrewFactionAddRep] = useState(0);
   const [crewFactionAddBusy, setCrewFactionAddBusy] = useState(false);
   const [crewFactionAddErr, setCrewFactionAddErr] = useState(null);
+  const crewCampaignFactionsRef = useRef([]);
+  const commitFactionPeerStanding = useCallback(
+    async (key, value) => {
+      if (!isGM) return;
+      const parts = String(key).split(":");
+      const selfId = parts[0];
+      const otherName = parts.slice(1).join(":");
+      const peers = crewCampaignFactionsRef.current || [];
+      const selfFaction = peers.find((f) => String(f.id) === String(selfId));
+      const other = peers.find(
+        (f) => String(f.name || "").trim() === String(otherName || "").trim(),
+      );
+      if (!selfFaction?.id || !other?.id) return;
+      const selfName = String(selfFaction.name || "").trim();
+      if (!selfName) return;
+      const prevSelf = normalizeFactionStatusMap(selfFaction.faction_status);
+      const prevOther = normalizeFactionStatusMap(other.faction_status);
+      const { statusA, statusB } = applySymmetricFactionStatus(
+        selfName,
+        otherName,
+        value,
+        prevSelf,
+        prevOther,
+      );
+      await factionAPI.patchFaction(selfFaction.id, {
+        faction_status: statusA,
+      });
+      await syncReverseFactionStatuses({
+        selfId: selfFaction.id,
+        selfName,
+        statusMap: statusA,
+        previousStatusMap: prevSelf,
+        campaignFactions: peers,
+        getFaction: factionAPI.getFaction,
+        patchFaction: factionAPI.patchFaction,
+      });
+      if (
+        JSON.stringify(normalizeFactionStatusMap(statusB)) !==
+        JSON.stringify(prevOther)
+      ) {
+        await factionAPI
+          .patchFaction(other.id, { faction_status: statusB })
+          .catch(() => {});
+      }
+      await onCampaignRefresh?.();
+    },
+    [isGM, onCampaignRefresh],
+  );
+  const {
+    getValue: getFactionPeerStanding,
+    applyDelta: applyFactionPeerDelta,
+    saving: factionPeerSaving,
+    error: factionPeerErr,
+    setError: setFactionPeerErr,
+  } = useOptimisticStandingMap({ onCommit: commitFactionPeerStanding });
+  const [factionPeerSeeOverrides, setFactionPeerSeeOverrides] = useState({});
+  const [factionPeerSeeBusy, setFactionPeerSeeBusy] = useState(false);
+  const resolveFactionPeerSee = useCallback(
+    (fac, peerName) => {
+      const okey = `${fac?.id}:${peerName}`;
+      if (Object.prototype.hasOwnProperty.call(factionPeerSeeOverrides, okey)) {
+        return !!factionPeerSeeOverrides[okey];
+      }
+      return peerStandingVisible(fac?.faction_status_visibility, peerName);
+    },
+    [factionPeerSeeOverrides],
+  );
+  const toggleFactionPeerSee = useCallback(
+    async (fac, peerName, visible) => {
+      if (!isGM || !fac?.id) return;
+      const okey = `${fac.id}:${peerName}`;
+      setFactionPeerSeeOverrides((p) => ({ ...p, [okey]: !!visible }));
+      setFactionPeerSeeBusy(true);
+      setFactionPeerErr(null);
+      try {
+        await patchFactionPeerVisibility({
+          selfFaction: fac,
+          otherName: peerName,
+          visible: !!visible,
+          campaignFactions: crewCampaignFactionsRef.current,
+          getFaction: factionAPI.getFaction,
+          patchFaction: factionAPI.patchFaction,
+        });
+        await onCampaignRefresh?.();
+        setFactionPeerSeeOverrides((p) => {
+          const next = { ...p };
+          delete next[okey];
+          return next;
+        });
+      } catch (e) {
+        setFactionPeerSeeOverrides((p) => {
+          const next = { ...p };
+          delete next[okey];
+          return next;
+        });
+        setFactionPeerErr(
+          e?.message || "Could not update standing visibility.",
+        );
+      } finally {
+        setFactionPeerSeeBusy(false);
+      }
+    },
+    [isGM, onCampaignRefresh, setFactionPeerErr],
+  );
   /** Optimistic NPC.visible_to_players overlays until server catches up. */
   const [npcPlayerVisOverrides, setNpcPlayerVisOverrides] = useState({});
   const [factionNpcVisErr, setFactionNpcVisErr] = useState(null);
@@ -3663,6 +3778,7 @@ const CharacterSheetWrapper = ({
     if (Array.isArray(fromList)) return fromList;
     return [];
   }, [charCampaign?.factions, campaignForCrewFactionAdd?.factions]);
+  crewCampaignFactionsRef.current = crewCampaignFactions;
 
   /**
    * All campaign factions joined to crew standings.
@@ -24561,6 +24677,168 @@ const CharacterSheetWrapper = ({
                   </div>
                 ) : null}
             </div>
+            {(crewCampaignFactions || []).length > 0 ? (
+              <div
+                style={{
+                  ...S.card,
+                  display: "flex",
+                  flexDirection: "column",
+                  minHeight: 0,
+                  minWidth: 0,
+                }}
+              >
+                <span style={S.lbl}>FACTION VS FACTION</span>
+                <div
+                  style={{
+                    fontSize: "11px",
+                    color: "#9ca3af",
+                    marginTop: "4px",
+                    marginBottom: "8px",
+                    lineHeight: 1.4,
+                  }}
+                >
+                  Standing between campaign factions (−3 to +3). Edits sync both
+                  directions.
+                </div>
+                {factionPeerErr ? (
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: "#fca5a5",
+                      marginBottom: 8,
+                    }}
+                  >
+                    {factionPeerErr}
+                    <button
+                      type="button"
+                      onClick={() => setFactionPeerErr(null)}
+                      style={{
+                        marginLeft: 8,
+                        fontSize: 10,
+                        background: "transparent",
+                        border: "none",
+                        color: "#9ca3af",
+                        cursor: "pointer",
+                      }}
+                    >
+                      dismiss
+                    </button>
+                  </div>
+                ) : null}
+                {factionPeerSaving ? (
+                  <div
+                    style={{
+                      fontSize: 10,
+                      color: "#a78bfa",
+                      marginBottom: 8,
+                    }}
+                  >
+                    Saving…
+                  </div>
+                ) : null}
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 10,
+                    maxHeight: "min(50vh, 480px)",
+                    overflowY: "auto",
+                  }}
+                >
+                  {(isGM
+                    ? crewCampaignFactions
+                    : crewCampaignFactions.filter(
+                        (f) => f.visible_to_players !== false,
+                      )
+                  ).map((fac) => {
+                    const { next } = seedFactionStatusFromCampaign(
+                      fac.faction_status,
+                      crewCampaignFactions,
+                      fac.id,
+                    );
+                    const rows = Object.entries(next)
+                      .map(([name, value]) => ({
+                        name,
+                        serverValue: clampStandingValue(value),
+                      }))
+                      .sort((a, b) =>
+                        a.name.localeCompare(b.name, undefined, {
+                          sensitivity: "base",
+                        }),
+                      );
+                    return (
+                      <div
+                        key={`fvf-${fac.id}`}
+                        style={{
+                          background: "#111827",
+                          border: "1px solid #374151",
+                          borderRadius: 6,
+                          padding: 10,
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontWeight: 700,
+                            fontSize: 12,
+                            color: "#f3f4f6",
+                            marginBottom: 6,
+                          }}
+                        >
+                          {fac.name || `Faction ${fac.id}`}
+                        </div>
+                        {rows.length === 0 ? (
+                          <div style={{ fontSize: 11, color: "#6b7280" }}>—</div>
+                        ) : (
+                          rows.map((row) => {
+                            const peer = (crewCampaignFactions || []).find(
+                              (f) =>
+                                String(f.name || "").trim() === row.name,
+                            );
+                            const peerThumb = resolveMediaUrl(
+                              peer?.image || "",
+                            ) || String(peer?.image_url || "").trim() || null;
+                            const peerKey = `${fac.id}:${row.name}`;
+                            const see = resolveFactionPeerSee(fac, row.name);
+                            if (!isGM && !see) return null;
+                            return (
+                              <StandingStepperRow
+                                key={peerKey}
+                                thumbSrc={peerThumb}
+                                label={row.name}
+                                value={getFactionPeerStanding(
+                                  peerKey,
+                                  row.serverValue,
+                                )}
+                                editable={isGM}
+                                onDelta={(d) =>
+                                  applyFactionPeerDelta(
+                                    peerKey,
+                                    row.serverValue,
+                                    d,
+                                  )
+                                }
+                                seeVisible={isGM ? see : null}
+                                onSeeChange={
+                                  isGM
+                                    ? (v) =>
+                                        void toggleFactionPeerSee(
+                                          fac,
+                                          row.name,
+                                          v,
+                                        )
+                                    : null
+                                }
+                                seeDisabled={factionPeerSeeBusy}
+                              />
+                            );
+                          })
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
             </div>
             <div style={S.g2}>
               <div style={S.card}>

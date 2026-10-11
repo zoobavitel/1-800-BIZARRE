@@ -1960,6 +1960,7 @@ function CampaignDetail({
         npcs={campaignNPCs}
         onOpenSession={onOpenSession}
         onCharactersRefresh={refreshRosterCharacters}
+        onRefresh={onRefresh}
         isGM={isGM}
         userId={user?.id}
       >

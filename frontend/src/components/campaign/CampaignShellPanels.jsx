@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   experienceTrackerAPI,
   normalizeListResponse,
-  resolveMediaUrl,
   rollAPI,
   sessionAPI,
 } from "../../features/character-sheet/services/api";
@@ -10,9 +9,8 @@ import {
   SESSION_SHELL_TABS,
   SessionShellTabBar,
 } from "../session/sessionShellUi";
-import HomeCardThumb from "../home/HomeCardThumb";
-import { getCharacterPortraitSrc } from "../../utils/homeAvatar";
 import CampaignHarmArmorGrid from "./CampaignHarmArmorGrid";
+import ReputationStandingPanel from "./ReputationStandingPanel";
 
 const lbl = { fontSize: 10, color: "#9ca3af", textTransform: "uppercase" };
 
@@ -110,26 +108,6 @@ function formatXpLineBody(row) {
   return `${trig} ${amt}${sess ? ` · ${sess}` : ""}`;
 }
 
-function formatSignedRep(v) {
-  if (v == null || v === "") return null;
-  const n = Number(v);
-  if (!Number.isFinite(n)) return String(v);
-  if (n > 0) return `+${n}`;
-  return String(n);
-}
-
-function factionThumbSrc(facOrRel) {
-  if (!facOrRel || typeof facOrRel !== "object") return null;
-  const fromUpload = resolveMediaUrl(
-    facOrRel.faction_image || facOrRel.image || "",
-  );
-  if (fromUpload) return fromUpload;
-  const url = String(
-    facOrRel.faction_image_url ?? facOrRel.image_url ?? "",
-  ).trim();
-  return url || null;
-}
-
 function PcColumnCard({ title, children }) {
   return (
     <div style={PC_COLUMN_CARD}>
@@ -137,57 +115,6 @@ function PcColumnCard({ title, children }) {
         {title}
       </div>
       {children}
-    </div>
-  );
-}
-
-function StandingRow({ thumbSrc, label, value }) {
-  const signed = formatSignedRep(value);
-  return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
-        marginBottom: 6,
-        minWidth: 0,
-      }}
-    >
-      <HomeCardThumb
-        src={thumbSrc}
-        label={label}
-        style={{
-          width: 28,
-          height: 28,
-          borderRadius: 4,
-          overflow: "hidden",
-          flexShrink: 0,
-          background: "#111827",
-          border: "1px solid #374151",
-          fontSize: 12,
-        }}
-      />
-      <div style={{ flex: 1, minWidth: 0, lineHeight: 1.35 }}>
-        <div
-          style={{
-            color: "#d1d5db",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {label}
-        </div>
-      </div>
-      <div
-        style={{
-          flexShrink: 0,
-          color: "#9ca3af",
-          fontVariantNumeric: "tabular-nums",
-        }}
-      >
-        {signed != null ? signed : "—"}
-      </div>
     </div>
   );
 }
@@ -204,6 +131,7 @@ export default function CampaignShellPanels({
   children,
   onOpenSession,
   onCharactersRefresh,
+  onRefresh = null,
   isGM = false,
   userId = null,
 }) {
@@ -340,77 +268,6 @@ export default function CampaignShellPanels({
     }
     return map;
   }, [xpRows, sortedPcs]);
-
-  const factionByName = useMemo(() => {
-    const m = new Map();
-    for (const f of campaign?.factions || []) {
-      const key = String(f?.name || "")
-        .trim()
-        .toLowerCase();
-      if (key) m.set(key, f);
-    }
-    return m;
-  }, [campaign?.factions]);
-
-  const npcByName = useMemo(() => {
-    const m = new Map();
-    for (const n of npcs || []) {
-      const key = String(n?.name || "")
-        .trim()
-        .toLowerCase();
-      if (key) m.set(key, n);
-    }
-    return m;
-  }, [npcs]);
-
-  const repColumns = useMemo(() => {
-    const crews = campaign?.crews || [];
-    return sortedPcs.map((full) => {
-      const name = pcDisplayName(full);
-      const crewId = full.crew ?? full.crew_id;
-      const crew = crews.find((c) => Number(c.id) === Number(crewId));
-      const standing = [];
-
-      const rels = Array.isArray(crew?.faction_relationships)
-        ? crew.faction_relationships
-        : [];
-      for (const rel of rels) {
-        if (rel.reputation_value == null && !isGM) continue;
-        standing.push({
-          key: `crew-fac-${rel.id ?? rel.faction_id}`,
-          kind: "faction",
-          label: rel.faction_name || `Faction ${rel.faction_id}`,
-          value: rel.reputation_value,
-          thumbSrc: factionThumbSrc(rel),
-        });
-      }
-
-      const status =
-        full.reputation_status && typeof full.reputation_status === "object"
-          ? full.reputation_status
-          : {};
-      for (const [rawName, rawVal] of Object.entries(status)) {
-        const label = String(rawName || "").trim();
-        if (!label) continue;
-        const key = label.toLowerCase();
-        const fac = factionByName.get(key);
-        const npc = !fac ? npcByName.get(key) : null;
-        standing.push({
-          key: `status-${key}`,
-          kind: fac ? "faction" : npc ? "npc" : "other",
-          label,
-          value: rawVal,
-          thumbSrc: fac
-            ? factionThumbSrc(fac)
-            : npc
-              ? getCharacterPortraitSrc(npc)
-              : null,
-        });
-      }
-
-      return { id: full.id, name, standing };
-    });
-  }, [sortedPcs, campaign?.crews, factionByName, npcByName, isGM]);
 
   const scopeSelect = (
     <div
@@ -647,35 +504,18 @@ export default function CampaignShellPanels({
       ) : null}
 
       {shellTab === "rep" ? (
-        <div style={S.card}>
-          <span style={S.sectionLbl}>Reputation</span>
-          <p style={{ fontSize: 11, color: "#6b7280", margin: "4px 0 10px" }}>
-            Crew faction and personal standing from current sheets (not
-            session-scoped).
-          </p>
-          {repColumns.length === 0 ? (
-            <div style={{ fontSize: 12, color: "#6b7280" }}>No PCs.</div>
-          ) : (
-            <div style={{ ...PC_COLUMN_GRID, maxHeight: undefined }}>
-              {repColumns.map((col) => (
-                <PcColumnCard key={col.id} title={col.name}>
-                  {col.standing.length === 0 ? (
-                    <div style={{ color: "#6b7280" }}>—</div>
-                  ) : (
-                    col.standing.map((row) => (
-                      <StandingRow
-                        key={row.key}
-                        thumbSrc={row.thumbSrc}
-                        label={row.label}
-                        value={row.value}
-                      />
-                    ))
-                  )}
-                </PcColumnCard>
-              ))}
-            </div>
-          )}
-        </div>
+        <ReputationStandingPanel
+          S={S}
+          crews={campaign?.crews || []}
+          characters={characters}
+          npcs={npcs}
+          factions={campaign?.factions || []}
+          isGM={isGM}
+          onRefresh={async () => {
+            await onCharactersRefresh?.();
+            await onRefresh?.();
+          }}
+        />
       ) : null}
     </>
   );
