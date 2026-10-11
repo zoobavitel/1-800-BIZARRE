@@ -535,6 +535,13 @@ class NPC(models.Model):
             "the faction to be revealed with players_see_npcs."
         ),
     )
+    players_see_inventory = models.BooleanField(
+        default=True,
+        help_text=(
+            "When True (and visible_to_players), players may see this NPC's "
+            "inventory on the sheet."
+        ),
+    )
 
     # Stand Description Fields
     stand_description = models.TextField(blank=True)

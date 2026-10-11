@@ -179,11 +179,12 @@ export function buildXpRequirementSnapshot(p) {
     ["PLAYBOOK_SPECIFIC", "STANDOUT"],
     2,
   );
+  // Per-roll desperate attribute XP is uncapped; do not apply end-session max-2.
   const desperateTrackerNote = sumTrackerXpByTriggers(
     trackerEntries,
     sessionId,
     ["DESPERATE", "DESPERATE_ROLL"],
-    2,
+    null,
   );
   const desperateRolls = tallyDesperateActionRolls(rolls, sessionId, characterId);
   const innateTrackerNote = sumTrackerXpByTriggers(

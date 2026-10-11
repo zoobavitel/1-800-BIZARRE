@@ -810,6 +810,7 @@ class SessionNPCInvolvementWriteSerializer(serializers.Serializer):
         child=serializers.CharField(), required=False, default=list
     )
 
+
 def _normalize_npc_involvement_clock_flags(show_all, raw_show_vuln_from_client):
     """Persist the same rule as player read-side: full clocks ⇒ vuln visible.
 
@@ -817,6 +818,50 @@ def _normalize_npc_involvement_clock_flags(show_all, raw_show_vuln_from_client):
     show_all); this applies the invariant exactly once: show_all ∨ raw.
     """
     return show_all, show_all or raw_show_vuln_from_client
+
+
+def _involvement_defaults_from_item(item):
+    """Parse one npc_involvements payload dict into SessionNPCInvolvement kwargs."""
+    if not isinstance(item, dict):
+        return {
+            "show_clocks_to_players": False,
+            "show_vulnerability_clock_to_players": False,
+            "revealed_conflict_clock_names": [],
+            "revealed_alt_clock_names": [],
+            "revealed_progress_clock_ids": [],
+            "show_stand_coin_to_players": False,
+            "revealed_stand_coin_stats": [],
+            "show_all_abilities_to_players": False,
+            "revealed_ability_names": [],
+        }
+    show = bool(item.get("show_clocks_to_players", False))
+    raw_vuln = bool(item.get("show_vulnerability_clock_to_players", False))
+    show, show_vuln = _normalize_npc_involvement_clock_flags(show, raw_vuln)
+    return {
+        "show_clocks_to_players": show,
+        "show_vulnerability_clock_to_players": show_vuln,
+        "revealed_conflict_clock_names": _normalized_list(
+            item.get("revealed_conflict_clock_names")
+        ),
+        "revealed_alt_clock_names": _normalized_list(
+            item.get("revealed_alt_clock_names")
+        ),
+        "revealed_progress_clock_ids": _normalized_list(
+            item.get("revealed_progress_clock_ids"), cast=int
+        ),
+        "show_stand_coin_to_players": bool(
+            item.get("show_stand_coin_to_players", False)
+        ),
+        "revealed_stand_coin_stats": _normalized_list(
+            item.get("revealed_stand_coin_stats")
+        ),
+        "show_all_abilities_to_players": bool(
+            item.get("show_all_abilities_to_players", False)
+        ),
+        "revealed_ability_names": _normalized_list(
+            item.get("revealed_ability_names")
+        ),
+    }
 
 def _normalized_list(raw, cast=None):
     if not isinstance(raw, list):
@@ -953,61 +998,12 @@ class SessionSerializer(serializers.ModelSerializer):
             involvement_rows = []
             for item in npc_involvements_data:
                 npc_id = item.get("npc") if isinstance(item, dict) else item
-                if isinstance(item, dict):
-                    show = bool(item.get("show_clocks_to_players", False))
-                    raw_vuln = bool(
-                        item.get("show_vulnerability_clock_to_players", False)
-                    )
-                    show, show_vuln = _normalize_npc_involvement_clock_flags(
-                        show, raw_vuln
-                    )
-                    revealed_conflict = _normalized_list(
-                        item.get("revealed_conflict_clock_names")
-                    )
-                    revealed_alt = _normalized_list(
-                        item.get("revealed_alt_clock_names")
-                    )
-                    revealed_progress_ids = _normalized_list(
-                        item.get("revealed_progress_clock_ids"), cast=int
-                    )
-                    show_stand = bool(item.get("show_stand_coin_to_players", False))
-                    revealed_stand = _normalized_list(
-                        item.get("revealed_stand_coin_stats")
-                    )
-                    show_all_abilities = bool(
-                        item.get("show_all_abilities_to_players", False)
-                    )
-                    revealed_abilities = _normalized_list(
-                        item.get("revealed_ability_names")
-                    )
-                else:
-                    show = False
-                    show_vuln = False
-                    revealed_conflict = []
-                    revealed_alt = []
-                    revealed_progress_ids = []
-                    show_stand = False
-                    revealed_stand = []
-                    show_all_abilities = False
-                    revealed_abilities = []
+                defaults = _involvement_defaults_from_item(
+                    item if isinstance(item, dict) else None
+                )
                 npc = NPC.objects.get(pk=npc_id) if isinstance(npc_id, int) else npc_id
                 _ensure_npc_belongs_to_session_campaign(npc, instance.campaign_id)
-                involvement_rows.append(
-                    (
-                        npc,
-                        {
-                            "show_clocks_to_players": show,
-                            "show_vulnerability_clock_to_players": show_vuln,
-                            "revealed_conflict_clock_names": revealed_conflict,
-                            "revealed_alt_clock_names": revealed_alt,
-                            "revealed_progress_clock_ids": revealed_progress_ids,
-                            "show_stand_coin_to_players": show_stand,
-                            "revealed_stand_coin_stats": revealed_stand,
-                            "show_all_abilities_to_players": show_all_abilities,
-                            "revealed_ability_names": revealed_abilities,
-                        },
-                    )
-                )
+                involvement_rows.append((npc, defaults))
             instance.npc_involvements.all().delete()
             for npc, defaults in involvement_rows:
                 SessionNPCInvolvement.objects.create(
@@ -1059,61 +1055,12 @@ class SessionSerializer(serializers.ModelSerializer):
             involvement_rows = []
             for item in npc_involvements_data:
                 npc_id = item.get("npc") if isinstance(item, dict) else item
-                if isinstance(item, dict):
-                    show = bool(item.get("show_clocks_to_players", False))
-                    raw_vuln = bool(
-                        item.get("show_vulnerability_clock_to_players", False)
-                    )
-                    show, show_vuln = _normalize_npc_involvement_clock_flags(
-                        show, raw_vuln
-                    )
-                    revealed_conflict = _normalized_list(
-                        item.get("revealed_conflict_clock_names")
-                    )
-                    revealed_alt = _normalized_list(
-                        item.get("revealed_alt_clock_names")
-                    )
-                    revealed_progress_ids = _normalized_list(
-                        item.get("revealed_progress_clock_ids"), cast=int
-                    )
-                    show_stand = bool(item.get("show_stand_coin_to_players", False))
-                    revealed_stand = _normalized_list(
-                        item.get("revealed_stand_coin_stats")
-                    )
-                    show_all_abilities = bool(
-                        item.get("show_all_abilities_to_players", False)
-                    )
-                    revealed_abilities = _normalized_list(
-                        item.get("revealed_ability_names")
-                    )
-                else:
-                    show = False
-                    show_vuln = False
-                    revealed_conflict = []
-                    revealed_alt = []
-                    revealed_progress_ids = []
-                    show_stand = False
-                    revealed_stand = []
-                    show_all_abilities = False
-                    revealed_abilities = []
+                defaults = _involvement_defaults_from_item(
+                    item if isinstance(item, dict) else None
+                )
                 npc = NPC.objects.get(pk=npc_id) if isinstance(npc_id, int) else npc_id
                 _ensure_npc_belongs_to_session_campaign(npc, instance.campaign_id)
-                involvement_rows.append(
-                    (
-                        npc,
-                        {
-                            "show_clocks_to_players": show,
-                            "show_vulnerability_clock_to_players": show_vuln,
-                            "revealed_conflict_clock_names": revealed_conflict,
-                            "revealed_alt_clock_names": revealed_alt,
-                            "revealed_progress_clock_ids": revealed_progress_ids,
-                            "show_stand_coin_to_players": show_stand,
-                            "revealed_stand_coin_stats": revealed_stand,
-                            "show_all_abilities_to_players": show_all_abilities,
-                            "revealed_ability_names": revealed_abilities,
-                        },
-                    )
-                )
+                involvement_rows.append((npc, defaults))
             for npc, defaults in involvement_rows:
                 SessionNPCInvolvement.objects.create(
                     session=instance,
@@ -3869,6 +3816,7 @@ class NPCSerializer(serializers.ModelSerializer):
             "image",
             "image_url",
             "visible_to_players",
+            "players_see_inventory",
             "stand_description",
             "stand_appearance",
             "stand_manifestation",
@@ -3893,6 +3841,26 @@ class NPCSerializer(serializers.ModelSerializer):
             "heal_recover_in_play_position",
             "heal_recover_in_play_effect",
         ]
+
+    def _viewer_is_gm_or_staff(self, instance):
+        request = self.context.get("request")
+        user = getattr(request, "user", None) if request else None
+        if not user or not getattr(user, "is_authenticated", False):
+            return False
+        if getattr(user, "is_staff", False):
+            return True
+        campaign = getattr(instance, "campaign", None)
+        return bool(campaign and campaign.gm_id == user.id)
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if self._viewer_is_gm_or_staff(instance):
+            return data
+        if not getattr(instance, "players_see_inventory", True):
+            data["inventory"] = []
+            data["items"] = []
+            data["inventory_notes"] = ""
+        return data
 
     def create(self, validated_data):
         hamon_ids = validated_data.pop("hamon_ability_ids", [])
