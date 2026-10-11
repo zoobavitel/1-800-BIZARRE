@@ -3914,6 +3914,30 @@ export default function SessionGMManagementPanels({
     [user, campaign, refreshSessionClocks, setError],
   );
 
+  const toggleNpcSessionProgressClockPlayers = useCallback(
+    async (npc, clock) => {
+      if (!canEditNpcStandCoin(user, campaign, npc)) return;
+      if (!clock?.id) return;
+      const key = `clk:${clock.id}`;
+      setNpcUiBusyKey(key);
+      setError(null);
+      try {
+        await progressClockAPI.updateProgressClock(clock.id, {
+          visible_to_players: !progressClockShowsPlayersBadge(
+            clock,
+            campaign?.gm,
+          ),
+        });
+        await refreshSessionClocks();
+      } catch (e) {
+        setError(e.message || "Could not update clock visibility.");
+      } finally {
+        setNpcUiBusyKey((k) => (k === key ? null : k));
+      }
+    },
+    [user, campaign, refreshSessionClocks, setError],
+  );
+
   const expandPanelChrome = {
     boxSizing: "border-box",
     border: "1px solid #374151",
@@ -4270,6 +4294,46 @@ export default function SessionGMManagementPanels({
                 </button>
               </span>
             )}
+            {vulnMax > 0 && canEditStand ? (
+              <label
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                  fontSize: 10,
+                  color: "#a7f3d0",
+                  cursor: inv.show_clocks_to_players ? "not-allowed" : "pointer",
+                  opacity: inv.show_clocks_to_players ? 0.7 : 1,
+                }}
+                title={
+                  inv.show_clocks_to_players
+                    ? "Master Clocks visibility already shows vulnerability to players."
+                    : "Show this vulnerability clock on player character sheets"
+                }
+              >
+                <input
+                  type="checkbox"
+                  checked={
+                    !!inv.show_clocks_to_players ||
+                    !!inv.show_vulnerability_clock_to_players
+                  }
+                  disabled={
+                    saving ||
+                    busy ||
+                    vulnBusy ||
+                    !!inv.show_clocks_to_players
+                  }
+                  onChange={() => {
+                    if (inv.show_clocks_to_players) return;
+                    updateInv(npc.id, {
+                      show_vulnerability_clock_to_players:
+                        !inv.show_vulnerability_clock_to_players,
+                    });
+                  }}
+                />
+                Visible to players
+              </label>
+            ) : null}
           </div>
           <div
             style={{
@@ -4523,6 +4587,32 @@ export default function SessionGMManagementPanels({
                       </span>
                     ) : null}
                   </span>
+                  {canEditStand ? (
+                    <label
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 4,
+                        fontSize: 9,
+                        color: "#a7f3d0",
+                        cursor: clkBusy || saving || busy ? "not-allowed" : "pointer",
+                      }}
+                      title="Show this clock to players"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={progressClockShowsPlayersBadge(
+                          c,
+                          campaign?.gm,
+                        )}
+                        disabled={saving || busy || clkBusy}
+                        onChange={() =>
+                          toggleNpcSessionProgressClockPlayers(npc, c)
+                        }
+                      />
+                      Players
+                    </label>
+                  ) : null}
                   <span style={{ display: "inline-flex", gap: 4 }}>
                     <button
                       type="button"
