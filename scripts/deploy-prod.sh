@@ -58,6 +58,8 @@ python manage.py test
 # Start production server
 echo "🌐 Starting production server..."
 # Use gunicorn for production
-gunicorn app.wsgi:application --bind 0.0.0.0:8000 --worker-class gthread --workers 2 --threads 32 --timeout 120 --graceful-timeout 60 --max-requests 5000 --max-requests-jitter 500
+# Bind localhost only — Caddy (or ngrok on the host) fronts the public hop.
+# Matches deploy/bizarre-api/gunicorn.service (do not open 0.0.0.0 here).
+gunicorn app.wsgi:application --bind 127.0.0.1:8000 --worker-class gthread --workers 2 --threads 32 --timeout 120 --graceful-timeout 60 --max-requests 5000 --max-requests-jitter 500
 
 echo "✅ Deployment complete!"
