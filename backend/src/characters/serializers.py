@@ -3379,6 +3379,18 @@ class CampaignSerializer(serializers.ModelSerializer):
             },
         ).data
 
+    def _npc_portrait_fields_for_session_detail(self, npc):
+        """Relative upload URL + optional HTTPS image_url for session NPC cards."""
+        image = ""
+        img = getattr(npc, "image", None)
+        if img:
+            try:
+                image = img.url or ""
+            except ValueError:
+                image = ""
+        image_url = (getattr(npc, "image_url", None) or "").strip()
+        return {"image": image, "image_url": image_url}
+
     def _npc_row_for_active_session_detail(self, npc, inv, viewer_is_gm_or_staff):
         """Build session NPC clock payload; strip hidden clocks for non-GM viewers."""
         clock_fields = (
@@ -3389,6 +3401,7 @@ class CampaignSerializer(serializers.ModelSerializer):
             "filled_segments",
             "completed",
         )
+        portrait = self._npc_portrait_fields_for_session_detail(npc)
         if viewer_is_gm_or_staff:
             progress_clocks_full = list(npc.progress_clocks.all().values(*clock_fields))
             return {
@@ -3402,6 +3415,7 @@ class CampaignSerializer(serializers.ModelSerializer):
                 "conflict_clocks": npc.conflict_clocks or [],
                 "alt_clocks": npc.alt_clocks or [],
                 "progress_clocks": progress_clocks_full,
+                **portrait,
                 "show_clocks_to_players": inv.show_clocks_to_players,
                 "show_vulnerability_clock_to_players": inv.show_vulnerability_clock_to_players,
                 "show_stand_coin_to_players": inv.show_stand_coin_to_players,
@@ -3486,6 +3500,7 @@ class CampaignSerializer(serializers.ModelSerializer):
             "conflict_clocks": conflict_clocks or [],
             "alt_clocks": alt_clocks or [],
             "progress_clocks": progress_clocks,
+            **portrait,
             "_player_visible": player_visible,
         }
 
