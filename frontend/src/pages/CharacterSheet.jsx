@@ -13335,10 +13335,63 @@ const CharacterSheetWrapper = ({
                                     style={{
                                       display: "flex",
                                       alignItems: "center",
-                                      gap: "6px",
+                                      gap: "8px",
                                       marginBottom: "4px",
                                     }}
                                   >
+                                    {(() => {
+                                      const portraitSrc =
+                                        resolveMediaUrl(npc.image || "") ||
+                                        String(npc.image_url || "").trim() ||
+                                        null;
+                                      const initial = String(
+                                        npc.name || "?",
+                                      )
+                                        .trim()
+                                        .charAt(0)
+                                        .toUpperCase() || "?";
+                                      return (
+                                        <div
+                                          style={{
+                                            width: 36,
+                                            height: 36,
+                                            borderRadius: 6,
+                                            overflow: "hidden",
+                                            flexShrink: 0,
+                                            border: "1px solid #374151",
+                                            background: "#111827",
+                                            display: "flex",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                            color: "#6b7280",
+                                            fontSize: 12,
+                                            fontWeight: "bold",
+                                          }}
+                                          title={npc.name || "NPC"}
+                                        >
+                                          {portraitSrc ? (
+                                            <img
+                                              src={portraitSrc}
+                                              alt=""
+                                              aria-hidden="true"
+                                              loading="lazy"
+                                              decoding="async"
+                                              referrerPolicy="no-referrer"
+                                              style={{
+                                                width: "100%",
+                                                height: "100%",
+                                                objectFit: "cover",
+                                                display: "block",
+                                              }}
+                                            />
+                                          ) : (
+                                            <span aria-hidden="true">
+                                              {initial}
+                                            </span>
+                                          )}
+                                        </div>
+                                      );
+                                    })()}
                                     <ProgressClock
                                       size={36}
                                       segments={npc.vulnerability_clock_max}
