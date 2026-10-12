@@ -81,7 +81,7 @@ export DB_HOST DB_PORT DB_NAME DB_USER DB_PASSWORD  # as needed
 
 ## [deploy-prod.sh](../../scripts/deploy-prod.sh)
 
-**Purpose:** Production-oriented sequence: require `SECRET_KEY` and `DB_PASSWORD`, set `DJANGO_SETTINGS_MODULE=app.settings_prod`, install `requirements-prod.txt`, run [backup-database.sh](../../scripts/backup-database.sh), `migrate`, `collectstatic`, idempotent Django `admin` superuser, `manage.py test`, then **gunicorn** on `0.0.0.0:8000`.
+**Purpose:** Production-oriented sequence: require `SECRET_KEY` and `DB_PASSWORD`, set `DJANGO_SETTINGS_MODULE=app.settings_prod`, install `requirements-prod.txt`, run [backup-database.sh](../../scripts/backup-database.sh), `migrate`, `collectstatic`, idempotent Django `admin` superuser, `manage.py test`, then **gunicorn** on `127.0.0.1:8000` (Caddy/ngrok front the public hop; matches [`gunicorn.service`](../../deploy/bizarre-api/gunicorn.service)).
 
 **When to use:** Server deploy workflows that match this script’s assumptions (not GitHub Pages-only frontends).
 
