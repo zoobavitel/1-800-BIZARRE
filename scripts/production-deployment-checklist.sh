@@ -70,7 +70,7 @@ echo "pip install -r requirements-prod.txt"
 echo "python manage.py migrate"
 echo "python manage.py loaddata srd_hamon_abilities.json srd_spin_abilities.json"
 echo "python manage.py collectstatic --noinput"
-echo "gunicorn app.wsgi:application --bind 0.0.0.0:8000"
+echo "gunicorn app.wsgi:application --bind 127.0.0.1:8000"
 
 echo -e "\n${YELLOW}Frontend Deployment:${NC}"
 echo "cd /path/to/production/frontend"
