@@ -4,21 +4,149 @@
  */
 export const PATCH_NOTES = [
   {
+    "date": "2026-10-12",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #203 from zoobavitel/feature/rep-tab-standing-cards",
+          "Merge pull request #202 from zoobavitel/fix/deploy-prod-gunicorn-bind-localhost",
+          "Merge pull request #201 from zoobavitel/feature/session-npc-clock-visibility-ui"
+        ]
+      },
+      {
+        "title": "Fixed",
+        "items": [
+          "bind gunicorn to 127.0.0.1 in deploy-prod.sh"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-10-11",
+    "version": null,
+    "sections": [
+      {
+        "title": "Added",
+        "items": [
+          "campaign/session Rep edits, peer visibility, home NPC links",
+          "toggle NPC clock visibility from Campaign Management"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-10-07",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #200 from zoobavitel/docs/scrub-1password-refs",
+          "Merge pull request #199 from zoobavitel/fix/deploy-prod-env-group-read"
+        ]
+      },
+      {
+        "title": "Documentation",
+        "items": [
+          "scrub leftover 1Password refs from agent-safety docs"
+        ]
+      },
+      {
+        "title": "Fixed",
+        "items": [
+          "put bizarre-deploy in bizarre group for prod.env read",
+          "protect harm edits from poll/SSE hydrate flicker"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-10-06",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #198 from zoobavitel/fix/harm-dirty-intent",
+          "Merge pull request #197 from zoobavitel/fix/agent-sudoers-usr-bin",
+          "Merge pull request #196 from zoobavitel/fix/sse-bound-gthread-recycle",
+          "Merge pull request #195 from zoobavitel/fix/downtime-recover-no-stress-harm"
+        ]
+      },
+      {
+        "title": "Fixed",
+        "items": [
+          "sudoers /usr/bin paths and prod.env 640 root:bizarre",
+          "bound streams so gthread recycles can drain",
+          "durability stress track, downtime recover, fuller PDF export"
+        ]
+      },
+      {
+        "title": "Tests",
+        "items": [
+          "align L1 stress fixtures with Durability track caps"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-10-05",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #194 from zoobavitel/fix/faction-npc-strip-playbook-back"
+        ]
+      },
+      {
+        "title": "Fixed",
+        "items": [
+          "sync faction NPC strip, create/playbook, and Back nav"
+        ]
+      }
+    ]
+  },
+  {
     "date": "2026-10-01",
     "version": null,
     "sections": [
       {
-        "title": "Fixed",
+        "title": "Other",
         "items": [
-          "show accurate PC heritage and level on cards",
-          "drop Collapse; use Show NPC/PC only",
-          "equal-height columns, compact tokens, avatar footer"
+          "Merge pull request #193 from zoobavitel/feature/agent-safety-guardrails",
+          "Add restore-drill Cursor skill for OPSEC-safe backup practice.",
+          "Harden agent safety: write-target hooks, nightly DB+media backup, secrets hygiene.",
+          "Merge pull request #192 from zoobavitel/feature/agent-safety-guardrails",
+          "Merge pull request #191 from zoobavitel/feature/delete-confirm-modal",
+          "Add agent safety hooks, CT103 least-privilege setup, and backup policy docs.",
+          "Merge pull request #190 from zoobavitel/fix/sanitize-test-script-url-lint",
+          "Merge pull request #189 from zoobavitel/fix/equal-roster-column-height",
+          "Merge pull request #188 from zoobavitel/fix/api-default-127-host"
         ]
       },
       {
-        "title": "Other",
+        "title": "Added",
         "items": [
-          "Merge pull request #188 from zoobavitel/fix/api-default-127-host"
+          "confirm before PC, NPC, and faction deletes"
+        ]
+      },
+      {
+        "title": "Tests",
+        "items": [
+          "quiet no-script-url on XSS payload"
+        ]
+      },
+      {
+        "title": "Fixed",
+        "items": [
+          "readable campaign stats over full-bleed art",
+          "use profile avatars on campaign GM/player chips",
+          "show accurate PC heritage and level on cards",
+          "drop Collapse; use Show NPC/PC only",
+          "equal-height columns, compact tokens, avatar footer"
         ]
       }
     ]
@@ -440,10 +568,7 @@ export const PATCH_NOTES = [
           "Merge branch 'master' into fix/pc-stand-coin-plan-decrease",
           "Merge branch 'master' into feature/clock-wedge-colors",
           "Merge pull request #133 from zoobavitel/feature/garage-lair-upgrade",
-          "Merge pull request #132 from zoobavitel/feature/remove-character-bar",
-          "Merge pull request #131 from zoobavitel/feature/saturday-load-gate",
-          "Merge pull request #130 from zoobavitel/fix/inventory-legacy-load-zero",
-          "ci: block PRs on API/SSE performance budgets"
+          "Merge pull request #132 from zoobavitel/feature/remove-character-bar"
         ]
       },
       {
@@ -452,127 +577,13 @@ export const PATCH_NOTES = [
           "sort and collapse campaign/character lists",
           "red→green wedge colors on NPC and GM clocks",
           "rename lair carriage upgrade to garage",
-          "move level/XP under portrait, drop character bar",
-          "Saturday-table load gate and merge SSE budgets"
+          "move level/XP under portrait, drop character bar"
         ]
       },
       {
         "title": "Fixed",
         "items": [
-          "let GM lower PC Stand Coin grades",
-          "allow setting legacy item load to 0"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-09-08",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #129 from zoobavitel/docs/restore-swan-song",
-          "sync(srd): restore Swan Song and align hamon/spin catalogs to SRD_DEV",
-          "Merge pull request #128 from zoobavitel/fix/prod-media-serving",
-          "Merge pull request #127 from zoobavitel/feature/npc-required-heritage-defaults",
-          "Merge pull request #126 from zoobavitel/feature/close-friend-rival-fields",
-          "Merge pull request #124 from zoobavitel/feature/avatar-crop",
-          "Merge pull request #125 from zoobavitel/feature/campaign-roster-cards",
-          "Merge pull request #123 from zoobavitel/feature/inventory-item-edit",
-          "Fix prod SSE FD leak and guard action dots after XP spends."
-        ]
-      },
-      {
-        "title": "Documentation",
-        "items": [
-          "drop stale urls.py duplicate-admin note"
-        ]
-      },
-      {
-        "title": "Fixed",
-        "items": [
-          "serve uploads in prod and reject Discord CDN links"
-        ]
-      },
-      {
-        "title": "Added",
-        "items": [
-          "default-check required heritage picks",
-          "expose close friend and rival fields",
-          "roster cards, HFTF tokens, and portrait multipart fixes",
-          "add crop and zoom for profile picture"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-09-07",
-    "version": null,
-    "sections": [
-      {
-        "title": "Added",
-        "items": [
-          "allow editing inventory items after creation",
-          "upload portraits for PC, NPC, crew, faction, and user"
-        ]
-      },
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #122 from zoobavitel/feature/portrait-upload",
-          "Merge pull request #121 from zoobavitel/fix/home-avatar-portrait-fallback",
-          "Merge pull request #120 from zoobavitel/fix/home-avatar-portrait-fallback",
-          "Merge pull request #119 from zoobavitel/feature/progression-planner"
-        ]
-      },
-      {
-        "title": "Fixed",
-        "items": [
-          "resolve avatars and fall back to PC portraits",
-          "apply coin_grade from owned grade"
-        ]
-      },
-      {
-        "title": "Style",
-        "items": [
-          "wire inventory UI to HFTF theme tokens"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-09-05",
-    "version": null,
-    "sections": [
-      {
-        "title": "Fixed",
-        "items": [
-          "compact clock grid and stop tick flicker"
-        ]
-      },
-      {
-        "title": "Added",
-        "items": [
-          "plan-mode queue with B→A grants"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-09-02",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #118 from zoobavitel/feature/srd-equipment-templates"
-        ]
-      },
-      {
-        "title": "Refactored",
-        "items": [
-          "drop archetype trigger picker from the XP panel"
+          "let GM lower PC Stand Coin grades"
         ]
       }
     ]

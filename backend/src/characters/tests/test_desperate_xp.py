@@ -139,3 +139,85 @@ class DesperateActionXpTests(TestCase):
         )
         self.assertEqual(xp, 0)
         self.assertIsNone(track)
+
+    def test_idempotent_second_call_no_double_credit(self):
+        roll = self._roll(pool_action_rating=2)
+        xp1, track1 = award_desperate_action_xp(
+            self.character, self.session, roll, "skirmish", self.gm
+        )
+        self.assertEqual(xp1, 1)
+        self.assertEqual(track1, "prowess")
+        xp2, track2 = award_desperate_action_xp(
+            self.character, self.session, roll, "skirmish", self.gm
+        )
+        self.assertEqual(xp2, 0)
+        self.assertIsNone(track2)
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.xp_clocks.get("prowess"), 1)
+        self.assertEqual(
+            ExperienceTracker.objects.filter(
+                roll=roll, trigger="DESPERATE_ROLL"
+            ).count(),
+            1,
+        )
+
+
+class DesperateActionXpRollActionAPITests(TestCase):
+    """Integration: desperate skill roll-action awards attribute XP + tracker."""
+
+    def setUp(self):
+        from rest_framework.test import APIClient
+
+        self.gm = User.objects.create_user(username="gm_dxp_api", password="pw")
+        self.player = User.objects.create_user(username="pl_dxp_api", password="pw")
+        self.campaign = Campaign.objects.create(name="DXP API Camp", gm=self.gm)
+        self.crew = Crew.objects.create(name="DXP API Crew", campaign=self.campaign)
+        self.heritage, _ = Heritage.objects.get_or_create(
+            name="Human",
+            defaults={"base_hp": 0, "description": "t"},
+        )
+        self.character = Character.objects.create(
+            user=self.player,
+            campaign=self.campaign,
+            crew=self.crew,
+            true_name="DXP API PC",
+            heritage=self.heritage,
+            action_dots={**_zero_action_dots(), "skirmish": 2},
+            xp_clocks={"insight": 0, "prowess": 0, "resolve": 0, "playbook": 0},
+        )
+        self.session = Session.objects.create(
+            campaign=self.campaign,
+            name="DS API",
+            status="ACTIVE",
+        )
+        self.campaign.active_session = self.session
+        self.campaign.save(update_fields=["active_session"])
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.player)
+
+    def test_roll_action_desperate_skirmish_awards_prowess(self):
+        # roll-action uses session default_position / per-character P/E when
+        # a session is attached — request body position is overridden.
+        self.session.default_position = "desperate"
+        self.session.save(update_fields=["default_position"])
+        url = f"/api/characters/{self.character.id}/roll-action/"
+        res = self.client.post(
+            url,
+            {
+                "action": "skirmish",
+                "position": "desperate",
+                "effect": "standard",
+                "session_id": self.session.id,
+            },
+            format="json",
+        )
+        self.assertEqual(res.status_code, 200, res.data)
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.xp_clocks.get("prowess"), 1)
+        roll_id = res.data.get("roll_id") or (res.data.get("roll") or {}).get("id")
+        self.assertTrue(roll_id)
+        self.assertTrue(
+            ExperienceTracker.objects.filter(
+                roll_id=roll_id, trigger="DESPERATE_ROLL", clock_key="prowess"
+            ).exists()
+        )

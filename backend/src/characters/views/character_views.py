@@ -3013,6 +3013,72 @@ class CharacterViewSet(viewsets.ModelViewSet):
             }
         )
 
+    @action(detail=True, methods=["post"], url_path="cancel-pending-advance")
+    def cancel_pending_advance_action(self, request, pk=None):
+        """
+        Forfeit one open pending advance: +(cap-1) to unallocated_xp, +1 mark
+        on the track (playbook: +9 pool / +1 playbook). Does not call credit_xp.
+        """
+        from characters.services.advancement import (
+            AdvancementError,
+            cancel_pending_advance,
+        )
+
+        character = self.get_object()
+        if not _user_may_edit_character(request.user, character):
+            raise PermissionDenied(
+                "You cannot cancel pending advances for this character."
+            )
+
+        track = request.data.get("track") or request.data.get("xp_type") or ""
+        if not isinstance(track, str) or not track.strip():
+            return Response(
+                {"error": "track is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        pending_id = request.data.get("pending_id")
+
+        with transaction.atomic():
+            locked = (
+                Character.objects.select_for_update(of=("self",)).get(
+                    pk=character.pk
+                )
+            )
+            try:
+                result = cancel_pending_advance(
+                    locked,
+                    track.strip().lower(),
+                    pending_id=pending_id,
+                    save=True,
+                )
+            except AdvancementError as exc:
+                code = getattr(exc, "code", "invalid")
+                status_code = (
+                    status.HTTP_404_NOT_FOUND
+                    if code == "not_found"
+                    else status.HTTP_400_BAD_REQUEST
+                )
+                return Response(
+                    {"error": exc.message, "code": code},
+                    status=status_code,
+                )
+
+        locked.refresh_from_db()
+        return Response(
+            {
+                "success": True,
+                **result,
+                "xp_clocks": locked.xp_clocks,
+                "unallocated_xp": locked.unallocated_xp,
+                "character": _character_response(locked),
+                "message": (
+                    f"Cancelled {result['track']} pending: "
+                    f"+{result['pool_refund']} Available XP, "
+                    f"+{result['track_refund']} on track"
+                ),
+            }
+        )
+
     @action(detail=True, methods=["post"], url_path="add-progress-clock")
     def add_progress_clock(self, request, pk=None):
         """Add a progress clock to a character."""
