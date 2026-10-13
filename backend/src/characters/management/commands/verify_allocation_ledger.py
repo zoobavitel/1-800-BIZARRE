@@ -59,7 +59,9 @@ class Command(BaseCommand):
                     )
                 )
                 for key, pair in diffs.items():
-                    self.stdout.write(f"  {key}: fold={pair['fold']!r} live={pair['live']!r}")
+                    self.stdout.write(
+                        f"  {key}: fold={pair['fold']!r} live={pair['live']!r}"
+                    )
         self.stdout.write(
             self.style.NOTICE(f"Done. ok={ok_n} mismatch={bad_n} total={ok_n + bad_n}")
         )

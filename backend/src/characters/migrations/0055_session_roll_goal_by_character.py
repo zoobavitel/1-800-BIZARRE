@@ -2,7 +2,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("characters", "0054_groupaction_action_name"),
     ]
@@ -18,4 +17,3 @@ class Migration(migrations.Migration):
             ),
         ),
     ]
-

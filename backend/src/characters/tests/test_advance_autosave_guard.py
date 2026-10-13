@@ -361,7 +361,9 @@ class AdvanceAutosaveGuardTests(TestCase):
         self.character.refresh_from_db()
         self.assertEqual(self.character.stand.power, "A")
 
-        gm = User.objects.create_user(username="gm_chargen_down", password="x", is_staff=True)
+        gm = User.objects.create_user(
+            username="gm_chargen_down", password="x", is_staff=True
+        )
         self.client.force_authenticate(user=gm)
         down = self.client.post(
             f"/api/characters/{self.character.id}/gm-force-stand-stat/",

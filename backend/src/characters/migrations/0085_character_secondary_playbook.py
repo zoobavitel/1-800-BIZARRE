@@ -2,7 +2,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("characters", "0084_character_playbook_xp_archetypes_playbook_specific"),
     ]

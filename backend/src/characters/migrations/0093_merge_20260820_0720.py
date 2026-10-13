@@ -4,11 +4,9 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('characters', '0092_experiencetracker_innate_trigger'),
-        ('characters', '0092_unlock_second_playbook_allocation'),
+        ("characters", "0092_experiencetracker_innate_trigger"),
+        ("characters", "0092_unlock_second_playbook_allocation"),
     ]
 
-    operations = [
-    ]
+    operations = []

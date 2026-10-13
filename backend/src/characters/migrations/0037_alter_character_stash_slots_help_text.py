@@ -5,15 +5,18 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('characters', '0036_portrait_filefield'),
+        ("characters", "0036_portrait_filefield"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='character',
-            name='stash_slots',
-            field=models.JSONField(blank=True, default=characters.models._default_stash_slots, help_text='Personal stash grid when not in a crew (40 booleans). When crew is set, use Crew.stash_slots.'),
+            model_name="character",
+            name="stash_slots",
+            field=models.JSONField(
+                blank=True,
+                default=characters.models._default_stash_slots,
+                help_text="Personal stash grid when not in a crew (40 booleans). When crew is set, use Crew.stash_slots.",
+            ),
         ),
     ]

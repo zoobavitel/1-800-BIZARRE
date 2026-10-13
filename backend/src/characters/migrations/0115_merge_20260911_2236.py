@@ -4,11 +4,9 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('characters', '0114_campaign_image'),
-        ('characters', '0114_npc_crew_and_crew_standing'),
+        ("characters", "0114_campaign_image"),
+        ("characters", "0114_npc_crew_and_crew_standing"),
     ]
 
-    operations = [
-    ]
+    operations = []

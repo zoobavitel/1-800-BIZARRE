@@ -33,7 +33,9 @@ def _section_title(c: canvas.Canvas, title: str, x: float, y: float) -> None:
     c.drawString(x, y, title)
 
 
-def _add_text_field(form, name: str, x: float, y: float, w: float, h: float = 14) -> None:
+def _add_text_field(
+    form, name: str, x: float, y: float, w: float, h: float = 14
+) -> None:
     form.textfield(
         name=name,
         tooltip=name,
@@ -109,11 +111,15 @@ def build_pc_template(output_path: Path) -> None:
     y -= 28
     _add_text_field(form, "pc_playbook", MARGIN, y - 2, 0.9 * inch)
     c.drawString(MARGIN, y - 12, "Playbook")
-    _add_text_field(form, "pc_secondary_playbook", MARGIN + 1.05 * inch, y - 2, 0.9 * inch)
+    _add_text_field(
+        form, "pc_secondary_playbook", MARGIN + 1.05 * inch, y - 2, 0.9 * inch
+    )
     c.drawString(MARGIN + 1.05 * inch, y - 12, "2nd Playbook")
     _add_text_field(form, "pc_level", MARGIN + 2.1 * inch, y - 2, 0.45 * inch)
     c.drawString(MARGIN + 2.1 * inch, y - 12, "Level")
-    _add_text_field(form, "pc_playbook_archetypes", MARGIN + 2.7 * inch, y - 2, 3.4 * inch)
+    _add_text_field(
+        form, "pc_playbook_archetypes", MARGIN + 2.7 * inch, y - 2, 3.4 * inch
+    )
     c.drawString(MARGIN + 2.7 * inch, y - 12, "Playbook XP Archetypes")
     y -= 28
     _add_text_field(form, "pc_close_friend", MARGIN, y - 2, 2.0 * inch)
@@ -135,18 +141,29 @@ def build_pc_template(output_path: Path) -> None:
     c.setFont("Helvetica", 7)
     _add_text_field(form, "pc_stand_type", coin_x, meta_y - 2, 1.1 * inch, 12)
     c.drawString(coin_x, meta_y - 12, "Type")
-    _add_text_field(form, "pc_stand_type_custom", coin_x + 1.2 * inch, meta_y - 2, 1.1 * inch, 12)
+    _add_text_field(
+        form, "pc_stand_type_custom", coin_x + 1.2 * inch, meta_y - 2, 1.1 * inch, 12
+    )
     c.drawString(coin_x + 1.2 * inch, meta_y - 12, "Subtype")
     meta_y -= 26
     _add_text_field(form, "pc_stand_forms", coin_x, meta_y - 2, 1.5 * inch, 12)
     c.drawString(coin_x, meta_y - 12, "Forms")
-    _add_text_field(form, "pc_stand_consciousness", coin_x + 1.65 * inch, meta_y - 2, 0.45 * inch, 12)
+    _add_text_field(
+        form,
+        "pc_stand_consciousness",
+        coin_x + 1.65 * inch,
+        meta_y - 2,
+        0.45 * inch,
+        12,
+    )
     c.drawString(coin_x + 1.65 * inch, meta_y - 12, "Mind")
     stat_y = meta_y - 26
     for stat in ("power", "speed", "range", "durability", "precision", "development"):
         c.setFont("Helvetica", 7)
         c.drawString(coin_x, stat_y, stat.title())
-        _add_text_field(form, f"pc_stand_{stat}", coin_x + 0.85 * inch, stat_y - 2, 0.35 * inch, 12)
+        _add_text_field(
+            form, f"pc_stand_{stat}", coin_x + 0.85 * inch, stat_y - 2, 0.35 * inch, 12
+        )
         stat_y -= 13
 
     col_w = 1.35 * inch
@@ -158,7 +175,9 @@ def build_pc_template(output_path: Path) -> None:
         for action in actions:
             c.setFont("Helvetica", 7)
             c.drawString(ax, ay, action.upper())
-            _add_text_field(form, f"pc_action_{action}", ax + 0.7 * inch, ay - 2, 0.28 * inch, 12)
+            _add_text_field(
+                form, f"pc_action_{action}", ax + 0.7 * inch, ay - 2, 0.28 * inch, 12
+            )
             ay -= 13
 
     y = min(stat_y, y - 26 - 13 * 4) - 16
@@ -208,7 +227,9 @@ def build_pc_template(output_path: Path) -> None:
     _section_title(c, "Coin", MARGIN, y)
     _checkbox_row(form, "pc_coin_", MAX_COIN_BOXES, MARGIN, y - 14, spacing=14)
     _section_title(c, "Stash", MARGIN + 1.2 * inch, y)
-    _checkbox_row(form, "pc_stash_", MAX_STASH_SLOTS, MARGIN + 1.2 * inch, y - 14, spacing=10)
+    _checkbox_row(
+        form, "pc_stash_", MAX_STASH_SLOTS, MARGIN + 1.2 * inch, y - 14, spacing=10
+    )
 
     y -= 34
     _section_title(c, "XP Tracks", MARGIN, y)
@@ -228,7 +249,9 @@ def build_pc_template(output_path: Path) -> None:
             spacing=spacing,
         )
         xp_x += 1.15 * inch if track != "playbook" else 1.25 * inch
-    _add_text_field(form, "pc_unallocated_xp", MARGIN + 5.8 * inch, y - 18, 0.8 * inch, 12)
+    _add_text_field(
+        form, "pc_unallocated_xp", MARGIN + 5.8 * inch, y - 18, 0.8 * inch, 12
+    )
     c.drawString(MARGIN + 5.8 * inch, y - 10, "Pool")
 
     y -= 48
@@ -312,13 +335,17 @@ def build_npc_template(output_path: Path) -> None:
     for stat in ("power", "speed", "range", "durability", "precision", "development"):
         c.setFont("Helvetica", 7)
         c.drawString(col2, stat_y, stat.title())
-        _add_text_field(form, f"npc_stand_{stat}", col2 + 0.75 * inch, stat_y - 2, 0.35 * inch, 12)
+        _add_text_field(
+            form, f"npc_stand_{stat}", col2 + 0.75 * inch, stat_y - 2, 0.35 * inch, 12
+        )
         stat_y -= 16
 
     y = PAGE_H - MARGIN - 170
     _section_title(c, "Vulnerability Clock", MARGIN, y)
     _add_text_field(form, "npc_vulnerability", MARGIN, y - 16, 1.2 * inch)
-    _checkbox_row(form, "npc_vuln_seg_", MAX_CLOCK_SEGMENTS, MARGIN + 1.35 * inch, y - 14)
+    _checkbox_row(
+        form, "npc_vuln_seg_", MAX_CLOCK_SEGMENTS, MARGIN + 1.35 * inch, y - 14
+    )
 
     y -= 36
     for label, field in (
@@ -394,7 +421,9 @@ def build_npc_template(output_path: Path) -> None:
     y2 -= 110
     _section_title(c, "Contacts & Relationships", MARGIN, y2)
     _add_text_field(form, "npc_contacts", MARGIN, y2 - 40, 3.1 * inch, 38)
-    _add_text_field(form, "npc_relationships", MARGIN + 3.25 * inch, y2 - 40, 3.25 * inch, 38)
+    _add_text_field(
+        form, "npc_relationships", MARGIN + 3.25 * inch, y2 - 40, 3.25 * inch, 38
+    )
     _add_text_field(form, "npc_faction_status", MARGIN, y2 - 70, 6.5 * inch, 26)
 
     c.save()

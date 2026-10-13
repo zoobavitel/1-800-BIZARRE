@@ -141,6 +141,7 @@ def xp_track_max_segments(track: str) -> int:
     """Playbook XP track holds 10 marks; other attribute tracks hold 8."""
     return MAX_XP_PLAYBOOK_TRACK if track == "playbook" else MAX_XP_PER_TRACK
 
+
 NPC_TEXT_FIELDS = (
     "npc_name",
     "npc_stand_name",

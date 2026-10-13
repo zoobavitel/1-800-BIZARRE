@@ -4,55 +4,58 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('characters', '0015_add_roll_rolled_by'),
+        ("characters", "0015_add_roll_rolled_by"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='userprofile',
-            name='display_title',
-            field=models.CharField(blank=True, default='', max_length=100),
+            model_name="userprofile",
+            name="display_title",
+            field=models.CharField(blank=True, default="", max_length=100),
         ),
         migrations.AddField(
-            model_name='userprofile',
-            name='email_digest',
+            model_name="userprofile",
+            name="email_digest",
             field=models.BooleanField(default=False),
         ),
         migrations.AddField(
-            model_name='userprofile',
-            name='email_digest_days',
+            model_name="userprofile",
+            name="email_digest_days",
             field=models.JSONField(blank=True, default=list),
         ),
         migrations.AddField(
-            model_name='userprofile',
-            name='notification_preferences',
+            model_name="userprofile",
+            name="notification_preferences",
             field=models.JSONField(blank=True, default=dict),
         ),
         migrations.AddField(
-            model_name='userprofile',
-            name='receive_all_email',
+            model_name="userprofile",
+            name="receive_all_email",
             field=models.BooleanField(default=True),
         ),
         migrations.AddField(
-            model_name='userprofile',
-            name='show_avatars',
+            model_name="userprofile",
+            name="show_avatars",
             field=models.BooleanField(default=True),
         ),
         migrations.AddField(
-            model_name='userprofile',
-            name='show_signatures',
+            model_name="userprofile",
+            name="show_signatures",
             field=models.BooleanField(default=True),
         ),
         migrations.AddField(
-            model_name='userprofile',
-            name='signature',
-            field=models.TextField(blank=True, default=''),
+            model_name="userprofile",
+            name="signature",
+            field=models.TextField(blank=True, default=""),
         ),
         migrations.AddField(
-            model_name='userprofile',
-            name='theme',
-            field=models.CharField(choices=[('dark', 'Dark'), ('light', 'Light')], default='dark', max_length=20),
+            model_name="userprofile",
+            name="theme",
+            field=models.CharField(
+                choices=[("dark", "Dark"), ("light", "Light")],
+                default="dark",
+                max_length=20,
+            ),
         ),
     ]

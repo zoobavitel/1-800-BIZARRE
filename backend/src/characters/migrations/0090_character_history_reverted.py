@@ -4,7 +4,6 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("characters", "0089_alter_characterxpallocation_allocation_type"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),

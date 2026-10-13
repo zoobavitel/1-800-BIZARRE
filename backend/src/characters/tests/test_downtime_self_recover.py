@@ -47,9 +47,7 @@ class DowntimeSelfRecoverTests(TestCase):
             harm_level3_used=True,
             harm_level3_name="Broken rib",
         )
-        self.session = Session.objects.create(
-            campaign=self.campaign, name="Recover S1"
-        )
+        self.session = Session.objects.create(campaign=self.campaign, name="Recover S1")
         self.campaign.active_session = self.session
         self.campaign.save(update_fields=["active_session"])
         self.url = f"/api/characters/{self.actor.id}/roll-action/"

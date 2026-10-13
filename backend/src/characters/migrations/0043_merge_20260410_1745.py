@@ -4,11 +4,9 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('characters', '0041_faction_unique_per_campaign'),
-        ('characters', '0042_merge_20260410_1741'),
+        ("characters", "0041_faction_unique_per_campaign"),
+        ("characters", "0042_merge_20260410_1741"),
     ]
 
-    operations = [
-    ]
+    operations = []

@@ -36,14 +36,26 @@ def seed_if_empty(apps, schema_editor):
     srd_rows = [
         (2, "Rock Human", 2, "Resilient stone-like beings with natural stealth."),
         (3, "Vampire", 2, "Immortal predators vulnerable to sunlight and Hamon."),
-        (4, "Pillar Man", 1, "Evolved ancients with heightened physicality and intelligence."),
+        (
+            4,
+            "Pillar Man",
+            1,
+            "Evolved ancients with heightened physicality and intelligence.",
+        ),
         (5, "Gray Matter", 2, "Extraterrestrials adept at mimicry and shapeshifting."),
-        (6, "Haunting", 2, "Partially spectral entities existing between life and death."),
+        (
+            6,
+            "Haunting",
+            2,
+            "Partially spectral entities existing between life and death.",
+        ),
         (7, "Cyborg", 2, "Humans enhanced with advanced cybernetics."),
         (8, "Oracle", 3, "Seers attuned deeply to the supernatural."),
     ]
     for pk, name, base_hp, description in srd_rows:
-        Heritage.objects.create(pk=pk, name=name, base_hp=base_hp, description=description)
+        Heritage.objects.create(
+            pk=pk, name=name, base_hp=base_hp, description=description
+        )
 
     if schema_editor.connection.vendor == "postgresql":
         table = Heritage._meta.db_table
@@ -60,7 +72,6 @@ def noop(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("characters", "0031_alter_session_devils_bargain_by_character"),
     ]

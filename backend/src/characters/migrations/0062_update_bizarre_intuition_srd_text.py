@@ -3,16 +3,12 @@
 from django.db import migrations
 
 
-NEW_DESCRIPTION = (
-    "You have a bizarre sense for danger. You cannot be surprised."
-)
+NEW_DESCRIPTION = "You have a bizarre sense for danger. You cannot be surprised."
 
 
 def forwards(apps, schema_editor):
     Ability = apps.get_model("characters", "Ability")
-    Ability.objects.filter(name="Bizarre Intuition").update(
-        description=NEW_DESCRIPTION
-    )
+    Ability.objects.filter(name="Bizarre Intuition").update(description=NEW_DESCRIPTION)
 
 
 def backwards(apps, schema_editor):

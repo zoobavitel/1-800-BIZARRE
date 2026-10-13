@@ -12,7 +12,9 @@ class CharacterProgressClockSegmentsTests(TestCase):
         self.client = APIClient()
         self.user = User.objects.create_user(username="clk_u", password="x")
         self.gm = User.objects.create_user(username="clk_gm", password="x")
-        self.heritage = Heritage.objects.create(name="HumanClk", base_hp=0, description="")
+        self.heritage = Heritage.objects.create(
+            name="HumanClk", base_hp=0, description=""
+        )
         self.vice = Vice.objects.create(name="VClk", description="")
         self.campaign = Campaign.objects.create(name="Clk Camp", gm=self.gm)
         self.campaign.players.add(self.user)

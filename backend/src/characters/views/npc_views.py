@@ -11,7 +11,7 @@ from ..parsers import MultipartJsonParser
 from ..serializers import NPCSerializer
 
 # Effect level to clock ticks (SRD: Limited=1, Standard=2, top tier=3; aligns with Roll effect "extreme")
-EFFECT_TO_TICKS = {'limited': 1, 'standard': 2, 'great': 3, 'greater': 3, 'extreme': 3}
+EFFECT_TO_TICKS = {"limited": 1, "standard": 2, "great": 3, "greater": 3, "extreme": 3}
 
 
 class NPCViewSet(viewsets.ModelViewSet):
@@ -22,7 +22,7 @@ class NPCViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        mine = self.request.query_params.get('mine', '').lower() in ('1', 'true')
+        mine = self.request.query_params.get("mine", "").lower() in ("1", "true")
 
         if mine:
             qs = NPC.objects.filter(creator=user)
@@ -44,7 +44,7 @@ class NPCViewSet(viewsets.ModelViewSet):
                 )
             ).distinct()
 
-        campaign_id = self.request.query_params.get('campaign')
+        campaign_id = self.request.query_params.get("campaign")
         if campaign_id:
             qs = qs.filter(campaign_id=campaign_id)
         return qs.prefetch_related("selected_benefits", "selected_detriments")
@@ -56,7 +56,7 @@ class NPCViewSet(viewsets.ModelViewSet):
             return True
         if npc.creator_id and npc.creator_id == user.id:
             return True
-        if npc.campaign_id and getattr(npc.campaign, 'gm_id', None) == user.id:
+        if npc.campaign_id and getattr(npc.campaign, "gm_id", None) == user.id:
             return True
         return False
 
@@ -91,7 +91,7 @@ class NPCViewSet(viewsets.ModelViewSet):
             )
         return super().destroy(request, *args, **kwargs)
 
-    @action(detail=True, methods=['post'], url_path='apply-effect')
+    @action(detail=True, methods=["post"], url_path="apply-effect")
     def apply_effect(self, request, pk=None):
         """
         GM-only: Apply the effect of a roll to an NPC's vulnerability clock.
@@ -100,36 +100,46 @@ class NPCViewSet(viewsets.ModelViewSet):
         npc = self.get_object()
         if not self._user_can_edit_npc_clocks(request, npc):
             return Response(
-                {'error': 'Only the GM (or NPC creator) can apply effect to NPC clocks. Players cannot deal harm to NPCs.'},
-                status=status.HTTP_403_FORBIDDEN
+                {
+                    "error": "Only the GM (or NPC creator) can apply effect to NPC clocks. Players cannot deal harm to NPCs."
+                },
+                status=status.HTTP_403_FORBIDDEN,
             )
-        effect = (request.data.get('effect') or '').strip().lower()
-        clock_type = (request.data.get('clock_type') or 'vulnerability').strip().lower()
+        effect = (request.data.get("effect") or "").strip().lower()
+        clock_type = (request.data.get("clock_type") or "vulnerability").strip().lower()
         if effect not in EFFECT_TO_TICKS:
             return Response(
-                {'error': f'effect must be one of: {", ".join(EFFECT_TO_TICKS)}', 'effect': effect},
-                status=status.HTTP_400_BAD_REQUEST
+                {
+                    "error": f'effect must be one of: {", ".join(EFFECT_TO_TICKS)}',
+                    "effect": effect,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
             )
-        if clock_type != 'vulnerability':
+        if clock_type != "vulnerability":
             return Response(
-                {'error': 'clock_type must be "vulnerability"', 'clock_type': clock_type},
-                status=status.HTTP_400_BAD_REQUEST
+                {
+                    "error": 'clock_type must be "vulnerability"',
+                    "clock_type": clock_type,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
             )
         ticks = EFFECT_TO_TICKS[effect]
         max_segments = npc.vulnerability_clock_max
         current = npc.vulnerability_clock_current
         new_value = min(current + ticks, max_segments)
         npc.vulnerability_clock_current = new_value
-        npc.save(update_fields=['vulnerability_clock_current'])
-        return Response({
-            'clock_type': 'vulnerability',
-            'effect': effect,
-            'ticks_applied': ticks,
-            'previous': current,
-            'current': new_value,
-            'max': max_segments,
-            'defeated': new_value >= max_segments and max_segments > 0,
-        })
+        npc.save(update_fields=["vulnerability_clock_current"])
+        return Response(
+            {
+                "clock_type": "vulnerability",
+                "effect": effect,
+                "ticks_applied": ticks,
+                "previous": current,
+                "current": new_value,
+                "max": max_segments,
+                "defeated": new_value >= max_segments and max_segments > 0,
+            }
+        )
 
     def perform_create(self, serializer):
         serializer.save(creator=self.request.user)

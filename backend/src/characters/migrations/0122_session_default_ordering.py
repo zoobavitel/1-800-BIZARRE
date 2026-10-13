@@ -4,14 +4,13 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('characters', '0121_npc_visible_to_players'),
+        ("characters", "0121_npc_visible_to_players"),
     ]
 
     operations = [
         migrations.AlterModelOptions(
-            name='session',
-            options={'ordering': ['-session_date', '-id']},
+            name="session",
+            options={"ordering": ["-session_date", "-id"]},
         ),
     ]

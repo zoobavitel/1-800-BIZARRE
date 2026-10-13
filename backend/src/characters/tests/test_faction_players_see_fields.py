@@ -110,10 +110,10 @@ class FactionPlayersSeeFieldsTests(TestCase):
         rels = r.data.get("faction_relationships") or []
         self.assertEqual(len(rels), 1)
         row = rels[0]
-        self.assertEqual(row.get("faction_image_url"), "https://example.com/faction.png")
-        self.assertNotEqual(
-            row.get("faction_image_url"), self.crew.image_url
+        self.assertEqual(
+            row.get("faction_image_url"), "https://example.com/faction.png"
         )
+        self.assertNotEqual(row.get("faction_image_url"), self.crew.image_url)
         self.assertNotIn("crew_images", str(row.get("faction_image") or ""))
 
     def test_gm_can_patch_field_flags(self):

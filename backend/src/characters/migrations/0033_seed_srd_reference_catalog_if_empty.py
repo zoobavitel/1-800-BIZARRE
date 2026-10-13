@@ -44,7 +44,6 @@ def noop(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("characters", "0032_seed_srd_heritages_if_empty"),
     ]

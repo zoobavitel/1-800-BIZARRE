@@ -15,7 +15,9 @@ def _wrap_canvas():
     return letter, c, buf
 
 
-def _draw_wrapped(c, text: str, x: float, y: float, max_width: float, leading: float = 11):
+def _draw_wrapped(
+    c, text: str, x: float, y: float, max_width: float, leading: float = 11
+):
     from reportlab.pdfbase.pdfmetrics import stringWidth
 
     words = (text or "").split()
@@ -35,7 +37,9 @@ def _draw_wrapped(c, text: str, x: float, y: float, max_width: float, leading: f
 
 
 def _standing_lines(character: Character) -> list[str]:
-    standing = character.npc_standing if isinstance(character.npc_standing, dict) else {}
+    standing = (
+        character.npc_standing if isinstance(character.npc_standing, dict) else {}
+    )
     if not standing:
         return ["No NPC standing recorded."]
 
@@ -206,11 +210,7 @@ def build_standing_crew_pdf_bytes(character: Character) -> bytes:
     crew = character.crew if character.crew_id else None
     if crew is None:
         personal = (character.personal_crew_name or "").strip()
-        msg = (
-            f"Personal crew name: {personal}"
-            if personal
-            else "No crew linked."
-        )
+        msg = f"Personal crew name: {personal}" if personal else "No crew linked."
         c.drawString(MARGIN, y, msg)
         c.save()
         buf.seek(0)
@@ -229,11 +229,11 @@ def build_standing_crew_pdf_bytes(character: Character) -> bytes:
     section("Identity")
     y = _draw_wrapped(c, f"Name: {crew.name or ''}", MARGIN, y, max_w)
     if crew.playbook_id and crew.playbook:
-        y = _draw_wrapped(
-            c, f"Playbook: {crew.playbook.name}", MARGIN, y, max_w
-        )
+        y = _draw_wrapped(c, f"Playbook: {crew.playbook.name}", MARGIN, y, max_w)
     if (crew.description or "").strip():
-        y = _draw_wrapped(c, f"Description: {crew.description.strip()}", MARGIN, y, max_w)
+        y = _draw_wrapped(
+            c, f"Description: {crew.description.strip()}", MARGIN, y, max_w
+        )
     y -= 6
 
     section("Tracks")

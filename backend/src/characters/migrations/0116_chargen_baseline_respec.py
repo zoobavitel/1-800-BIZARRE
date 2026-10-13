@@ -40,9 +40,7 @@ def backfill_chargen_baseline(apps, schema_editor):
             baseline = {
                 "action_dots": dict(before.get("action_dots") or {}),
                 "coin_stats": dict(before.get("coin_stats") or {}),
-                "standard_ability_ids": list(
-                    before.get("standard_ability_ids") or []
-                ),
+                "standard_ability_ids": list(before.get("standard_ability_ids") or []),
                 "spin_ability_ids": [int(x) for x in spin_ids],
                 "hamon_ability_ids": [int(x) for x in hamon_ids],
                 "extra_custom_abilities": list(
@@ -73,7 +71,6 @@ def noop_reverse(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("characters", "0115_merge_20260911_2236"),
     ]

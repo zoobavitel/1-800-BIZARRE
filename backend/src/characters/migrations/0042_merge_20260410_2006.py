@@ -4,7 +4,6 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("characters", "0041_alter_npc_relationships"),
         ("characters", "0041_faction_unique_per_campaign"),

@@ -247,17 +247,17 @@ class CrewViewSet(viewsets.ModelViewSet):
             sid: dict(row) for sid, row in existing.items() if isinstance(row, dict)
         }
         rep_data = dict(crew.session_rep_contributions or {})
-        actor_cid = Character.objects.filter(user=user, crew_id=crew.id).values_list(
-            "id", flat=True
-        ).first()
+        actor_cid = (
+            Character.objects.filter(user=user, crew_id=crew.id)
+            .values_list("id", flat=True)
+            .first()
+        )
         for sid_raw, row in incoming.items():
             sid = str(sid_raw)
             if not isinstance(row, dict):
                 continue
             sanitized = {
-                k: bool(row[k])
-                for k in _CREW_XP_TRIGGER_BOOL_KEYS
-                if k in row
+                k: bool(row[k]) for k in _CREW_XP_TRIGGER_BOOL_KEYS if k in row
             }
             if not sanitized:
                 # Empty row: leave existing untouched (no implicit deletes).

@@ -22,9 +22,7 @@ _STAND_ARCH_KEYS = frozenset(
 _HAMON_ARCH_KEYS = frozenset(
     {"OVERDRIVE_STYLE", "CAESAR_STYLE", "CYBER_STYLE", "VAMPIRIC_STYLE"}
 )
-_SPIN_ARCH_KEYS = frozenset(
-    {"CAVALIER", "EXECUTIONER", "MEDICO", "BALLBREAKER"}
-)
+_SPIN_ARCH_KEYS = frozenset({"CAVALIER", "EXECUTIONER", "MEDICO", "BALLBREAKER"})
 
 
 def allowed_playbook_xp_archetype_keys(playbook: str) -> frozenset[str]:
@@ -36,9 +34,7 @@ def allowed_playbook_xp_archetype_keys(playbook: str) -> frozenset[str]:
     return _STAND_ARCH_KEYS
 
 
-def normalize_playbook_xp_archetypes(
-    playbook: str, raw: list | None
-) -> list[str]:
+def normalize_playbook_xp_archetypes(playbook: str, raw: list | None) -> list[str]:
     """Dedupe preserving order; filter to allowed keys for playbook."""
     allowed = allowed_playbook_xp_archetype_keys(playbook)
     if not isinstance(raw, list):
@@ -130,9 +126,7 @@ def resolve_playbook_xp_archetype_labels(character: Character) -> str:
         character.playbook, getattr(character, "playbook_xp_archetypes", None)
     )
     if stored:
-        return " · ".join(
-            archetype_key_to_label(character.playbook, k) for k in stored
-        )
+        return " · ".join(archetype_key_to_label(character.playbook, k) for k in stored)
     pb = (character.playbook or "STAND").upper()
     if pb == "STAND":
         d = _stand_type_display(character)

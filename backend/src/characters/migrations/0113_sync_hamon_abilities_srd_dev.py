@@ -75,7 +75,6 @@ def sync_hamon_srd_dev(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("characters", "0112_restore_swan_song"),
     ]

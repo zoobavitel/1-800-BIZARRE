@@ -23,7 +23,6 @@ def noop_reverse(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("characters", "0119_faction_players_see_fields"),
     ]
