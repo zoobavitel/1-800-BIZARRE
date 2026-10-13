@@ -55,6 +55,10 @@ from .services.playbook_xp_archetype import normalize_playbook_xp_archetypes
 from .services.inventory import normalize_inventory_list
 from .services.crew_standing import normalize_crew_standing
 from .services.pc_standing import normalize_pc_standing
+from .services.faction_status_visibility import (
+    normalize_faction_status_visibility,
+    redact_faction_status_for_player,
+)
 from .services.npc_stand_identity import (
     normalize_stand_consciousness,
     normalize_stand_forms,
@@ -3006,6 +3010,9 @@ class FactionSerializer(serializers.ModelSerializer):
         campaign = getattr(instance, "campaign", None)
         return bool(campaign and campaign.gm_id == user.id)
 
+    def validate_faction_status_visibility(self, value):
+        return normalize_faction_status_visibility(value)
+
     def to_representation(self, instance):
         data = super().to_representation(instance)
         if self._viewer_is_gm_or_staff(instance):
@@ -3029,6 +3036,20 @@ class FactionSerializer(serializers.ModelSerializer):
                 for n in npcs
                 if isinstance(n, dict) and n.get("visible_to_players", True) is not False
             ]
+        vis = normalize_faction_status_visibility(
+            getattr(instance, "faction_status_visibility", None) or {}
+        )
+        if not show:
+            data["faction_status"] = {}
+            data["faction_status_visibility"] = {}
+        else:
+            data["faction_status"] = redact_faction_status_for_player(
+                data.get("faction_status") or {},
+                vis,
+            )
+            data["faction_status_visibility"] = {
+                k: True for k, v in vis.items() if v
+            }
         return data
 
     class Meta:
@@ -3045,6 +3066,7 @@ class FactionSerializer(serializers.ModelSerializer):
             "inventory",
             "contacts",
             "faction_status",
+            "faction_status_visibility",
             "crew_notes",
             "visible_to_players",
             "players_see_tier",

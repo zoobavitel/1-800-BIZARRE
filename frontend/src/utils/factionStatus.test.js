@@ -1,6 +1,9 @@
 import {
   applySymmetricFactionStatus,
+  applySymmetricFactionStatusVisibility,
   normalizeFactionStatusMap,
+  normalizeFactionStatusVisibility,
+  peerStandingVisible,
   seedFactionStatusFromCampaign,
 } from "./factionStatus";
 
@@ -70,5 +73,28 @@ describe("applySymmetricFactionStatus", () => {
       statusA: { X: 1 },
       statusB: { Y: 2 },
     });
+  });
+});
+
+describe("faction status visibility", () => {
+  test("normalize and peerStandingVisible default true", () => {
+    expect(normalizeFactionStatusVisibility({ A: 0, B: 1 })).toEqual({
+      A: false,
+      B: true,
+    });
+    expect(peerStandingVisible({}, "A")).toBe(true);
+    expect(peerStandingVisible({ A: false }, "A")).toBe(false);
+  });
+
+  test("applySymmetricFactionStatusVisibility both ways", () => {
+    const { visibilityA, visibilityB } = applySymmetricFactionStatusVisibility(
+      "Dirty",
+      "Canary",
+      false,
+      {},
+      {},
+    );
+    expect(visibilityA).toEqual({ Canary: false });
+    expect(visibilityB).toEqual({ Dirty: false });
   });
 });

@@ -48,6 +48,8 @@ export default function RosterNpcColumn({
   factionAddNpcId,
   setFactionAddNpcId,
   campaignNPCs,
+  characters = [],
+  crews = null,
   onNpcFactionDrop,
   onNavigateToNPC,
   onUnassignNPC,
@@ -152,6 +154,8 @@ export default function RosterNpcColumn({
         npc={npc}
         S={S}
         campaign={campaign}
+        characters={characters}
+        crews={crews}
         onNavigateToNPC={onNavigateToNPC}
         onLeaveFaction={
           !readOnly && showLeaveFaction
