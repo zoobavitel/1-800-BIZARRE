@@ -387,6 +387,8 @@ export default function CampaignRosterPanels({
               factionAddNpcId={factionAddNpcId}
               setFactionAddNpcId={setFactionAddNpcId}
               campaignNPCs={campaignNPCs}
+              characters={characters}
+              crews={campaign?.crews || []}
               onNpcFactionDrop={onNpcFactionDrop}
               onNavigateToNPC={onNavigateToNPC}
               onUnassignNPC={onUnassignNPC}

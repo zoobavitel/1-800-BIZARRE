@@ -20,6 +20,7 @@ export const NPC_NESTED_TABS = [
   { id: "abilities", label: "Abilities" },
   { id: "items", label: "Items" },
   { id: "clocks", label: "Clocks" },
+  { id: "rep", label: "Rep" },
   { id: "more", label: "More" },
 ];
 
