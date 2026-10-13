@@ -2,7 +2,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("characters", "0046_sessionnpcinvolvement_show_vulnerability_clock"),
     ]

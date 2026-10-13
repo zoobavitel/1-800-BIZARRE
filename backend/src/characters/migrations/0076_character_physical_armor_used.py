@@ -4,7 +4,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("characters", "0075_character_stand_and_physical_armor"),
     ]

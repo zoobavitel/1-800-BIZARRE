@@ -4,25 +4,24 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('characters', '0018_experiencetracker_roll'),
+        ("characters", "0018_experiencetracker_roll"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='session',
-            name='default_effect',
-            field=models.CharField(blank=True, default='standard', max_length=20),
+            model_name="session",
+            name="default_effect",
+            field=models.CharField(blank=True, default="standard", max_length=20),
         ),
         migrations.AddField(
-            model_name='session',
-            name='default_position',
-            field=models.CharField(blank=True, default='risky', max_length=20),
+            model_name="session",
+            name="default_position",
+            field=models.CharField(blank=True, default="risky", max_length=20),
         ),
         migrations.AddField(
-            model_name='session',
-            name='show_position_effect_to_players',
+            model_name="session",
+            name="show_position_effect_to_players",
             field=models.BooleanField(default=True),
         ),
     ]

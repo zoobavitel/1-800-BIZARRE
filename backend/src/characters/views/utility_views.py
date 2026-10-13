@@ -10,8 +10,17 @@ from rest_framework.decorators import api_view, permission_classes
 from django.db.models import Q, Count
 
 from ..models import (
-    Character, Campaign, NPC, Crew, Heritage, Vice, Ability,
-    StandAbility, HamonAbility, SpinAbility, Session,
+    Character,
+    Campaign,
+    NPC,
+    Crew,
+    Heritage,
+    Vice,
+    Ability,
+    StandAbility,
+    HamonAbility,
+    SpinAbility,
+    Session,
 )
 from .character_views import _character_queryset_for_user
 
@@ -22,27 +31,27 @@ def home(request):
 
 
 def _merge_playbook_counts(queryset):
-    out = {'STAND': 0, 'HAMON': 0, 'SPIN': 0}
-    for row in queryset.values('playbook').annotate(count=Count('id')):
-        key = (row['playbook'] or 'STAND').upper()
+    out = {"STAND": 0, "HAMON": 0, "SPIN": 0}
+    for row in queryset.values("playbook").annotate(count=Count("id")):
+        key = (row["playbook"] or "STAND").upper()
         if key in out:
-            out[key] += row['count']
+            out[key] += row["count"]
     return out
 
 
 def _character_has_any_progress(character):
     """True when a sheet has content beyond a blank 'New Character' shell."""
-    if (character.stand_name or '').strip():
+    if (character.stand_name or "").strip():
         return True
     if character.heritage_id:
         return True
-    if (character.background_note or '').strip():
+    if (character.background_note or "").strip():
         return True
-    if (character.appearance or '').strip():
+    if (character.appearance or "").strip():
         return True
     if character.vice_id:
         return True
-    if character.crew_id or (character.personal_crew_name or '').strip():
+    if character.crew_id or (character.personal_crew_name or "").strip():
         return True
     if (character.stress or 0) > 0:
         return True
@@ -69,7 +78,7 @@ def _character_has_any_progress(character):
 
 
 def _is_placeholder_pc(character):
-    if (character.true_name or '').strip().lower() != 'new character':
+    if (character.true_name or "").strip().lower() != "new character":
         return False
     return not _character_has_any_progress(character)
 
@@ -80,7 +89,7 @@ def _count_real_pcs():
     )
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def site_stats(request):
     """Aggregate site-wide stats: counts, playbooks (PCs + NPCs), top heritages."""
@@ -92,33 +101,32 @@ def site_stats(request):
     h_counter = Counter()
     for row in (
         Character.objects.filter(heritage__isnull=False)
-        .values('heritage__name')
-        .annotate(c=Count('id'))
+        .values("heritage__name")
+        .annotate(c=Count("id"))
     ):
-        name = row['heritage__name'] or '—'
-        h_counter[name] += row['c']
+        name = row["heritage__name"] or "—"
+        h_counter[name] += row["c"]
     for row in (
         NPC.objects.filter(heritage__isnull=False)
-        .values('heritage__name')
-        .annotate(c=Count('id'))
+        .values("heritage__name")
+        .annotate(c=Count("id"))
     ):
-        name = row['heritage__name'] or '—'
-        h_counter[name] += row['c']
+        name = row["heritage__name"] or "—"
+        h_counter[name] += row["c"]
 
     top_heritages = [
-        {'name': name, 'count': count}
-        for name, count in h_counter.most_common(3)
+        {"name": name, "count": count} for name, count in h_counter.most_common(3)
     ]
 
     return Response(
         {
-            'active_campaigns': Campaign.objects.filter(is_active=True).count(),
-            'session_count': Session.objects.count(),
-            'crew_count': Crew.objects.count(),
-            'pc_count': _count_real_pcs(),
-            'npc_count': NPC.objects.count(),
-            'playbook_counts': playbook_counts,
-            'top_heritages': top_heritages,
+            "active_campaigns": Campaign.objects.filter(is_active=True).count(),
+            "session_count": Session.objects.count(),
+            "crew_count": Crew.objects.count(),
+            "pc_count": _count_real_pcs(),
+            "npc_count": NPC.objects.count(),
+            "playbook_counts": playbook_counts,
+            "top_heritages": top_heritages,
         }
     )
 
@@ -130,344 +138,343 @@ class SpendCoinAPIView(APIView):
         """Spend coin from a character's stash."""
         try:
             character = Character.objects.get(pk=pk, user=request.user)
-            amount = request.data.get('amount', 0)
-            
+            amount = request.data.get("amount", 0)
+
             if amount <= 0:
                 return Response(
-                    {'error': 'Amount must be positive'}, 
-                    status=status.HTTP_400_BAD_REQUEST
+                    {"error": "Amount must be positive"},
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
-            
+
             if character.coin < amount:
                 return Response(
-                    {'error': 'Insufficient coin'}, 
-                    status=status.HTTP_400_BAD_REQUEST
+                    {"error": "Insufficient coin"}, status=status.HTTP_400_BAD_REQUEST
                 )
-            
+
             character.coin -= amount
             character.save()
-            
-            return Response({
-                'message': f'Spent {amount} coin',
-                'coin_spent': amount,
-                'remaining_coin': character.coin
-            })
+
+            return Response(
+                {
+                    "message": f"Spent {amount} coin",
+                    "coin_spent": amount,
+                    "remaining_coin": character.coin,
+                }
+            )
         except Character.DoesNotExist:
             return Response(
-                {'error': 'Character not found'}, 
-                status=status.HTTP_404_NOT_FOUND
+                {"error": "Character not found"}, status=status.HTTP_404_NOT_FOUND
             )
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def global_search(request):
     """Global search across characters, campaigns, NPCs, abilities, heritages, Hamon/Spin/Stand abilities."""
-    query = request.GET.get('q', '').strip()
+    query = request.GET.get("q", "").strip()
     if not query:
-        return Response({'results': [], 'message': 'No search query provided'})
+        return Response({"results": [], "message": "No search query provided"})
 
     user = request.user
     results = []
 
     # Search Characters (use true_name, not name) — same visibility as CharacterViewSet detail
     character_queryset = _character_queryset_for_user(user).filter(
-        Q(true_name__icontains=query) |
-        Q(alias__icontains=query) |
-        Q(stand_name__icontains=query) |
-        Q(background_note__icontains=query) |
-        Q(heritage__name__icontains=query)
+        Q(true_name__icontains=query)
+        | Q(alias__icontains=query)
+        | Q(stand_name__icontains=query)
+        | Q(background_note__icontains=query)
+        | Q(heritage__name__icontains=query)
     )[:10]
 
     for char in character_queryset:
-        results.append({
-            'type': 'character',
-            'id': char.id,
-            'title': char.true_name or 'Unnamed Character',
-            'subtitle': f"{char.heritage.name if char.heritage else 'Human'} • {char.playbook or 'STAND'} User",
-            'description': f"Stand: {char.stand_name or 'Unnamed Stand'}",
-            'url': f'/characters/{char.id}',
-            'campaign': char.campaign.name if char.campaign else None
-        })
+        results.append(
+            {
+                "type": "character",
+                "id": char.id,
+                "title": char.true_name or "Unnamed Character",
+                "subtitle": f"{char.heritage.name if char.heritage else 'Human'} • {char.playbook or 'STAND'} User",
+                "description": f"Stand: {char.stand_name or 'Unnamed Stand'}",
+                "url": f"/characters/{char.id}",
+                "campaign": char.campaign.name if char.campaign else None,
+            }
+        )
 
     # Search Campaigns
-    campaign_queryset = Campaign.objects.filter(
-        Q(gm=user) | Q(players=user)
-    ).filter(
-        Q(name__icontains=query) |
-        Q(description__icontains=query)
-    ).distinct()[:10]
+    campaign_queryset = (
+        Campaign.objects.filter(Q(gm=user) | Q(players=user))
+        .filter(Q(name__icontains=query) | Q(description__icontains=query))
+        .distinct()[:10]
+    )
 
     for campaign in campaign_queryset:
-        results.append({
-            'type': 'campaign',
-            'id': campaign.id,
-            'title': campaign.name or 'Unnamed',
-            'subtitle': f"Campaign • GM: {campaign.gm.username if campaign.gm else '—'}",
-            'description': campaign.description or 'No description',
-            'url': f'/campaigns',
-            'campaign': campaign.name
-        })
+        results.append(
+            {
+                "type": "campaign",
+                "id": campaign.id,
+                "title": campaign.name or "Unnamed",
+                "subtitle": f"Campaign • GM: {campaign.gm.username if campaign.gm else '—'}",
+                "description": campaign.description or "No description",
+                "url": f"/campaigns",
+                "campaign": campaign.name,
+            }
+        )
 
     # Search NPCs (only if user is GM)
     npc_queryset = NPC.objects.filter(campaign__gm=user).filter(
-        Q(name__icontains=query) |
-        Q(description__icontains=query)
+        Q(name__icontains=query) | Q(description__icontains=query)
     )[:10]
 
     for npc in npc_queryset:
-        results.append({
-            'type': 'npc',
-            'id': npc.id,
-            'title': npc.name or 'Unnamed',
-            'subtitle': f"NPC • {npc.campaign.name if npc.campaign else '—'}",
-            'description': npc.description or 'No description',
-            'url': f'/campaigns',
-            'campaign': npc.campaign.name if npc.campaign else None
-        })
+        results.append(
+            {
+                "type": "npc",
+                "id": npc.id,
+                "title": npc.name or "Unnamed",
+                "subtitle": f"NPC • {npc.campaign.name if npc.campaign else '—'}",
+                "description": npc.description or "No description",
+                "url": f"/campaigns",
+                "campaign": npc.campaign.name if npc.campaign else None,
+            }
+        )
 
     # Search Standard Abilities (Ability model)
     ability_queryset = Ability.objects.filter(
-        Q(name__icontains=query) |
-        Q(description__icontains=query)
+        Q(name__icontains=query) | Q(description__icontains=query)
     )[:10]
 
     for ability in ability_queryset:
-        desc = ability.description or ''
+        desc = ability.description or ""
         try:
             cat_label = ability.get_category_display()
         except (AttributeError, ValueError):
-            cat_label = getattr(ability, 'category', '') or 'Standard'
-        results.append({
-            'type': 'ability',
-            'id': ability.id,
-            'title': ability.name or 'Unnamed',
-            'subtitle': f"Standard Ability • {cat_label}",
-            'description': desc[:100] + '...' if len(desc) > 100 else desc,
-            'url': f'/abilities-ability',
-            'campaign': None
-        })
+            cat_label = getattr(ability, "category", "") or "Standard"
+        results.append(
+            {
+                "type": "ability",
+                "id": ability.id,
+                "title": ability.name or "Unnamed",
+                "subtitle": f"Standard Ability • {cat_label}",
+                "description": desc[:100] + "..." if len(desc) > 100 else desc,
+                "url": f"/abilities-ability",
+                "campaign": None,
+            }
+        )
 
     # Search Hamon Abilities (playbook)
     hamon_queryset = HamonAbility.objects.filter(
-        Q(name__icontains=query) |
-        Q(description__icontains=query)
+        Q(name__icontains=query) | Q(description__icontains=query)
     )[:10]
 
     for ha in hamon_queryset:
-        desc = ha.description or ''
+        desc = ha.description or ""
         try:
             type_label = ha.get_hamon_type_display()
         except (AttributeError, ValueError):
-            type_label = getattr(ha, 'hamon_type', '') or 'Hamon'
-        results.append({
-            'type': 'hamon_ability',
-            'id': ha.id,
-            'title': ha.name or 'Unnamed',
-            'subtitle': f"Hamon • {type_label}",
-            'description': desc[:100] + '...' if len(desc) > 100 else desc,
-            'url': f'/abilities-hamon',
-            'campaign': None
-        })
+            type_label = getattr(ha, "hamon_type", "") or "Hamon"
+        results.append(
+            {
+                "type": "hamon_ability",
+                "id": ha.id,
+                "title": ha.name or "Unnamed",
+                "subtitle": f"Hamon • {type_label}",
+                "description": desc[:100] + "..." if len(desc) > 100 else desc,
+                "url": f"/abilities-hamon",
+                "campaign": None,
+            }
+        )
 
     # Search Spin Abilities (playbook)
     spin_queryset = SpinAbility.objects.filter(
-        Q(name__icontains=query) |
-        Q(description__icontains=query)
+        Q(name__icontains=query) | Q(description__icontains=query)
     )[:10]
 
     for sa in spin_queryset:
-        desc = sa.description or ''
+        desc = sa.description or ""
         try:
             type_label = sa.get_spin_type_display()
         except (AttributeError, ValueError):
-            type_label = getattr(sa, 'spin_type', '') or 'Spin'
-        results.append({
-            'type': 'spin_ability',
-            'id': sa.id,
-            'title': sa.name or 'Unnamed',
-            'subtitle': f"Spin • {type_label}",
-            'description': desc[:100] + '...' if len(desc) > 100 else desc,
-            'url': f'/abilities-spin',
-            'campaign': None
-        })
+            type_label = getattr(sa, "spin_type", "") or "Spin"
+        results.append(
+            {
+                "type": "spin_ability",
+                "id": sa.id,
+                "title": sa.name or "Unnamed",
+                "subtitle": f"Spin • {type_label}",
+                "description": desc[:100] + "..." if len(desc) > 100 else desc,
+                "url": f"/abilities-spin",
+                "campaign": None,
+            }
+        )
 
     # Search Stand Abilities (Stand-specific)
     stand_ability_queryset = StandAbility.objects.filter(
-        Q(name__icontains=query) |
-        Q(description__icontains=query)
+        Q(name__icontains=query) | Q(description__icontains=query)
     )[:10]
 
     for sta in stand_ability_queryset:
-        desc = sta.description or ''
-        stand_name = sta.stand.name if sta.stand else 'Stand'
-        results.append({
-            'type': 'stand_ability',
-            'id': sta.id,
-            'title': sta.name or 'Unnamed',
-            'subtitle': f"Stand Ability • {stand_name}",
-            'description': desc[:100] + '...' if len(desc) > 100 else desc,
-            'url': f'/abilities-stand',
-            'campaign': None
-        })
+        desc = sta.description or ""
+        stand_name = sta.stand.name if sta.stand else "Stand"
+        results.append(
+            {
+                "type": "stand_ability",
+                "id": sta.id,
+                "title": sta.name or "Unnamed",
+                "subtitle": f"Stand Ability • {stand_name}",
+                "description": desc[:100] + "..." if len(desc) > 100 else desc,
+                "url": f"/abilities-stand",
+                "campaign": None,
+            }
+        )
 
     # Search Heritages
     heritage_queryset = Heritage.objects.filter(
-        Q(name__icontains=query) |
-        Q(description__icontains=query)
+        Q(name__icontains=query) | Q(description__icontains=query)
     )[:10]
 
     for heritage in heritage_queryset:
-        results.append({
-            'type': 'heritage',
-            'id': heritage.id,
-            'title': heritage.name,
-            'subtitle': f"Heritage • Base HP: {heritage.base_hp}",
-            'description': heritage.description or 'No description',
-            'url': f'/abilities-heritage',
-            'campaign': None
-        })
+        results.append(
+            {
+                "type": "heritage",
+                "id": heritage.id,
+                "title": heritage.name,
+                "subtitle": f"Heritage • Base HP: {heritage.base_hp}",
+                "description": heritage.description or "No description",
+                "url": f"/abilities-heritage",
+                "campaign": None,
+            }
+        )
 
-    return Response({
-        'results': results,
-        'total': len(results),
-        'query': query
-    })
+    return Response({"results": results, "total": len(results), "query": query})
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_available_playbook_abilities(request):
     """Get available abilities for character playbooks."""
-    heritage_id = request.GET.get('heritage_id')
+    heritage_id = request.GET.get("heritage_id")
     if not heritage_id:
         return Response(
-            {'error': 'Heritage ID is required'}, 
-            status=status.HTTP_400_BAD_REQUEST
+            {"error": "Heritage ID is required"}, status=status.HTTP_400_BAD_REQUEST
         )
-    
+
     try:
         heritage = Heritage.objects.get(id=heritage_id)
     except Heritage.DoesNotExist:
         return Response(
-            {'error': 'Heritage not found'}, 
-            status=status.HTTP_404_NOT_FOUND
+            {"error": "Heritage not found"}, status=status.HTTP_404_NOT_FOUND
         )
-    
-    abilities = {
-        'stand_abilities': [],
-        'hamon_abilities': [],
-        'spin_abilities': []
-    }
-    
+
+    abilities = {"stand_abilities": [], "hamon_abilities": [], "spin_abilities": []}
+
     # Get abilities based on heritage type
-    if heritage.name.lower() == 'stand user':
+    if heritage.name.lower() == "stand user":
         stand_abilities = StandAbility.objects.all()
-        abilities['stand_abilities'] = [
+        abilities["stand_abilities"] = [
             {
-                'id': sa.id,
-                'name': sa.name,
-                'description': sa.description,
-                'cost': sa.cost
+                "id": sa.id,
+                "name": sa.name,
+                "description": sa.description,
+                "cost": sa.cost,
             }
             for sa in stand_abilities
         ]
-    elif heritage.name.lower() == 'hamon user':
+    elif heritage.name.lower() == "hamon user":
         hamon_abilities = HamonAbility.objects.all()
-        abilities['hamon_abilities'] = [
+        abilities["hamon_abilities"] = [
             {
-                'id': ha.id,
-                'name': ha.name,
-                'description': ha.description,
-                'cost': ha.cost
+                "id": ha.id,
+                "name": ha.name,
+                "description": ha.description,
+                "cost": ha.cost,
             }
             for ha in hamon_abilities
         ]
-    elif heritage.name.lower() == 'spin user':
+    elif heritage.name.lower() == "spin user":
         spin_abilities = SpinAbility.objects.all()
-        abilities['spin_abilities'] = [
+        abilities["spin_abilities"] = [
             {
-                'id': spa.id,
-                'name': spa.name,
-                'description': spa.description,
-                'cost': spa.cost
+                "id": spa.id,
+                "name": spa.name,
+                "description": spa.description,
+                "cost": spa.cost,
             }
             for spa in spin_abilities
         ]
-    
+
     return Response(abilities)
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([AllowAny])
 def api_documentation(request):
     """Return API documentation and available endpoints."""
     documentation = {
-        'title': '1(800)Bizarre API',
-        'version': '1.0.0',
-        'description': 'API for the 1-800-BIZARRE Platform',
-        'endpoints': {
-            'authentication': {
-                'register': 'POST /api/auth/register/',
-                'login': 'POST /api/auth/login/',
-                'logout': 'POST /api/auth/logout/',
+        "title": "1(800)Bizarre API",
+        "version": "1.0.0",
+        "description": "API for the 1-800-BIZARRE Platform",
+        "endpoints": {
+            "authentication": {
+                "register": "POST /api/auth/register/",
+                "login": "POST /api/auth/login/",
+                "logout": "POST /api/auth/logout/",
             },
-            'characters': {
-                'list': 'GET /api/characters/',
-                'create': 'POST /api/characters/',
-                'detail': 'GET /api/characters/{id}/',
-                'update': 'PUT /api/characters/{id}/',
-                'delete': 'DELETE /api/characters/{id}/',
-                'roll_action': 'POST /api/characters/{id}/roll-action/',
-                'indulge_vice': 'POST /api/characters/{id}/indulge-vice/',
-                'take_harm': 'POST /api/characters/{id}/take-harm/',
-                'heal_harm': 'POST /api/characters/{id}/heal-harm/',
-                'add_xp': 'POST /api/characters/{id}/add-xp/',
+            "characters": {
+                "list": "GET /api/characters/",
+                "create": "POST /api/characters/",
+                "detail": "GET /api/characters/{id}/",
+                "update": "PUT /api/characters/{id}/",
+                "delete": "DELETE /api/characters/{id}/",
+                "roll_action": "POST /api/characters/{id}/roll-action/",
+                "indulge_vice": "POST /api/characters/{id}/indulge-vice/",
+                "take_harm": "POST /api/characters/{id}/take-harm/",
+                "heal_harm": "POST /api/characters/{id}/heal-harm/",
+                "add_xp": "POST /api/characters/{id}/add-xp/",
             },
-            'campaigns': {
-                'list': 'GET /api/campaigns/',
-                'create': 'POST /api/campaigns/',
-                'detail': 'GET /api/campaigns/{id}/',
-                'update': 'PUT /api/campaigns/{id}/',
-                'delete': 'DELETE /api/campaigns/{id}/',
+            "campaigns": {
+                "list": "GET /api/campaigns/",
+                "create": "POST /api/campaigns/",
+                "detail": "GET /api/campaigns/{id}/",
+                "update": "PUT /api/campaigns/{id}/",
+                "delete": "DELETE /api/campaigns/{id}/",
             },
-            'crews': {
-                'list': 'GET /api/crews/',
-                'create': 'POST /api/crews/',
-                'detail': 'GET /api/crews/{id}/',
-                'update': 'PUT /api/crews/{id}/',
-                'delete': 'DELETE /api/crews/{id}/',
-                'propose_name': 'POST /api/crews/{id}/propose-name/',
-                'approve_name': 'POST /api/crews/{id}/approve-name/',
+            "crews": {
+                "list": "GET /api/crews/",
+                "create": "POST /api/crews/",
+                "detail": "GET /api/crews/{id}/",
+                "update": "PUT /api/crews/{id}/",
+                "delete": "DELETE /api/crews/{id}/",
+                "propose_name": "POST /api/crews/{id}/propose-name/",
+                "approve_name": "POST /api/crews/{id}/approve-name/",
             },
-            'sessions': {
-                'list': 'GET /api/sessions/',
-                'create': 'POST /api/sessions/',
-                'detail': 'GET /api/sessions/{id}/',
-                'update': 'PUT /api/sessions/{id}/',
-                'delete': 'DELETE /api/sessions/{id}/',
-                'propose_score': 'POST /api/sessions/{id}/propose-score/',
-                'vote_for_score': 'POST /api/sessions/{id}/vote-for-score/',
+            "sessions": {
+                "list": "GET /api/sessions/",
+                "create": "POST /api/sessions/",
+                "detail": "GET /api/sessions/{id}/",
+                "update": "PUT /api/sessions/{id}/",
+                "delete": "DELETE /api/sessions/{id}/",
+                "propose_score": "POST /api/sessions/{id}/propose-score/",
+                "vote_for_score": "POST /api/sessions/{id}/vote-for-score/",
             },
-            'reference': {
-                'heritages': 'GET /api/heritages/',
-                'vices': 'GET /api/vices/',
-                'abilities': 'GET /api/abilities/',
-                'stand_abilities': 'GET /api/stand-abilities/',
-                'hamon_abilities': 'GET /api/hamon-abilities/',
-                'spin_abilities': 'GET /api/spin-abilities/',
-                'traumas': 'GET /api/traumas/',
+            "reference": {
+                "heritages": "GET /api/heritages/",
+                "vices": "GET /api/vices/",
+                "abilities": "GET /api/abilities/",
+                "stand_abilities": "GET /api/stand-abilities/",
+                "hamon_abilities": "GET /api/hamon-abilities/",
+                "spin_abilities": "GET /api/spin-abilities/",
+                "traumas": "GET /api/traumas/",
             },
-            'utility': {
-                'search': 'GET /api/search/?q={query}',
-                'playbook_abilities': 'GET /api/playbook-abilities/?heritage_id={id}',
-                'spend_coin': 'POST /api/characters/{id}/spend-coin/',
-            }
+            "utility": {
+                "search": "GET /api/search/?q={query}",
+                "playbook_abilities": "GET /api/playbook-abilities/?heritage_id={id}",
+                "spend_coin": "POST /api/characters/{id}/spend-coin/",
+            },
         },
-        'authentication': {
-            'type': 'Token Authentication',
-            'header': 'Authorization: Token {your_token}',
-        }
+        "authentication": {
+            "type": "Token Authentication",
+            "header": "Authorization: Token {your_token}",
+        },
     }
-    
-    return Response(documentation) 
+
+    return Response(documentation)

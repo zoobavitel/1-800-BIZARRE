@@ -4,7 +4,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("characters", "0060_session_auto_encoded_xp_settled"),
     ]

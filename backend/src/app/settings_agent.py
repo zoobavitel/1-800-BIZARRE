@@ -68,9 +68,7 @@ MEDIA_ROOT = config(
 
 CELERY_BROKER_URL = config("REDIS_URL", default="redis://127.0.0.1:6379/1")
 CELERY_RESULT_BACKEND = config("CELERY_RESULT_BACKEND", default=CELERY_BROKER_URL)
-CELERY_TASK_ALWAYS_EAGER = config(
-    "CELERY_TASK_ALWAYS_EAGER", default=True, cast=bool
-)
+CELERY_TASK_ALWAYS_EAGER = config("CELERY_TASK_ALWAYS_EAGER", default=True, cast=bool)
 
 CSRF_TRUSTED_ORIGINS = config(
     "CSRF_TRUSTED_ORIGINS",

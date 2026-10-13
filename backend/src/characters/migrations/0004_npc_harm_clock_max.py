@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('characters', '0003_add_level_to_faction'),
+        ("characters", "0003_add_level_to_faction"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='npc',
-            name='harm_clock_max',
+            model_name="npc",
+            name="harm_clock_max",
             field=models.IntegerField(default=4),
         ),
     ]

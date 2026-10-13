@@ -6,13 +6,13 @@ from django.db import migrations
 
 
 def deduplicate_human_heritage(apps, schema_editor):
-    Heritage = apps.get_model('characters', 'Heritage')
-    Benefit = apps.get_model('characters', 'Benefit')
-    Detriment = apps.get_model('characters', 'Detriment')
-    Character = apps.get_model('characters', 'Character')
-    NPC = apps.get_model('characters', 'NPC')
+    Heritage = apps.get_model("characters", "Heritage")
+    Benefit = apps.get_model("characters", "Benefit")
+    Detriment = apps.get_model("characters", "Detriment")
+    Character = apps.get_model("characters", "Character")
+    NPC = apps.get_model("characters", "NPC")
 
-    humans = list(Heritage.objects.filter(name__iexact='Human').order_by('pk'))
+    humans = list(Heritage.objects.filter(name__iexact="Human").order_by("pk"))
     if len(humans) <= 1:
         return
 
@@ -30,9 +30,8 @@ def noop(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('characters', '0028_alter_progressclock_max_segments'),
+        ("characters", "0028_alter_progressclock_max_segments"),
     ]
 
     operations = [

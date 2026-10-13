@@ -4,7 +4,6 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("characters", "0090_character_history_reverted"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),

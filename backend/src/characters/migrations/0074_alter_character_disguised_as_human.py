@@ -4,15 +4,19 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('characters', '0073_npc_heal_recover_in_play_pe'),
+        ("characters", "0073_npc_heal_recover_in_play_pe"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='character',
-            name='disguised_as_human',
-            field=models.BooleanField(blank=True, default=None, help_text='Sheet toggle: when true, Alien Understanding (−1d social) does not apply.', null=True),
+            model_name="character",
+            name="disguised_as_human",
+            field=models.BooleanField(
+                blank=True,
+                default=None,
+                help_text="Sheet toggle: when true, Alien Understanding (−1d social) does not apply.",
+                null=True,
+            ),
         ),
     ]

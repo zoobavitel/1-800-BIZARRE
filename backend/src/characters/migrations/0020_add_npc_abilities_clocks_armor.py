@@ -4,35 +4,34 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('characters', '0019_session_position_effect_visibility'),
+        ("characters", "0019_session_position_effect_visibility"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='npc',
-            name='abilities',
+            model_name="npc",
+            name="abilities",
             field=models.JSONField(blank=True, default=list),
         ),
         migrations.AddField(
-            model_name='npc',
-            name='alt_clocks',
+            model_name="npc",
+            name="alt_clocks",
             field=models.JSONField(blank=True, default=list),
         ),
         migrations.AddField(
-            model_name='npc',
-            name='conflict_clocks',
+            model_name="npc",
+            name="conflict_clocks",
             field=models.JSONField(blank=True, default=list),
         ),
         migrations.AddField(
-            model_name='npc',
-            name='regular_armor_used',
+            model_name="npc",
+            name="regular_armor_used",
             field=models.IntegerField(default=0),
         ),
         migrations.AddField(
-            model_name='npc',
-            name='special_armor_used',
+            model_name="npc",
+            name="special_armor_used",
             field=models.IntegerField(default=0),
         ),
     ]

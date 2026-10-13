@@ -5,20 +5,34 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('characters', '0017_add_progress_clock_created_by_visible_to_party'),
+        ("characters", "0017_add_progress_clock_created_by_visible_to_party"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='experiencetracker',
-            name='roll',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='xp_entries', to='characters.roll'),
+            model_name="experiencetracker",
+            name="roll",
+            field=models.ForeignKey(
+                blank=True,
+                null=True,
+                on_delete=django.db.models.deletion.SET_NULL,
+                related_name="xp_entries",
+                to="characters.roll",
+            ),
         ),
         migrations.AlterField(
-            model_name='experiencetracker',
-            name='trigger',
-            field=models.CharField(choices=[('BELIEFS', 'Express beliefs, drives, heritage, or background'), ('STRUGGLE', 'Struggle with issues from vice or trauma'), ('DESPERATE', 'Address a challenge with action rating 0'), ('DESPERATE_ROLL', 'Desperate skill check'), ('STANDOUT', 'Standout action or leadership')], max_length=24),
+            model_name="experiencetracker",
+            name="trigger",
+            field=models.CharField(
+                choices=[
+                    ("BELIEFS", "Express beliefs, drives, heritage, or background"),
+                    ("STRUGGLE", "Struggle with issues from vice or trauma"),
+                    ("DESPERATE", "Address a challenge with action rating 0"),
+                    ("DESPERATE_ROLL", "Desperate skill check"),
+                    ("STANDOUT", "Standout action or leadership"),
+                ],
+                max_length=24,
+            ),
         ),
     ]

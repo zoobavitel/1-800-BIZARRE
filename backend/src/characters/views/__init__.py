@@ -1,6 +1,10 @@
 # Import all view classes for backward compatibility
 from .character_views import CharacterViewSet
-from .campaign_views import CampaignViewSet, CampaignInvitationViewSet, ShowcasedNPCViewSet
+from .campaign_views import (
+    CampaignViewSet,
+    CampaignInvitationViewSet,
+    ShowcasedNPCViewSet,
+)
 from .faction_views import FactionViewSet
 from .equipment_views import EquipmentItemViewSet
 from .npc_views import NPCViewSet
@@ -10,31 +14,77 @@ from .roll_views import RollViewSet
 from .group_action_views import GroupActionViewSet
 from .auth_views import RegisterView, LoginView, CurrentUserView, UserProfileViewSet
 from .gameplay_views import (
-    ClaimViewSet, CrewSpecialAbilityViewSet, CrewPlaybookViewSet,
-    CrewUpgradeViewSet, XPHistoryViewSet, StressHistoryViewSet,
-    ChatMessageViewSet, ProgressClockViewSet
+    ClaimViewSet,
+    CrewSpecialAbilityViewSet,
+    CrewPlaybookViewSet,
+    CrewUpgradeViewSet,
+    XPHistoryViewSet,
+    StressHistoryViewSet,
+    ChatMessageViewSet,
+    ProgressClockViewSet,
 )
 from .reference_views import (
-    HeritageViewSet, ViceViewSet, AbilityViewSet, StandViewSet,
-    StandAbilityViewSet, HamonAbilityViewSet, SpinAbilityViewSet,
-    TraumaViewSet, CharacterHistoryViewSet, CrewHistoryViewSet,
+    HeritageViewSet,
+    ViceViewSet,
+    AbilityViewSet,
+    StandViewSet,
+    StandAbilityViewSet,
+    HamonAbilityViewSet,
+    SpinAbilityViewSet,
+    TraumaViewSet,
+    CharacterHistoryViewSet,
+    CrewHistoryViewSet,
     ExperienceTrackerViewSet,
 )
 from .utility_views import (
-    global_search, get_available_playbook_abilities,
-    api_documentation, home, SpendCoinAPIView, site_stats,
+    global_search,
+    get_available_playbook_abilities,
+    api_documentation,
+    home,
+    SpendCoinAPIView,
+    site_stats,
 )
 
 __all__ = [
-    'CharacterViewSet', 'CampaignViewSet', 'CampaignInvitationViewSet', 'ShowcasedNPCViewSet',
-    'FactionViewSet', 'EquipmentItemViewSet', 'NPCViewSet', 'CrewViewSet',
-    'SessionViewSet', 'SessionEventViewSet', 'RollViewSet', 'GroupActionViewSet', 'RegisterView', 'LoginView', 'CurrentUserView',
-    'UserProfileViewSet', 'ClaimViewSet', 'CrewSpecialAbilityViewSet',
-    'CrewPlaybookViewSet', 'CrewUpgradeViewSet', 'XPHistoryViewSet',
-    'StressHistoryViewSet', 'ChatMessageViewSet', 'ProgressClockViewSet', 'HeritageViewSet',
-    'ViceViewSet', 'AbilityViewSet', 'StandViewSet', 'StandAbilityViewSet',
-    'HamonAbilityViewSet', 'SpinAbilityViewSet', 'TraumaViewSet',
-    'CharacterHistoryViewSet', 'CrewHistoryViewSet', 'ExperienceTrackerViewSet',
-    'global_search', 'get_available_playbook_abilities', 'api_documentation',
-    'home', 'SpendCoinAPIView', 'site_stats',
-] 
+    "CharacterViewSet",
+    "CampaignViewSet",
+    "CampaignInvitationViewSet",
+    "ShowcasedNPCViewSet",
+    "FactionViewSet",
+    "EquipmentItemViewSet",
+    "NPCViewSet",
+    "CrewViewSet",
+    "SessionViewSet",
+    "SessionEventViewSet",
+    "RollViewSet",
+    "GroupActionViewSet",
+    "RegisterView",
+    "LoginView",
+    "CurrentUserView",
+    "UserProfileViewSet",
+    "ClaimViewSet",
+    "CrewSpecialAbilityViewSet",
+    "CrewPlaybookViewSet",
+    "CrewUpgradeViewSet",
+    "XPHistoryViewSet",
+    "StressHistoryViewSet",
+    "ChatMessageViewSet",
+    "ProgressClockViewSet",
+    "HeritageViewSet",
+    "ViceViewSet",
+    "AbilityViewSet",
+    "StandViewSet",
+    "StandAbilityViewSet",
+    "HamonAbilityViewSet",
+    "SpinAbilityViewSet",
+    "TraumaViewSet",
+    "CharacterHistoryViewSet",
+    "CrewHistoryViewSet",
+    "ExperienceTrackerViewSet",
+    "global_search",
+    "get_available_playbook_abilities",
+    "api_documentation",
+    "home",
+    "SpendCoinAPIView",
+    "site_stats",
+]

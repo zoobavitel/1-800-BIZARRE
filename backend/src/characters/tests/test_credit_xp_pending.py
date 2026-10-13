@@ -141,9 +141,7 @@ class CreditXpPendingTests(TestCase):
 
     def test_redeem_attribute_pending_grants_dot(self):
         credit_xp(self.character, "insight", 5)
-        alloc = apply_minor_advance(
-            self.character, xp_track="insight", action="hunt"
-        )
+        alloc = apply_minor_advance(self.character, xp_track="insight", action="hunt")
         self.character.refresh_from_db()
         self.assertEqual(int(self.character.action_dots.get("hunt") or 0), 1)
         self.assertTrue(alloc.metadata.get("from_pending"))

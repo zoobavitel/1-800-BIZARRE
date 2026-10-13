@@ -274,9 +274,7 @@ class RespecFoldTests(TestCase):
         from characters.models import SpinAbility
 
         foundation = SpinAbility.objects.filter(spin_type="FOUNDATION").first()
-        technique = (
-            SpinAbility.objects.exclude(spin_type="FOUNDATION").first()
-        )
+        technique = SpinAbility.objects.exclude(spin_type="FOUNDATION").first()
         if not foundation or not technique:
             self.skipTest("SpinAbility fixtures not loaded")
 
@@ -302,7 +300,9 @@ class RespecFoldTests(TestCase):
             xp_cost=10,
             payload_before={},
             payload_after={},
-            metadata={"picked": {"kind": "spin", "id": technique.id, "name": technique.name}},
+            metadata={
+                "picked": {"kind": "spin", "id": technique.id, "name": technique.name}
+            },
         )
         self.character.total_xp_spent = 10
         self.character.save(update_fields=["total_xp_spent"])

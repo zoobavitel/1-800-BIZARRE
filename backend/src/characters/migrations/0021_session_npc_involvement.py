@@ -6,13 +6,14 @@ from django.db import migrations, models
 
 def migrate_npcs_involved_to_through(apps, schema_editor):
     """Copy existing session-npc pairs from M2M table to SessionNPCInvolvement."""
-    SessionNPCInvolvement = apps.get_model('characters', 'SessionNPCInvolvement')
-    Session = apps.get_model('characters', 'Session')
+    SessionNPCInvolvement = apps.get_model("characters", "SessionNPCInvolvement")
+    Session = apps.get_model("characters", "Session")
     OldThrough = Session.npcs_involved.through
     for row in OldThrough.objects.all():
         SessionNPCInvolvement.objects.get_or_create(
-            session_id=row.session_id, npc_id=row.npc_id,
-            defaults={'show_clocks_to_players': False}
+            session_id=row.session_id,
+            npc_id=row.npc_id,
+            defaults={"show_clocks_to_players": False},
         )
 
 
@@ -22,32 +23,60 @@ def migrate_npcs_involved_to_through_reverse(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('characters', '0020_add_npc_abilities_clocks_armor'),
+        ("characters", "0020_add_npc_abilities_clocks_armor"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='SessionNPCInvolvement',
+            name="SessionNPCInvolvement",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('show_clocks_to_players', models.BooleanField(default=False)),
-                ('npc', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='session_involvements', to='characters.npc')),
-                ('session', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='npc_involvements', to='characters.session')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("show_clocks_to_players", models.BooleanField(default=False)),
+                (
+                    "npc",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="session_involvements",
+                        to="characters.npc",
+                    ),
+                ),
+                (
+                    "session",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="npc_involvements",
+                        to="characters.session",
+                    ),
+                ),
             ],
             options={
-                'unique_together': {('session', 'npc')},
+                "unique_together": {("session", "npc")},
             },
         ),
-        migrations.RunPython(migrate_npcs_involved_to_through, migrate_npcs_involved_to_through_reverse),
+        migrations.RunPython(
+            migrate_npcs_involved_to_through, migrate_npcs_involved_to_through_reverse
+        ),
         migrations.RemoveField(
-            model_name='session',
-            name='npcs_involved',
+            model_name="session",
+            name="npcs_involved",
         ),
         migrations.AddField(
-            model_name='session',
-            name='npcs_involved',
-            field=models.ManyToManyField(blank=True, related_name='sessions_involved', through='characters.SessionNPCInvolvement', to='characters.npc'),
+            model_name="session",
+            name="npcs_involved",
+            field=models.ManyToManyField(
+                blank=True,
+                related_name="sessions_involved",
+                through="characters.SessionNPCInvolvement",
+                to="characters.npc",
+            ),
         ),
     ]

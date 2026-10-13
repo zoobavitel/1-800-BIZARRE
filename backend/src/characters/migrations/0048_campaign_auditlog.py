@@ -6,25 +6,48 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('characters', '0047_npc_inventory_notes'),
+        ("characters", "0047_npc_inventory_notes"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='CampaignAuditLog',
+            name="CampaignAuditLog",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('timestamp', models.DateTimeField(auto_now_add=True)),
-                ('action', models.CharField(max_length=32)),
-                ('payload', models.JSONField(blank=True, default=dict)),
-                ('actor', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='campaign_audit_actions', to=settings.AUTH_USER_MODEL)),
-                ('campaign', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='audit_logs', to='characters.campaign')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("timestamp", models.DateTimeField(auto_now_add=True)),
+                ("action", models.CharField(max_length=32)),
+                ("payload", models.JSONField(blank=True, default=dict)),
+                (
+                    "actor",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="campaign_audit_actions",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
+                (
+                    "campaign",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="audit_logs",
+                        to="characters.campaign",
+                    ),
+                ),
             ],
             options={
-                'ordering': ['-timestamp'],
+                "ordering": ["-timestamp"],
             },
         ),
     ]

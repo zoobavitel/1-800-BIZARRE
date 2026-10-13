@@ -4,15 +4,19 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('characters', '0113_sync_hamon_abilities_srd_dev'),
+        ("characters", "0113_sync_hamon_abilities_srd_dev"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='campaign',
-            name='image',
-            field=models.FileField(blank=True, help_text='Optional emblem or photo for this campaign.', null=True, upload_to='campaign_images/'),
+            model_name="campaign",
+            name="image",
+            field=models.FileField(
+                blank=True,
+                help_text="Optional emblem or photo for this campaign.",
+                null=True,
+                upload_to="campaign_images/",
+            ),
         ),
     ]

@@ -118,7 +118,9 @@ class RippleBreathingFreePushTests(TestCase):
         self.session.ripple_breathing_free_push_claimed_by_character = {
             str(self.actor.id): True
         }
-        self.session.save(update_fields=["ripple_breathing_free_push_claimed_by_character"])
+        self.session.save(
+            update_fields=["ripple_breathing_free_push_claimed_by_character"]
+        )
 
         r = self.client.post(
             self.roll_url,

@@ -411,9 +411,7 @@ class PlanWalkTests(TestCase):
             1,
         )
 
-        apply_minor_advance(
-            self.character, xp_track="insight", action="study"
-        )
+        apply_minor_advance(self.character, xp_track="insight", action="study")
         self.character.refresh_from_db()
         self.assertEqual(self.character.action_dots.get("study"), 2)
         self.assertEqual(self.character.action_dots.get("hunt"), 1)

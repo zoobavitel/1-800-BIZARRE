@@ -4,8 +4,15 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 
 from ..models import (
-    Claim, CrewSpecialAbility, CrewPlaybook, CrewUpgrade,
-    Character, XPHistory, StressHistory, ChatMessage, ProgressClock,
+    Claim,
+    CrewSpecialAbility,
+    CrewPlaybook,
+    CrewUpgrade,
+    Character,
+    XPHistory,
+    StressHistory,
+    ChatMessage,
+    ProgressClock,
     CampaignAuditLog,
 )
 
@@ -32,10 +39,17 @@ def _log_progress_clock_audit(clock, user, action, extra=None):
         action=action,
         payload=payload,
     )
+
+
 from ..serializers import (
-    ClaimSerializer, CrewSpecialAbilitySerializer, CrewPlaybookSerializer,
-    CrewUpgradeSerializer, XPHistorySerializer, StressHistorySerializer,
-    ChatMessageSerializer, ProgressClockSerializer
+    ClaimSerializer,
+    CrewSpecialAbilitySerializer,
+    CrewPlaybookSerializer,
+    CrewUpgradeSerializer,
+    XPHistorySerializer,
+    StressHistorySerializer,
+    ChatMessageSerializer,
+    ProgressClockSerializer,
 )
 
 
@@ -65,19 +79,27 @@ class CrewUpgradeViewSet(viewsets.ModelViewSet):
 
 class XPHistoryViewSet(viewsets.ReadOnlyModelViewSet):
     """XP ledger entries; players see own PC, GM sees campaign PCs when ?character= is set."""
+
     permission_classes = [IsAuthenticated]
     queryset = XPHistory.objects.all()
     serializer_class = XPHistorySerializer
 
     def get_queryset(self):
-        qs = XPHistory.objects.all().select_related('character', 'session', 'character__campaign')
+        qs = XPHistory.objects.all().select_related(
+            "character", "session", "character__campaign"
+        )
         user = self.request.user
         if user.is_staff:
             return qs
-        char_id = self.request.query_params.get('character')
+        char_id = self.request.query_params.get("character")
         if char_id:
-            char = Character.objects.filter(pk=char_id).select_related('campaign').first()
-            if char and (char.user_id == user.id or (char.campaign_id and char.campaign.gm_id == user.id)):
+            char = (
+                Character.objects.filter(pk=char_id).select_related("campaign").first()
+            )
+            if char and (
+                char.user_id == user.id
+                or (char.campaign_id and char.campaign.gm_id == user.id)
+            ):
                 return qs.filter(character_id=char_id)
             return XPHistory.objects.none()
         return qs.filter(character__user=user)
@@ -97,18 +119,20 @@ class ChatMessageViewSet(viewsets.ModelViewSet):
 
 class ProgressClockViewSet(viewsets.ModelViewSet):
     """CRUD for progress clocks. GM and players can create; visibility filter for non-GM."""
+
     permission_classes = [IsAuthenticated]
     serializer_class = ProgressClockSerializer
 
     def get_queryset(self):
         from django.db.models import Q
         from ..models import Campaign
+
         qs = ProgressClock.objects.all()
-        campaign_id = self.request.query_params.get('campaign')
-        session_id = self.request.query_params.get('session')
-        completed = self.request.query_params.get('completed')
-        include_dismissed = self.request.query_params.get('include_dismissed')
-        completed_session_id = self.request.query_params.get('completed_session')
+        campaign_id = self.request.query_params.get("campaign")
+        session_id = self.request.query_params.get("session")
+        completed = self.request.query_params.get("completed")
+        include_dismissed = self.request.query_params.get("include_dismissed")
+        completed_session_id = self.request.query_params.get("completed_session")
         if campaign_id:
             qs = qs.filter(campaign_id=campaign_id)
         if session_id:
@@ -128,17 +152,16 @@ class ProgressClockViewSet(viewsets.ModelViewSet):
             "dismiss",
             "undismiss",
         }
-        if (
-            getattr(self, "action", None) not in detail_actions
-            and include_dismissed not in ("1", "true", "True")
-        ):
+        if getattr(
+            self, "action", None
+        ) not in detail_actions and include_dismissed not in ("1", "true", "True"):
             qs = qs.filter(dismissed_at__isnull=True)
         user = self.request.user
         if not user.is_staff:
             qs = qs.filter(
-                models.Q(campaign__gm=user) |
-                models.Q(campaign__characters__user=user) |
-                models.Q(campaign__players=user)
+                models.Q(campaign__gm=user)
+                | models.Q(campaign__characters__user=user)
+                | models.Q(campaign__players=user)
             ).distinct()
             if campaign_id:
                 try:
@@ -151,9 +174,15 @@ class ProgressClockViewSet(viewsets.ModelViewSet):
                                 | models.Q(crew__members__user=user)
                                 | models.Q(created_by=user)
                             )
-                        showcased_npc_ids = list(campaign.showcased_npcs.values_list('npc_id', flat=True))
-                        campaign_player_ids = list(campaign.players.values_list('id', flat=True)) + list(
-                            campaign.characters.values_list('user_id', flat=True).distinct()
+                        showcased_npc_ids = list(
+                            campaign.showcased_npcs.values_list("npc_id", flat=True)
+                        )
+                        campaign_player_ids = list(
+                            campaign.players.values_list("id", flat=True)
+                        ) + list(
+                            campaign.characters.values_list(
+                                "user_id", flat=True
+                            ).distinct()
                         )
                         active_sid = getattr(campaign, "active_session_id", None)
                         gm_public_session = Q(session__isnull=True)
@@ -171,10 +200,16 @@ class ProgressClockViewSet(viewsets.ModelViewSet):
                         qs = qs.filter(
                             Q(
                                 Q(created_by__isnull=True, visible_to_players=True)
-                                & (Q(npc__isnull=True) | Q(npc_id__in=showcased_npc_ids))
+                                & (
+                                    Q(npc__isnull=True)
+                                    | Q(npc_id__in=showcased_npc_ids)
+                                )
                             )
                             | Q(created_by_id=user.id)
-                            | Q(visible_to_party=True, created_by_id__in=campaign_player_ids)
+                            | Q(
+                                visible_to_party=True,
+                                created_by_id__in=campaign_player_ids,
+                            )
                             | (
                                 Q(created_by_id=campaign.gm_id, visible_to_players=True)
                                 & gm_public_session
@@ -202,7 +237,9 @@ class ProgressClockViewSet(viewsets.ModelViewSet):
                 or campaign.characters.filter(user_id=user.id).exists()
             )
             if not in_campaign:
-                raise PermissionDenied("Only campaign members can create progress clocks.")
+                raise PermissionDenied(
+                    "Only campaign members can create progress clocks."
+                )
             clock = serializer.save(created_by=user)
         else:
             clock = serializer.save(created_by=user)
@@ -236,12 +273,11 @@ class ProgressClockViewSet(viewsets.ModelViewSet):
             ):
                 pass
             elif obj.created_by_id == user.id:
-                if "visible_to_players" in data and data.get(
-                    "visible_to_players"
-                ) != obj.visible_to_players:
-                    raise PermissionDenied(
-                        "Only the GM can change visible_to_players."
-                    )
+                if (
+                    "visible_to_players" in data
+                    and data.get("visible_to_players") != obj.visible_to_players
+                ):
+                    raise PermissionDenied("Only the GM can change visible_to_players.")
             else:
                 raise PermissionDenied("Only the creator or GM can update this clock.")
 
@@ -254,7 +290,9 @@ class ProgressClockViewSet(viewsets.ModelViewSet):
             "completed": obj.completed,
         }
         serializer.save()
-        _log_progress_clock_audit(serializer.instance, user, "clock_updated", {"before": before})
+        _log_progress_clock_audit(
+            serializer.instance, user, "clock_updated", {"before": before}
+        )
 
     def perform_destroy(self, instance):
         from rest_framework.exceptions import PermissionDenied

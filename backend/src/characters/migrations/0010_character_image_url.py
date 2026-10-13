@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('characters', '0009_campaign_invitation_and_active'),
+        ("characters", "0009_campaign_invitation_and_active"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='character',
-            name='image_url',
-            field=models.URLField(blank=True, default='', max_length=500),
+            model_name="character",
+            name="image_url",
+            field=models.URLField(blank=True, default="", max_length=500),
         ),
     ]

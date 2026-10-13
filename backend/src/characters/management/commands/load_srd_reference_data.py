@@ -13,7 +13,9 @@ from django.core.management.base import BaseCommand
 
 from characters.models import Ability, Benefit, Detriment
 from characters.services.equipment_template_sync import sync_srd_equipment_templates
-from characters.services.playbook_ability_catalog_sync import sync_playbook_ability_catalog
+from characters.services.playbook_ability_catalog_sync import (
+    sync_playbook_ability_catalog,
+)
 
 
 class Command(BaseCommand):
@@ -45,7 +47,9 @@ class Command(BaseCommand):
             call_command("loaddata", "standard_abilities", verbosity=1)
             self.stdout.write(self.style.SUCCESS("Loaded fixture: standard_abilities"))
         else:
-            self.stdout.write("Skipping standard_abilities (Ability rows already exist).")
+            self.stdout.write(
+                "Skipping standard_abilities (Ability rows already exist)."
+            )
 
         stats = sync_playbook_ability_catalog()
         self.stdout.write(

@@ -6,7 +6,6 @@ import django.core.validators
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("characters", "0098_sync_spin_hamon_abilities_srd"),
     ]

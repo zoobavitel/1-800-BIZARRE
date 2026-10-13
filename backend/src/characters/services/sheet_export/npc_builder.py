@@ -19,7 +19,6 @@ NPC_STAND_KEY_MAP = {
 }
 
 
-
 def _npc_stand_grade(npc: NPC, stat: str) -> str:
     stats = npc.stand_coin_stats or {}
     keys = NPC_STAND_KEY_MAP.get(stat, (stat.upper(), stat))

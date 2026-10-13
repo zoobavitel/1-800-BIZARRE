@@ -90,9 +90,7 @@ class PlaybookXpArchetypePersistTests(TestCase):
         }
         r = self.client.put(url, payload, format="json")
         self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
-        self.assertEqual(
-            r.data.get("playbook_xp_archetypes"), ["PHENOMENA", "SHARED"]
-        )
+        self.assertEqual(r.data.get("playbook_xp_archetypes"), ["PHENOMENA", "SHARED"])
         self.char.refresh_from_db()
         self.assertEqual(self.char.playbook_xp_archetypes, ["PHENOMENA", "SHARED"])
         stand = Stand.objects.get(character=self.char)

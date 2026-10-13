@@ -131,7 +131,6 @@ def noop(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("characters", "0093_merge_20260820_0720"),
     ]

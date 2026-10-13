@@ -4,15 +4,17 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('characters', '0125_character_npc_standing'),
+        ("characters", "0125_character_npc_standing"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='npc',
-            name='visible_to_players',
-            field=models.BooleanField(default=True, help_text='When True, players may see this NPC on standing/roster views even if its faction is hidden. Faction membership nesting still requires the faction to be revealed with players_see_npcs.'),
+            model_name="npc",
+            name="visible_to_players",
+            field=models.BooleanField(
+                default=True,
+                help_text="When True, players may see this NPC on standing/roster views even if its faction is hidden. Faction membership nesting still requires the faction to be revealed with players_see_npcs.",
+            ),
         ),
     ]

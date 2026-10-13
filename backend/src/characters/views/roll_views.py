@@ -22,14 +22,15 @@ from ..serializers import RollSerializer
 
 class RollViewSet(viewsets.ModelViewSet):
     """List/retrieve rolls; GM can PATCH position/effect. Filter by campaign or session."""
+
     permission_classes = [IsAuthenticated]
     serializer_class = RollSerializer
-    http_method_names = ['get', 'patch', 'post', 'delete', 'head', 'options']
+    http_method_names = ["get", "patch", "post", "delete", "head", "options"]
 
     def get_queryset(self):
-        xp_entries_qs = ExperienceTracker.objects.select_related(
-            "character"
-        ).order_by("pk")
+        xp_entries_qs = ExperienceTracker.objects.select_related("character").order_by(
+            "pk"
+        )
         qs = (
             Roll.objects.all()
             .select_related(
@@ -41,10 +42,10 @@ class RollViewSet(viewsets.ModelViewSet):
             )
             .prefetch_related(Prefetch("xp_entries", queryset=xp_entries_qs))
         )
-        campaign_id = self.request.query_params.get('campaign')
-        session_id = self.request.query_params.get('session')
-        character_id = self.request.query_params.get('character')
-        group_action_id = self.request.query_params.get('group_action')
+        campaign_id = self.request.query_params.get("campaign")
+        session_id = self.request.query_params.get("session")
+        character_id = self.request.query_params.get("character")
+        group_action_id = self.request.query_params.get("group_action")
         if campaign_id:
             qs = qs.filter(session__campaign_id=campaign_id)
         if session_id:
@@ -56,11 +57,11 @@ class RollViewSet(viewsets.ModelViewSet):
         user = self.request.user
         if not user.is_staff:
             qs = qs.filter(
-                models.Q(session__campaign__gm=user) |
-                models.Q(session__campaign__characters__user=user) |
-                models.Q(session__campaign__players=user)
+                models.Q(session__campaign__gm=user)
+                | models.Q(session__campaign__characters__user=user)
+                | models.Q(session__campaign__players=user)
             ).distinct()
-        return qs.order_by('-timestamp')
+        return qs.order_by("-timestamp")
 
     def partial_update(self, request, *args, **kwargs):
         """GM-only: update roll fields (position/effect/fortune + manual corrections)."""
@@ -68,42 +69,50 @@ class RollViewSet(viewsets.ModelViewSet):
         campaign = roll.session.campaign
         if campaign.gm_id != request.user.id and not request.user.is_staff:
             return Response(
-                {'error': 'Only the GM can edit roll records.'},
-                status=status.HTTP_403_FORBIDDEN
+                {"error": "Only the GM can edit roll records."},
+                status=status.HTTP_403_FORBIDDEN,
             )
-        position = request.data.get('position')
-        effect = request.data.get('effect')
+        position = request.data.get("position")
+        effect = request.data.get("effect")
         updates = {}
-        if position and position in ('controlled', 'risky', 'desperate'):
-            updates['position'] = position
+        if position and position in ("controlled", "risky", "desperate"):
+            updates["position"] = position
         if effect:
             ne = normalize_effect(effect)
-            if ne in ('limited', 'standard', 'extreme'):
-                updates['effect'] = ne
-        if 'fortune_reveal_outcome' in request.data:
-            updates['fortune_reveal_outcome'] = bool(request.data.get('fortune_reveal_outcome'))
-        if 'fortune_public_label' in request.data:
-            updates['fortune_public_label'] = str(request.data.get('fortune_public_label') or '').strip()[:120]
-        if 'action_name' in request.data:
-            updates['action_name'] = str(request.data.get('action_name') or '').strip()[:50]
-        if 'description' in request.data:
-            updates['description'] = str(request.data.get('description') or '').strip()
-        if 'goal_label' in request.data:
-            updates['goal_label'] = str(request.data.get('goal_label') or '').strip()[:300]
-        if 'dice_pool' in request.data:
+            if ne in ("limited", "standard", "extreme"):
+                updates["effect"] = ne
+        if "fortune_reveal_outcome" in request.data:
+            updates["fortune_reveal_outcome"] = bool(
+                request.data.get("fortune_reveal_outcome")
+            )
+        if "fortune_public_label" in request.data:
+            updates["fortune_public_label"] = str(
+                request.data.get("fortune_public_label") or ""
+            ).strip()[:120]
+        if "action_name" in request.data:
+            updates["action_name"] = str(request.data.get("action_name") or "").strip()[
+                :50
+            ]
+        if "description" in request.data:
+            updates["description"] = str(request.data.get("description") or "").strip()
+        if "goal_label" in request.data:
+            updates["goal_label"] = str(request.data.get("goal_label") or "").strip()[
+                :300
+            ]
+        if "dice_pool" in request.data:
             try:
-                updates['dice_pool'] = max(0, int(request.data.get('dice_pool')))
+                updates["dice_pool"] = max(0, int(request.data.get("dice_pool")))
             except (TypeError, ValueError):
                 return Response(
-                    {'error': 'dice_pool must be an integer.'},
-                    status=status.HTTP_400_BAD_REQUEST
+                    {"error": "dice_pool must be an integer."},
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
-        if 'results' in request.data:
-            raw_results = request.data.get('results')
+        if "results" in request.data:
+            raw_results = request.data.get("results")
             if not isinstance(raw_results, list):
                 return Response(
-                    {'error': 'results must be a list of integers 1-6.'},
-                    status=status.HTTP_400_BAD_REQUEST
+                    {"error": "results must be a list of integers 1-6."},
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
             parsed = []
             for n in raw_results:
@@ -111,29 +120,37 @@ class RollViewSet(viewsets.ModelViewSet):
                     v = int(n)
                 except (TypeError, ValueError):
                     return Response(
-                        {'error': 'results must be a list of integers 1-6.'},
-                        status=status.HTTP_400_BAD_REQUEST
+                        {"error": "results must be a list of integers 1-6."},
+                        status=status.HTTP_400_BAD_REQUEST,
                     )
                 if v < 1 or v > 6:
                     return Response(
-                        {'error': 'results values must be between 1 and 6.'},
-                        status=status.HTTP_400_BAD_REQUEST
+                        {"error": "results values must be between 1 and 6."},
+                        status=status.HTTP_400_BAD_REQUEST,
                     )
                 parsed.append(v)
-            updates['results'] = parsed
-            if 'dice_pool' not in request.data:
-                updates['dice_pool'] = len(parsed)
-            if 'outcome' not in request.data:
-                updates['outcome'] = outcome_from_dice_results(parsed)
-        if 'outcome' in request.data:
-            raw_outcome = str(request.data.get('outcome') or '').strip().upper()
-            allowed = {'CRITICAL_SUCCESS', 'FULL_SUCCESS', 'PARTIAL_SUCCESS', 'FAILURE', 'BOTCH'}
+            updates["results"] = parsed
+            if "dice_pool" not in request.data:
+                updates["dice_pool"] = len(parsed)
+            if "outcome" not in request.data:
+                updates["outcome"] = outcome_from_dice_results(parsed)
+        if "outcome" in request.data:
+            raw_outcome = str(request.data.get("outcome") or "").strip().upper()
+            allowed = {
+                "CRITICAL_SUCCESS",
+                "FULL_SUCCESS",
+                "PARTIAL_SUCCESS",
+                "FAILURE",
+                "BOTCH",
+            }
             if raw_outcome not in allowed:
                 return Response(
-                    {'error': 'outcome must be one of CRITICAL_SUCCESS, FULL_SUCCESS, PARTIAL_SUCCESS, FAILURE, BOTCH.'},
-                    status=status.HTTP_400_BAD_REQUEST
+                    {
+                        "error": "outcome must be one of CRITICAL_SUCCESS, FULL_SUCCESS, PARTIAL_SUCCESS, FAILURE, BOTCH."
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
-            updates['outcome'] = raw_outcome
+            updates["outcome"] = raw_outcome
         became_desperate = (
             updates.get("position") == "desperate"
             and (roll.position or "").lower() != "desperate"
@@ -163,88 +180,100 @@ class RollViewSet(viewsets.ModelViewSet):
                 roll.character.refresh_from_db()
         return Response(RollSerializer(roll).data)
 
-    @action(detail=True, methods=['post'], url_path='grant-xp')
+    @action(detail=True, methods=["post"], url_path="grant-xp")
     def grant_xp(self, request, pk=None):
         """GM-only: Grant desperate-action XP (+1, or +2 for 0-dot per SRD)."""
         roll = self.get_object()
         campaign = roll.session.campaign
         if campaign.gm_id != request.user.id and not request.user.is_staff:
             return Response(
-                {'error': 'Only the GM can grant XP from rolls.'},
-                status=status.HTTP_403_FORBIDDEN
+                {"error": "Only the GM can grant XP from rolls."},
+                status=status.HTTP_403_FORBIDDEN,
             )
-        if roll.position != 'desperate' or roll.roll_type != 'ACTION':
+        if roll.position != "desperate" or roll.roll_type != "ACTION":
             return Response(
-                {'error': 'Only desperate action rolls can award XP.'},
-                status=status.HTTP_400_BAD_REQUEST
+                {"error": "Only desperate action rolls can award XP."},
+                status=status.HTTP_400_BAD_REQUEST,
             )
         character = roll.character
         if innate_stand_stat_from_roll(roll.action_name):
-            if ExperienceTracker.objects.filter(roll=roll, trigger='INNATE').exists():
+            if ExperienceTracker.objects.filter(roll=roll, trigger="INNATE").exists():
                 return Response(
-                    {'error': 'Innate stand-dice XP already awarded for this roll.'},
-                    status=status.HTTP_400_BAD_REQUEST
+                    {"error": "Innate stand-dice XP already awarded for this roll."},
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
             xp_awarded, track = award_innate_stand_dice_xp(
                 character, roll.session, roll, roll.action_name, request.user
             )
             if not xp_awarded or not track:
                 return Response(
-                    {'error': f'Cannot award innate XP for "{roll.action_name}".'},
-                    status=status.HTTP_400_BAD_REQUEST
+                    {"error": f'Cannot award innate XP for "{roll.action_name}".'},
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
             xp_clocks = character.xp_clocks or {}
-            return Response({
-                'success': True,
-                'track': track,
-                'amount': xp_awarded,
-                'new_total': xp_clocks.get(track, 0),
-            })
-        if ExperienceTracker.objects.filter(roll=roll, trigger='DESPERATE_ROLL').exists():
             return Response(
-                {'error': 'Desperate-roll XP already awarded for this roll.'},
-                status=status.HTTP_400_BAD_REQUEST
+                {
+                    "success": True,
+                    "track": track,
+                    "amount": xp_awarded,
+                    "new_total": xp_clocks.get(track, 0),
+                }
+            )
+        if ExperienceTracker.objects.filter(
+            roll=roll, trigger="DESPERATE_ROLL"
+        ).exists():
+            return Response(
+                {"error": "Desperate-roll XP already awarded for this roll."},
+                status=status.HTTP_400_BAD_REQUEST,
             )
         xp_awarded, track = award_desperate_action_xp(
             character, roll.session, roll, roll.action_name, request.user
         )
         if not xp_awarded or not track:
             return Response(
-                {'error': f'Cannot map action "{roll.action_name}" to an attribute or track is capped.'},
-                status=status.HTTP_400_BAD_REQUEST
+                {
+                    "error": f'Cannot map action "{roll.action_name}" to an attribute or track is capped.'
+                },
+                status=status.HTTP_400_BAD_REQUEST,
             )
         xp_clocks = character.xp_clocks or {}
-        return Response({
-            'success': True,
-            'track': track,
-            'amount': xp_awarded,
-            'new_total': xp_clocks.get(track, 0),
-        })
+        return Response(
+            {
+                "success": True,
+                "track": track,
+                "amount": xp_awarded,
+                "new_total": xp_clocks.get(track, 0),
+            }
+        )
 
     def create(self, request, *args, **kwargs):
         """Create a manual roll (offline dice) for a character in a session.
 
         Allowed for campaign GM/staff, or the owner of the target character.
         """
-        session_id = request.data.get('session')
-        character_id = request.data.get('character')
+        session_id = request.data.get("session")
+        character_id = request.data.get("character")
         if not session_id or not character_id:
             return Response(
-                {'error': 'character and session are required.'},
+                {"error": "character and session are required."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         session = get_object_or_404(Session, pk=session_id)
         character = get_object_or_404(Character, pk=character_id)
         if character.campaign_id != session.campaign_id:
             return Response(
-                {'error': 'Character must belong to session campaign.'},
+                {"error": "Character must belong to session campaign."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        is_gm_or_staff = session.campaign.gm_id == request.user.id or request.user.is_staff
+        is_gm_or_staff = (
+            session.campaign.gm_id == request.user.id or request.user.is_staff
+        )
         is_character_owner = character.user_id == request.user.id
         if not is_gm_or_staff and not is_character_owner:
             return Response(
-                {'error': "Only the GM/staff or this character's owner can create manual rolls."},
+                {
+                    "error": "Only the GM/staff or this character's owner can create manual rolls."
+                },
                 status=status.HTTP_403_FORBIDDEN,
             )
         return super().create(request, *args, **kwargs)
@@ -255,7 +284,7 @@ class RollViewSet(viewsets.ModelViewSet):
         campaign = roll.session.campaign
         if campaign.gm_id != request.user.id and not request.user.is_staff:
             return Response(
-                {'error': 'Only the GM can remove roll records.'},
+                {"error": "Only the GM can remove roll records."},
                 status=status.HTTP_403_FORBIDDEN,
             )
         self.perform_destroy(roll)
@@ -266,17 +295,19 @@ class RollViewSet(viewsets.ModelViewSet):
         results = roll.results or []
         if not roll.outcome and results:
             roll.outcome = outcome_from_dice_results(results)
-            roll.save(update_fields=['outcome'])
+            roll.save(update_fields=["outcome"])
         RollHistory.objects.get_or_create(
             roll=roll,
-            defaults={'campaign': roll.session.campaign},
+            defaults={"campaign": roll.session.campaign},
         )
         raw_hb = self.request.data.get("heritage_bonuses")
         if roll.roll_type == "ACTION":
-            award_heritage_expression_xp(
-                roll.character, roll.session, roll, raw_hb
-            )
-        if roll.position == 'desperate' and roll.roll_type == 'ACTION' and roll.action_name:
+            award_heritage_expression_xp(roll.character, roll.session, roll, raw_hb)
+        if (
+            roll.position == "desperate"
+            and roll.roll_type == "ACTION"
+            and roll.action_name
+        ):
             award_desperate_action_xp(
                 roll.character, roll.session, roll, roll.action_name, self.request.user
             )

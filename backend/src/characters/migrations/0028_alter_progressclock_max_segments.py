@@ -5,15 +5,21 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('characters', '0027_group_action'),
+        ("characters", "0027_group_action"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='progressclock',
-            name='max_segments',
-            field=models.IntegerField(default=4, help_text='Total number of segments (1-12)', validators=[django.core.validators.MinValueValidator(1), django.core.validators.MaxValueValidator(12)]),
+            model_name="progressclock",
+            name="max_segments",
+            field=models.IntegerField(
+                default=4,
+                help_text="Total number of segments (1-12)",
+                validators=[
+                    django.core.validators.MinValueValidator(1),
+                    django.core.validators.MaxValueValidator(12),
+                ],
+            ),
         ),
     ]

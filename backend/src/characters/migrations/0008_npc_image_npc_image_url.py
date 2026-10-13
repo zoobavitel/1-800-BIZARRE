@@ -4,20 +4,19 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('characters', '0007_srd_update_playbook_overhaul'),
+        ("characters", "0007_srd_update_playbook_overhaul"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='npc',
-            name='image',
-            field=models.ImageField(blank=True, null=True, upload_to='npc_images/'),
+            model_name="npc",
+            name="image",
+            field=models.ImageField(blank=True, null=True, upload_to="npc_images/"),
         ),
         migrations.AddField(
-            model_name='npc',
-            name='image_url',
-            field=models.URLField(blank=True, default='', max_length=500),
+            model_name="npc",
+            name="image_url",
+            field=models.URLField(blank=True, default="", max_length=500),
         ),
     ]

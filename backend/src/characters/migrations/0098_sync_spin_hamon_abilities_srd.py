@@ -66,7 +66,6 @@ def sync_spin_hamon_abilities_from_fixtures(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("characters", "0097_level_up_playbook_ability_allocation"),
     ]

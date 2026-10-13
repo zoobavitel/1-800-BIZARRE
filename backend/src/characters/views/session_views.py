@@ -9,14 +9,18 @@ from rest_framework.response import Response
 from rest_framework.decorators import action
 
 from ..models import Session, SessionEvent, Roll, Character
-from ..serializers import SessionSerializer, SessionEventSerializer, SessionRecordsSerializer
+from ..serializers import (
+    SessionSerializer,
+    SessionEventSerializer,
+    SessionRecordsSerializer,
+)
 
 logger = logging.getLogger(__name__)
 
 
 class IsCampaignGMOrReadOnly(permissions.BasePermission):
     """Custom permission to allow campaign GMs to edit sessions."""
-    
+
     def has_permission(self, request, view):
         # Allow read-only access for any authenticated user
         if request.method in permissions.SAFE_METHODS:
@@ -45,7 +49,7 @@ class SessionViewSet(viewsets.ModelViewSet):
     serializer_class = SessionSerializer
 
     def get_serializer_class(self):
-        if self.action == 'retrieve':
+        if self.action == "retrieve":
             return SessionRecordsSerializer
         return SessionSerializer
 
@@ -55,11 +59,15 @@ class SessionViewSet(viewsets.ModelViewSet):
         rolls_qs = Roll.objects.select_related("rolled_by", "character").order_by(
             "-timestamp"
         )
-        base = Session.objects.all() if user.is_staff else Session.objects.filter(
-            models.Q(campaign__gm=user)
-            | models.Q(campaign__characters__user=user)
-            | models.Q(campaign__players=user)
-        ).distinct()
+        base = (
+            Session.objects.all()
+            if user.is_staff
+            else Session.objects.filter(
+                models.Q(campaign__gm=user)
+                | models.Q(campaign__characters__user=user)
+                | models.Q(campaign__players=user)
+            ).distinct()
+        )
 
         # Narrow by query params so a campaign-scoped list page doesn't
         # accidentally show or affect sessions from other campaigns the
@@ -174,52 +182,46 @@ class SessionViewSet(viewsets.ModelViewSet):
             credit_crew_xp_triggers_for_session(instance, self.request.user)
         except Exception:
             logger.exception(
-                "Crew XP trigger credit failed before session DELETE "
-                "(session=%s)",
+                "Crew XP trigger credit failed before session DELETE " "(session=%s)",
                 instance.id,
             )
         super().perform_destroy(instance)
 
-    @action(detail=True, methods=['post'], url_path='propose-score')
+    @action(detail=True, methods=["post"], url_path="propose-score")
     def propose_score(self, request, pk=None):
         """Propose a score for the session."""
         session = self.get_object()
         score_data = request.data
-        
+
         # Validate score data
-        required_fields = ['title', 'description']
+        required_fields = ["title", "description"]
         for field in required_fields:
             if field not in score_data:
                 return Response(
-                    {'error': f'Field {field} is required'}, 
-                    status=status.HTTP_400_BAD_REQUEST
+                    {"error": f"Field {field} is required"},
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
-        
-        # Create score proposal (simplified - you'd implement actual score mechanics)
-        return Response({
-            'message': 'Score proposed successfully',
-            'score': score_data
-        })
 
-    @action(detail=True, methods=['post'], url_path='vote-for-score')
+        # Create score proposal (simplified - you'd implement actual score mechanics)
+        return Response({"message": "Score proposed successfully", "score": score_data})
+
+    @action(detail=True, methods=["post"], url_path="vote-for-score")
     def vote_for_score(self, request, pk=None):
         """Vote for a proposed score."""
         session = self.get_object()
-        score_id = request.data.get('score_id')
-        vote = request.data.get('vote')  # 'yes' or 'no'
-        
-        if not score_id or vote not in ['yes', 'no']:
+        score_id = request.data.get("score_id")
+        vote = request.data.get("vote")  # 'yes' or 'no'
+
+        if not score_id or vote not in ["yes", "no"]:
             return Response(
-                {'error': 'Score ID and vote (yes/no) are required'}, 
-                status=status.HTTP_400_BAD_REQUEST
+                {"error": "Score ID and vote (yes/no) are required"},
+                status=status.HTTP_400_BAD_REQUEST,
             )
-        
+
         # Process vote (simplified - you'd implement actual voting mechanics)
-        return Response({
-            'message': f'Vote recorded: {vote}',
-            'score_id': score_id,
-            'vote': vote
-        })
+        return Response(
+            {"message": f"Vote recorded: {vote}", "score_id": score_id, "vote": vote}
+        )
 
 
 class SessionEventViewSet(viewsets.ModelViewSet):
@@ -234,8 +236,8 @@ class SessionEventViewSet(viewsets.ModelViewSet):
             return SessionEvent.objects.all()
         # Return events from sessions where user is GM or a member
         return SessionEvent.objects.filter(
-            models.Q(session__campaign__gm=user) | 
-            models.Q(session__campaign__characters__user=user)
+            models.Q(session__campaign__gm=user)
+            | models.Q(session__campaign__characters__user=user)
         ).distinct()
 
     def perform_create(self, serializer):

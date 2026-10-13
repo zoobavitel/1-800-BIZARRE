@@ -18,24 +18,22 @@ class SessionListCampaignFilterTests(TestCase):
         self.gm = User.objects.create_user(username="gm_filter", password="pw")
         self.campaign_a = Campaign.objects.create(name="Camp A", gm=self.gm)
         self.campaign_b = Campaign.objects.create(name="Camp B", gm=self.gm)
-        self.session_a1 = Session.objects.create(
-            campaign=self.campaign_a, name="A-1"
-        )
-        self.session_a2 = Session.objects.create(
-            campaign=self.campaign_a, name="A-2"
-        )
-        self.session_b1 = Session.objects.create(
-            campaign=self.campaign_b, name="B-1"
-        )
+        self.session_a1 = Session.objects.create(campaign=self.campaign_a, name="A-1")
+        self.session_a2 = Session.objects.create(campaign=self.campaign_a, name="A-2")
+        self.session_b1 = Session.objects.create(campaign=self.campaign_b, name="B-1")
 
     def _ids(self, response):
         data = response.data
-        results = data["results"] if isinstance(data, dict) and "results" in data else data
+        results = (
+            data["results"] if isinstance(data, dict) and "results" in data else data
+        )
         return sorted(item["id"] for item in results)
 
     def _ids_in_order(self, response):
         data = response.data
-        results = data["results"] if isinstance(data, dict) and "results" in data else data
+        results = (
+            data["results"] if isinstance(data, dict) and "results" in data else data
+        )
         return [item["id"] for item in results]
 
     def test_list_filters_by_campaign(self):
@@ -58,9 +56,7 @@ class SessionListCampaignFilterTests(TestCase):
         self.assertEqual(res.status_code, 200, res.data)
         self.assertEqual(
             self._ids(res),
-            sorted(
-                [self.session_a1.id, self.session_a2.id, self.session_b1.id]
-            ),
+            sorted([self.session_a1.id, self.session_a2.id, self.session_b1.id]),
         )
 
     def test_list_returns_newest_first(self):

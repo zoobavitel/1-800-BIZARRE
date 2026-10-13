@@ -59,9 +59,7 @@ class MultipartJsonParser(parsers.MultiPartParser):
                         data[key] = value
                         continue
                     if isinstance(parsed, list):
-                        data.setlist(
-                            key, ["" if x is None else str(x) for x in parsed]
-                        )
+                        data.setlist(key, ["" if x is None else str(x) for x in parsed])
                     else:
                         data[key] = value
                 else:

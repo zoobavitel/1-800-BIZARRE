@@ -16,7 +16,6 @@ def remove_junk_heritages(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("characters", "0104_equipment_loadout_catalog"),
     ]

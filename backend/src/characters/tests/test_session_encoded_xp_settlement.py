@@ -459,18 +459,14 @@ class SessionEncodedXpSettlementTests(TestCase):
             trigger="MANUAL",
             description__icontains="Session end (pool)",
         )
-        self.assertEqual(
-            pool_row_a.aggregate(s=Sum("xp_gained"))["s"] or 0, dev_a
-        )
+        self.assertEqual(pool_row_a.aggregate(s=Sum("xp_gained"))["s"] or 0, dev_a)
         pool_row_b = ExperienceTracker.objects.filter(
             character=char_b,
             session=self.session,
             trigger="MANUAL",
             description__icontains="Session end (pool)",
         )
-        self.assertEqual(
-            pool_row_b.aggregate(s=Sum("xp_gained"))["s"] or 0, dev_b
-        )
+        self.assertEqual(pool_row_b.aggregate(s=Sum("xp_gained"))["s"] or 0, dev_b)
 
         self.assertEqual(
             _manual_track_xp_for_session(self.character, self.session),

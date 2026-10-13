@@ -63,7 +63,9 @@ def development_session_xp_to_pool_amount(character: Character) -> int:
     return int(_DEV_SESSION_XP_BY_GRADE[g])
 
 
-def trigger_xp_session_sum(character: Character, session: Session, triggers: list[str]) -> int:
+def trigger_xp_session_sum(
+    character: Character, session: Session, triggers: list[str]
+) -> int:
     total = (
         ExperienceTracker.objects.filter(
             character=character, session=session, trigger__in=triggers
@@ -99,9 +101,7 @@ def grant_encoded_trigger_xp(
     if want <= 0 or session is None:
         return 0
     cap = (
-        session_trigger_cap
-        if session_trigger_cap is not None
-        else _SESSION_TRIGGER_CAP
+        session_trigger_cap if session_trigger_cap is not None else _SESSION_TRIGGER_CAP
     )
     used = trigger_xp_session_sum(character, session, [trigger])
     cap_left = max(0, cap - used)
@@ -226,13 +226,9 @@ def settle_encoded_session_xp(session: Session, acting_user: Any) -> dict:
             out["skipped"] = True
             out["reason"] = "already_settled"
             return out
-        rolls = list(
-            Roll.objects.filter(session=session).select_related("character")
-        )
+        rolls = list(Roll.objects.filter(session=session).select_related("character"))
         char_ids = {r.character_id for r in rolls if r.character_id}
-        char_ids |= set(
-            locked.characters_involved.values_list("id", flat=True)
-        )
+        char_ids |= set(locked.characters_involved.values_list("id", flat=True))
         # Mid-session tracker/scorecard rows (toggles) even if PC never rolled /
         # characters_involved empty — still grant Dev→pool at settle.
         char_ids |= set(
@@ -241,9 +237,7 @@ def settle_encoded_session_xp(session: Session, acting_user: Any) -> dict:
             )
         )
         if not char_ids:
-            Session.objects.filter(pk=session.pk).update(
-                auto_encoded_xp_settled=True
-            )
+            Session.objects.filter(pk=session.pk).update(auto_encoded_xp_settled=True)
             out["message"] = "no_characters"
             return out
         for cid in sorted(char_ids):

@@ -4,30 +4,42 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('characters', '0037_alter_character_stash_slots_help_text'),
+        ("characters", "0037_alter_character_stash_slots_help_text"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='faction',
-            name='contacts',
-            field=models.JSONField(blank=True, default=list, help_text='Faction-level contacts and associates.'),
+            model_name="faction",
+            name="contacts",
+            field=models.JSONField(
+                blank=True,
+                default=list,
+                help_text="Faction-level contacts and associates.",
+            ),
         ),
         migrations.AddField(
-            model_name='faction',
-            name='crew_notes',
-            field=models.TextField(blank=True, help_text='Operational notes shared across all faction members.'),
+            model_name="faction",
+            name="crew_notes",
+            field=models.TextField(
+                blank=True,
+                help_text="Operational notes shared across all faction members.",
+            ),
         ),
         migrations.AddField(
-            model_name='faction',
-            name='faction_status',
-            field=models.JSONField(blank=True, default=dict, help_text="This faction's standing towards other factions (-3 to +3)."),
+            model_name="faction",
+            name="faction_status",
+            field=models.JSONField(
+                blank=True,
+                default=dict,
+                help_text="This faction's standing towards other factions (-3 to +3).",
+            ),
         ),
         migrations.AddField(
-            model_name='faction',
-            name='inventory',
-            field=models.JSONField(blank=True, default=list, help_text='Shared faction assets/inventory.'),
+            model_name="faction",
+            name="inventory",
+            field=models.JSONField(
+                blank=True, default=list, help_text="Shared faction assets/inventory."
+            ),
         ),
     ]

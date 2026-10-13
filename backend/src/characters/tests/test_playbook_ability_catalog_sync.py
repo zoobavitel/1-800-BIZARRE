@@ -3,7 +3,9 @@
 from django.test import TestCase
 
 from characters.models import HamonAbility, SpinAbility
-from characters.services.playbook_ability_catalog_sync import sync_playbook_ability_catalog
+from characters.services.playbook_ability_catalog_sync import (
+    sync_playbook_ability_catalog,
+)
 
 
 class PlaybookAbilityCatalogSyncTests(TestCase):

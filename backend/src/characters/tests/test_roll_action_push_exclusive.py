@@ -41,9 +41,7 @@ class RollActionPushExclusiveTests(TestCase):
             action_dots=dots,
             stress=6,
         )
-        self.session = Session.objects.create(
-            campaign=self.campaign, name="PushEx S1"
-        )
+        self.session = Session.objects.create(campaign=self.campaign, name="PushEx S1")
 
     def test_rejects_push_effect_and_push_dice_together(self):
         self.client.force_authenticate(user=self.user)
