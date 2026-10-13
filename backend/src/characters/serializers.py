@@ -2855,6 +2855,8 @@ class CrewCampaignSerializer(serializers.ModelSerializer):
             "members",
             "proposed_name",
             "faction_relationships",
+            "image",
+            "image_url",
         ]
 
 class EquipmentItemSerializer(serializers.ModelSerializer):

@@ -24,6 +24,7 @@ import { STAND_ARCHETYPE_ROWS } from "../features/character-sheet/utils/playbook
 import { HistoryBranchIcon } from "../components/position-effect/PositionEffectIndicators";
 import NpcsStandCoin from "../components/NpcsStandCoin";
 import AvatarCropModal from "../components/AvatarCropModal";
+import HomeCardThumb from "../components/home/HomeCardThumb";
 import { SessionHelpTip } from "../components/session/sessionShellUi";
 import { getCharacterPortraitSrc } from "../utils/homeAvatar";
 import { clockWedgeFillColor } from "../features/character-sheet/utils/progressClockSegments";
@@ -240,6 +241,51 @@ function upsertNpcContactDisposition(list, npc, disposition) {
       npc_id: npcId,
     },
   ];
+}
+
+/**
+ * Square portrait thumb for NPC sheet lists (contacts, factions, crews).
+ * Uses upload / image_url when present; otherwise initial from label.
+ */
+function ContactPortraitThumb({ entity, label, size = 24 }) {
+  const portraitSrc = getCharacterPortraitSrc(entity);
+  const displayLabel =
+    label ||
+    entity?.name ||
+    entity?.true_name ||
+    entity?.stand_name ||
+    entity?.alias ||
+    "?";
+  return (
+    <HomeCardThumb
+      src={portraitSrc}
+      label={displayLabel}
+      style={{
+        width: size,
+        height: size,
+        borderRadius: 4,
+        border: "1px solid #2d1f52",
+        background: "#1f1035",
+        overflow: "hidden",
+        flexShrink: 0,
+        fontSize: Math.max(10, Math.round(size * 0.4)),
+        fontWeight: "bold",
+        color: "#6b7280",
+      }}
+    />
+  );
+}
+
+function findCampaignFactionByName(factions, name) {
+  const key = String(name || "")
+    .trim()
+    .toLowerCase();
+  if (!key) return null;
+  return (
+    (factions || []).find(
+      (f) => String(f?.name || "").trim().toLowerCase() === key,
+    ) || null
+  );
 }
 
 function ContactOpenButton({ link, onOpenNpc, onOpenCharacter }) {
@@ -1348,6 +1394,16 @@ const NPCSheet = ({
       return Number(cid) === Number(currentCrewId);
     });
   }, [campaignPlayerCharacters, currentCrewId]);
+
+  /** Hide manual contact rows already shown in the auto peer / crew lists. */
+  const autoContactNpcIds = useMemo(
+    () => new Set(factionNpcPeers.map((n) => Number(n.id))),
+    [factionNpcPeers],
+  );
+  const autoContactPcIds = useMemo(
+    () => new Set(crewAssociatePcs.map((ch) => Number(ch.id))),
+    [crewAssociatePcs],
+  );
 
   const activeSessionId = useMemo(() => {
     const raw = activeCampaign?.active_session;
@@ -7119,6 +7175,7 @@ const NPCSheet = ({
                           color: "#d1d5db",
                         }}
                       >
+                        <ContactPortraitThumb entity={n} />
                         <span style={{ flex: 1, minWidth: 0 }}>
                           {n.name || n.stand_name || `NPC #${n.id}`}
                         </span>
@@ -7183,6 +7240,7 @@ const NPCSheet = ({
                           color: "#d1d5db",
                         }}
                       >
+                        <ContactPortraitThumb entity={ch} />
                         <span style={{ flex: 1, minWidth: 0 }}>
                           {ch.true_name ||
                             ch.name ||
@@ -7225,6 +7283,22 @@ const NPCSheet = ({
                 )}
                 <div style={{ marginBottom: "8px" }}>
                   {(faction ? factionContacts : contacts).map((c, i) => {
+                    const linkedNpcId = c.npc_id ?? c.npcId;
+                    if (
+                      linkedNpcId != null &&
+                      linkedNpcId !== "" &&
+                      autoContactNpcIds.has(Number(linkedNpcId))
+                    ) {
+                      return null;
+                    }
+                    const pcIdRaw = c.character_id ?? c.characterId;
+                    if (
+                      pcIdRaw != null &&
+                      pcIdRaw !== "" &&
+                      autoContactPcIds.has(Number(pcIdRaw))
+                    ) {
+                      return null;
+                    }
                     const sheetLink = resolveContactSheetLink(c, {
                       allNpcs,
                       campaignPlayerCharacters,
@@ -7239,6 +7313,7 @@ const NPCSheet = ({
                         alignItems: "center",
                       }}
                     >
+                      <ContactPortraitThumb entity={sheetLink?.entity} />
                       <input
                         value={c.name}
                         placeholder="Name"
@@ -7496,7 +7571,12 @@ const NPCSheet = ({
                           (typeof value === "string" &&
                             Number.isFinite(Number(value)))),
                     )
-                    .map(([fName, value]) => (
+                    .map(([fName, value]) => {
+                    const peerFac = findCampaignFactionByName(
+                      campaignFactions,
+                      fName,
+                    );
+                    return (
                     <div
                       key={fName}
                       style={{
@@ -7506,6 +7586,11 @@ const NPCSheet = ({
                         alignItems: "center",
                       }}
                     >
+                      <ContactPortraitThumb
+                        entity={peerFac}
+                        label={fName}
+                        size={36}
+                      />
                       <span
                         style={{ flex: 1, fontSize: "12px", color: "#d1d5db" }}
                       >
@@ -7606,7 +7691,8 @@ const NPCSheet = ({
                         ✕
                       </button>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
                 <button
                   onClick={() => {
@@ -7699,6 +7785,11 @@ const NPCSheet = ({
                               alignItems: "center",
                             }}
                           >
+                          <ContactPortraitThumb
+                            entity={c}
+                            label={c.name}
+                            size={36}
+                          />
                           <span
                             style={{
                               flex: 1,
