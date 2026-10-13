@@ -39,6 +39,7 @@ import AdvancementPlanPanel from "../features/character-sheet/components/Advance
 import { buildRouteHref, handleSpaNavClick } from "../utils/spaNavigation";
 import StandingStepperRow from "../components/standing/StandingStepperRow";
 import useOptimisticStandingMap from "../hooks/useOptimisticStandingMap";
+import HomeFactionInlineEditor from "../components/home/HomeFactionInlineEditor";
 import {
   applySymmetricFactionStatus,
   normalizeFactionStatusMap,
@@ -3245,6 +3246,8 @@ const CharacterSheetWrapper = ({
   /** Optimistic NPC.visible_to_players overlays until server catches up. */
   const [npcPlayerVisOverrides, setNpcPlayerVisOverrides] = useState({});
   const [factionNpcVisErr, setFactionNpcVisErr] = useState(null);
+  /** Expanded faction id under CREW FACTION REPUTATION (inline editor / read panel). */
+  const [expandedCrewFactionId, setExpandedCrewFactionId] = useState(null);
   /** Optimistic NPC.pc_standing[this PC] overlays for NPC STANDING panel. */
   const [npcTowardMeOverrides, setNpcTowardMeOverrides] = useState({});
   const [npcTowardMeErr, setNpcTowardMeErr] = useState(null);
@@ -3259,6 +3262,7 @@ const CharacterSheetWrapper = ({
   useEffect(() => {
     setNpcPlayerVisOverrides({});
     setFactionNpcVisErr(null);
+    setExpandedCrewFactionId(null);
     setNpcTowardMeOverrides({});
     setNpcTowardMeErr(null);
     npcTowardMePatchGenRef.current = {};
@@ -5195,6 +5199,85 @@ const CharacterSheetWrapper = ({
       }
     } catch (e) {
       const msg = e?.message || "Could not train that track";
+      setTrainError(msg);
+      setPoolTickError(msg);
+    } finally {
+      setTrainBusyTrack(null);
+    }
+  };
+
+  const handleCancelPendingAdvance = async (trackKey) => {
+    const track = String(trackKey || "")
+      .trim()
+      .toLowerCase();
+    if (!characterId || !canEditSheet) return;
+    if (
+      !["insight", "prowess", "resolve", "heritage", "playbook"].includes(
+        track,
+      )
+    ) {
+      return;
+    }
+    if ((Number(pendingAdvanceCounts?.[track]) || 0) < 1) return;
+    if (trainBusyTrack || poolAllocateBusy) return;
+
+    setTrainBusyTrack(track);
+    setTrainError(null);
+    setPoolTickError(null);
+    markFieldTouch("xp");
+    try {
+      const res = await characterAPI.cancelPendingAdvance(characterId, {
+        track,
+      });
+      if (res?.character) {
+        applyAllocationBackendCharacter(res.character);
+      } else {
+        if (res?.xp_clocks && typeof res.xp_clocks === "object") {
+          const nextXp = { ...xp, ...res.xp_clocks };
+          setXp(nextXp);
+          setCharData((prev) => ({
+            ...prev,
+            xp: { ...(prev.xp || {}), ...res.xp_clocks },
+          }));
+        }
+        if (typeof res?.unallocated_xp === "number") {
+          const pool = Math.max(0, Math.floor(Number(res.unallocated_xp) || 0));
+          setUnallocatedXp(pool);
+          setCharData((prev) => ({ ...prev, unallocatedXp: pool }));
+        }
+        const truth = {
+          xp: {
+            ...xp,
+            ...(res?.xp_clocks && typeof res.xp_clocks === "object"
+              ? res.xp_clocks
+              : {}),
+          },
+          unallocatedXp: Math.max(
+            0,
+            Math.floor(
+              Number(
+                res?.unallocated_xp != null ? res.unallocated_xp : unallocatedXp,
+              ) || 0,
+            ),
+          ),
+        };
+        xpClocksTruthRef.current = truth;
+        onCharacterXpSync?.(truth);
+        fieldTouchRef.current = { ...fieldTouchRef.current, xp: false };
+        if (typeof res?.open_pending_count === "number") {
+          setPendingAdvanceCounts((prev) => ({
+            ...prev,
+            [track]: Math.max(0, Number(res.open_pending_count) || 0),
+          }));
+        } else {
+          setPendingAdvanceCounts((prev) => ({
+            ...prev,
+            [track]: Math.max(0, (Number(prev?.[track]) || 0) - 1),
+          }));
+        }
+      }
+    } catch (e) {
+      const msg = e?.message || "Could not cancel that pending advance";
       setTrainError(msg);
       setPoolTickError(msg);
     } finally {
@@ -15607,17 +15690,17 @@ const CharacterSheetWrapper = ({
                           </p>
                           <p style={{ margin: 0 }}>
                             <strong style={{ color: "#e5e7eb" }}>
-                              Desperate roll → attribute (+1) · end-of-session (max
-                              2 each).
+                              Desperate roll → attribute (+1 each, uncapped) ·
+                              end-of-session categories (max 2 each).
                             </strong>{" "}
-                            Desperate rolls: +1 XP in the roll&apos;s attribute:
-                            Insight (Hunt, Study, Survey, Tinker), Prowess (Finesse,
-                            Prowl, Skirmish, Wreck), Resolve (Bizarre, Command,
-                            Consort, Sway). End of session: table review for beliefs
-                            / struggle / playbook, up to 2 XP in each category; you
-                            may place that XP on any track when you spend it. Numbers
-                            here come from the experience tracker (this session) and
-                            your desperate rolls in the dice log.
+                            Desperate rolls: +1 XP in the roll&apos;s attribute
+                            (+2 at 0 dots): Insight (Hunt, Study, Survey, Tinker),
+                            Prowess (Finesse, Prowl, Skirmish, Wreck), Resolve
+                            (Bizarre, Command, Consort, Sway). End of session: table
+                            review for beliefs / struggle / playbook, up to 2 XP in
+                            each category. Numbers here come from the experience
+                            tracker (this session) and your desperate rolls in the
+                            dice log.
                           </p>
                         </div>
                       ) : null}
@@ -15848,6 +15931,34 @@ const CharacterSheetWrapper = ({
                           {pendingCount > 1 ? ` (${pendingCount})` : ""}
                         </button>
                       ) : null}
+                      {pendingCount > 0 && canEditSheet && character?.id ? (
+                        <button
+                          type="button"
+                          disabled={
+                            trainBusyTrack === key || poolAllocateBusy
+                          }
+                          title={
+                            key === "playbook"
+                              ? "Cancel pending: +9 Available XP, +1 playbook mark"
+                              : "Cancel pending: +(cap−1) Available XP, +1 track mark"
+                          }
+                          onClick={() => handleCancelPendingAdvance(key)}
+                          style={{
+                            ...S.btn,
+                            fontSize: "10px",
+                            padding: "2px 8px",
+                            background: "#1f2937",
+                            color: "#fca5a5",
+                            border: "1px solid #7f1d1d",
+                            fontWeight: "bold",
+                            opacity: trainBusyTrack === key ? 0.6 : 1,
+                            cursor:
+                              trainBusyTrack === key ? "wait" : "pointer",
+                          }}
+                        >
+                          {trainBusyTrack === key ? "…" : "Cancel"}
+                        </button>
+                      ) : null}
                     </div>
                     );
                   })}
@@ -15989,8 +16100,8 @@ const CharacterSheetWrapper = ({
                               <div
                                 style={{ fontSize: "10px", color: "#a78bfa", marginTop: "2px" }}
                               >
-                                Logged in tracker: up to +{xpReqSnapshot.desperateTrackerNote}{" "}
-                                (desperate rolls; display capped)
+                                Logged in tracker: +{xpReqSnapshot.desperateTrackerNote}{" "}
+                                XP from desperate rolls
                               </div>
                             )}
                             <div
@@ -24187,7 +24298,15 @@ const CharacterSheetWrapper = ({
                                 {factionInitial}
                               </div>
                             )}
-                            <span
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExpandedCrewFactionId((prev) =>
+                                  Number(prev) === Number(row.faction_id)
+                                    ? null
+                                    : Number(row.faction_id),
+                                )
+                              }
                               style={{
                                 fontWeight: 600,
                                 color: "#e5e7eb",
@@ -24195,11 +24314,26 @@ const CharacterSheetWrapper = ({
                                 textOverflow: "ellipsis",
                                 whiteSpace: "nowrap",
                                 minWidth: 0,
+                                background: "none",
+                                border: "none",
+                                padding: 0,
+                                cursor: "pointer",
+                                textAlign: "left",
+                                font: "inherit",
+                                textDecoration:
+                                  Number(expandedCrewFactionId) ===
+                                  Number(row.faction_id)
+                                    ? "underline"
+                                    : "none",
                               }}
-                              title={row.faction_name}
+                              title={
+                                isGM
+                                  ? `Edit ${row.faction_name}`
+                                  : `View ${row.faction_name}`
+                              }
                             >
                               {row.faction_name}
-                            </span>
+                            </button>
                           </div>
                           {isGM || row.players_see_reputation !== false ? (
                             isGM && charData.crewId ? (
@@ -24258,12 +24392,11 @@ const CharacterSheetWrapper = ({
                                 : "Weak"}
                             </span>
                           ) : null}
-                          {!isGM &&
-                          row.players_see_notes !== false &&
+                          {(isGM || row.players_see_notes !== false) &&
                           row.faction_notes ? (
                             <span
                               style={{
-                                color: "#6b7280",
+                                color: isGM ? "#c4b5fd" : "#6b7280",
                                 display: "-webkit-box",
                                 WebkitLineClamp: 3,
                                 WebkitBoxOrient: "vertical",
@@ -24271,7 +24404,14 @@ const CharacterSheetWrapper = ({
                               }}
                               title={row.faction_notes}
                             >
+                              {isGM ? (
+                                <span style={{ color: "#a78bfa" }}>Notes: </span>
+                              ) : null}
                               {row.faction_notes}
+                            </span>
+                          ) : isGM ? (
+                            <span style={{ color: "#4b5563", fontSize: 11 }}>
+                              No faction notes yet — click name to edit
                             </span>
                           ) : null}
                           {(() => {
@@ -24557,6 +24697,143 @@ const CharacterSheetWrapper = ({
                                   ? "Hide from players"
                                   : "Reveal to players"}
                               </button>
+                            </div>
+                          ) : null}
+                          {Number(expandedCrewFactionId) ===
+                          Number(row.faction_id) ? (
+                            <div
+                              id={`crew-faction-expand-${row.faction_id}`}
+                              style={{
+                                marginTop: 4,
+                                paddingTop: 10,
+                                borderTop: "1px solid #374151",
+                              }}
+                            >
+                              {isGM ? (
+                                <HomeFactionInlineEditor
+                                  faction={
+                                    (crewCampaignFactions || []).find(
+                                      (f) =>
+                                        Number(f.id) ===
+                                        Number(row.faction_id),
+                                    ) || {
+                                      id: row.faction_id,
+                                      name: row.faction_name,
+                                      notes: row.faction_notes || "",
+                                      level: row.faction_level,
+                                      hold: row.faction_hold,
+                                      visible_to_players:
+                                        row.visible_to_players,
+                                      players_see_tier: row.players_see_tier,
+                                      players_see_hold: row.players_see_hold,
+                                      players_see_reputation:
+                                        row.players_see_reputation,
+                                      players_see_notes: row.players_see_notes,
+                                      players_see_npcs: row.players_see_npcs,
+                                      npcs: row.npcs || [],
+                                      image: row.faction_image,
+                                      image_url: row.faction_image_url,
+                                    }
+                                  }
+                                  campaign={
+                                    (campaigns || []).find(
+                                      (c) =>
+                                        Number(c.id) ===
+                                        Number(campaignId),
+                                    ) || { id: campaignId }
+                                  }
+                                  onCancel={() =>
+                                    setExpandedCrewFactionId(null)
+                                  }
+                                  onSaved={async () => {
+                                    await onCampaignRefresh?.();
+                                    if (charData.crewId) {
+                                      try {
+                                        const d = await crewAPI.getCrew(
+                                          charData.crewId,
+                                        );
+                                        setCrewFactionLinks(
+                                          d.faction_relationships || [],
+                                        );
+                                      } catch {
+                                        /* ignore */
+                                      }
+                                    }
+                                  }}
+                                  onDeleted={async () => {
+                                    setExpandedCrewFactionId(null);
+                                    await onCampaignRefresh?.();
+                                  }}
+                                />
+                              ) : (
+                                <div
+                                  style={{
+                                    fontSize: 12,
+                                    color: "#d1d5db",
+                                    lineHeight: 1.45,
+                                    display: "flex",
+                                    flexDirection: "column",
+                                    gap: 6,
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      fontWeight: 700,
+                                      color: "#e5e7eb",
+                                    }}
+                                  >
+                                    {row.faction_name}
+                                  </div>
+                                  {row.players_see_tier !== false &&
+                                  row.faction_level != null ? (
+                                    <div>Tier {row.faction_level}</div>
+                                  ) : null}
+                                  {row.players_see_hold !== false &&
+                                  row.faction_hold ? (
+                                    <div>
+                                      Hold:{" "}
+                                      {row.faction_hold === "strong"
+                                        ? "Strong"
+                                        : "Weak"}
+                                    </div>
+                                  ) : null}
+                                  {row.players_see_reputation !== false ? (
+                                    <div>
+                                      Crew standing: {row.reputation_value} (
+                                      {reputationTierLabel(
+                                        row.reputation_value,
+                                      )}
+                                      )
+                                    </div>
+                                  ) : null}
+                                  {row.players_see_notes !== false &&
+                                  row.faction_notes ? (
+                                    <div
+                                      style={{
+                                        color: "#9ca3af",
+                                        whiteSpace: "pre-wrap",
+                                      }}
+                                    >
+                                      {row.faction_notes}
+                                    </div>
+                                  ) : null}
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setExpandedCrewFactionId(null)
+                                    }
+                                    style={{
+                                      ...S.btn,
+                                      alignSelf: "flex-start",
+                                      fontSize: 10,
+                                      padding: "2px 8px",
+                                      marginTop: 4,
+                                    }}
+                                  >
+                                    Close
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           ) : null}
                         </div>

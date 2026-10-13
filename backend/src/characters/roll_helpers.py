@@ -263,6 +263,7 @@ def award_desperate_action_xp(character, session, roll, action_name, request_use
 
     +1 normally, +2 at zero dots (SRD). Group-action desperate uses the same
     path. Coin Actions are not mapped here (see award_innate_stand_dice_xp).
+    Idempotent per roll (DESPERATE_ROLL tracker row).
 
     Returns (xp_awarded: int, xp_track: str|None).
     """
@@ -275,6 +276,12 @@ def award_desperate_action_xp(character, session, roll, action_name, request_use
     track = xp_track_for_action_name(action_name)
     if not track:
         return 0, None
+
+    if roll is not None and getattr(roll, "pk", None):
+        if ExperienceTracker.objects.filter(
+            roll=roll, trigger="DESPERATE_ROLL"
+        ).exists():
+            return 0, None
 
     rating = action_rating_from_action_dots(
         getattr(character, "action_dots", None), action_name

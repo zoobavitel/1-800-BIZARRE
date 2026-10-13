@@ -860,6 +860,240 @@ function NpcClockAddCard({
   );
 }
 
+/** Clickable card chrome while GM visibility-edit (gear) mode is on. */
+function VisEditSection({
+  active,
+  visible,
+  label,
+  onToggle,
+  children,
+  style,
+}) {
+  if (!active) {
+    return <div style={style}>{children}</div>;
+  }
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onToggle?.();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          e.stopPropagation();
+          onToggle?.();
+        }
+      }}
+      title={`${label}: players ${visible ? "can" : "cannot"} see — click to toggle`}
+      style={{
+        ...style,
+        outline: visible ? "2px solid #34d399" : "2px dashed #f87171",
+        outlineOffset: 2,
+        cursor: "pointer",
+        position: "relative",
+      }}
+    >
+      <span
+        style={{
+          position: "absolute",
+          top: 4,
+          right: 6,
+          zIndex: 2,
+          fontSize: 9,
+          fontFamily: "monospace",
+          fontWeight: "bold",
+          letterSpacing: "0.04em",
+          padding: "1px 6px",
+          borderRadius: 3,
+          background: visible ? "#064e3b" : "#7f1d1d",
+          color: visible ? "#6ee7b7" : "#fecaca",
+          pointerEvents: "none",
+        }}
+      >
+        {visible ? "PLAYERS SEE" : "HIDDEN"}
+      </span>
+      <div style={{ pointerEvents: "none" }}>{children}</div>
+    </div>
+  );
+}
+
+/** Freeform narrative ability rows (Stand / custom Hamon / Spin). */
+function NpcNarrativeAbilitiesEditor({
+  label,
+  hint,
+  abilities,
+  setAbilities,
+  showTypeSelect = true,
+  styles: S,
+}) {
+  return (
+    <div>
+      {label ? <span style={S.lbl}>{label}</span> : null}
+      {hint ? (
+        <div
+          style={{
+            fontSize: "10px",
+            color: "#6b7280",
+            marginBottom: "8px",
+          }}
+        >
+          {hint}
+        </div>
+      ) : null}
+      {abilities.map((ab) => {
+        const typeVal =
+          String(ab.type || "").toLowerCase() === "passive"
+            ? "passive"
+            : "unique";
+        return (
+          <div
+            key={ab.id}
+            style={{
+              background: "#1a1030",
+              border: "1px solid #2d1f52",
+              borderRadius: "4px",
+              padding: "8px",
+              marginBottom: "6px",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "flex-start",
+              }}
+            >
+              <div style={{ flex: 1 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: "6px",
+                    alignItems: "center",
+                    marginBottom: "4px",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <input
+                    value={ab.name}
+                    onChange={(e) =>
+                      setAbilities((p) =>
+                        p.map((a) =>
+                          a.id === ab.id ? { ...a, name: e.target.value } : a,
+                        ),
+                      )
+                    }
+                    style={{
+                      ...S.inp,
+                      flex: 1,
+                      minWidth: "140px",
+                      fontWeight: "bold",
+                      borderBottom: "1px solid #4b2d8f",
+                      fontSize: "12px",
+                    }}
+                    placeholder="Ability name"
+                  />
+                  {showTypeSelect ? (
+                    <select
+                      value={typeVal}
+                      onChange={(e) =>
+                        setAbilities((p) =>
+                          p.map((a) =>
+                            a.id === ab.id
+                              ? { ...a, type: e.target.value }
+                              : a,
+                          ),
+                        )
+                      }
+                      style={{
+                        ...S.sel,
+                        fontSize: "10px",
+                        padding: "2px 4px",
+                      }}
+                    >
+                      <option value="unique">Unique</option>
+                      <option value="passive">Passive</option>
+                    </select>
+                  ) : null}
+                </div>
+                <textarea
+                  value={ab.description}
+                  onChange={(e) =>
+                    setAbilities((p) =>
+                      p.map((a) =>
+                        a.id === ab.id
+                          ? { ...a, description: e.target.value }
+                          : a,
+                      ),
+                    )
+                  }
+                  placeholder="What does this ability do narratively?"
+                  style={{
+                    width: "100%",
+                    background: "transparent",
+                    color: "#d1d5db",
+                    border: "none",
+                    fontFamily: "monospace",
+                    fontSize: "11px",
+                    resize: "vertical",
+                    outline: "none",
+                    minHeight: "40px",
+                    boxSizing: "border-box",
+                  }}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  setAbilities((p) => p.filter((a) => a.id !== ab.id))
+                }
+                style={{
+                  color: "#f87171",
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  fontSize: "15px",
+                  marginLeft: "6px",
+                  flexShrink: 0,
+                }}
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        );
+      })}
+      <button
+        type="button"
+        onClick={() =>
+          setAbilities((p) => [
+            ...p,
+            {
+              id: Date.now(),
+              name: "",
+              description: "",
+              type: "unique",
+            },
+          ])
+        }
+        style={{
+          ...S.btn,
+          border: "2px dashed #2d1f52",
+          background: "transparent",
+          color: "#6b7280",
+          width: "100%",
+          padding: "6px",
+        }}
+      >
+        + Add Ability
+      </button>
+    </div>
+  );
+}
+
 // ─── NPCSheet ─────────────────────────────────────────────────────────────────
 
 const NPCSheet = ({
@@ -926,7 +1160,17 @@ const NPCSheet = ({
   const [heritageSectionExpanded, setHeritageSectionExpanded] = useState(() =>
     readNpcSheetBool(npc?.id, "heritage", false),
   );
+  const [playbookAbilitiesExpanded, setPlaybookAbilitiesExpanded] = useState(
+    () => readNpcSheetBool(npc?.id, "playbookAbilities", false),
+  );
   const [hideCompletedClocks, setHideCompletedClocks] = useState(false);
+  const [npcVisibleToPlayers, setNpcVisibleToPlayers] = useState(
+    () => npc?.visible_to_players !== false,
+  );
+  const [playersSeeInventory, setPlayersSeeInventory] = useState(
+    () => npc?.players_see_inventory !== false,
+  );
+  const [visibilityEditMode, setVisibilityEditMode] = useState(false);
   const [showFactionItemPicker, setShowFactionItemPicker] = useState(false);
 
   useEffect(() => {
@@ -982,7 +1226,13 @@ const NPCSheet = ({
     setHealingSectionExpanded(readNpcSheetBool(npc?.id, "healing", true));
     setClocksSectionExpanded(readNpcSheetBool(npc?.id, "clocks", true));
     setHeritageSectionExpanded(readNpcSheetBool(npc?.id, "heritage", false));
-  }, [npc?.id]);
+    setPlaybookAbilitiesExpanded(
+      readNpcSheetBool(npc?.id, "playbookAbilities", false),
+    );
+    setNpcVisibleToPlayers(npc?.visible_to_players !== false);
+    setPlayersSeeInventory(npc?.players_see_inventory !== false);
+    setVisibilityEditMode(false);
+  }, [npc?.id, npc?.visible_to_players, npc?.players_see_inventory]);
 
   const setHealingSectionExpandedPersist = useCallback(
     (updater) => {
@@ -1011,6 +1261,17 @@ const NPCSheet = ({
       setHeritageSectionExpanded((prev) => {
         const next = typeof updater === "function" ? updater(prev) : updater;
         writeNpcSheetBool(npc?.id, "heritage", next);
+        return next;
+      });
+    },
+    [npc?.id],
+  );
+
+  const setPlaybookAbilitiesExpandedPersist = useCallback(
+    (updater) => {
+      setPlaybookAbilitiesExpanded((prev) => {
+        const next = typeof updater === "function" ? updater(prev) : updater;
+        writeNpcSheetBool(npc?.id, "playbookAbilities", next);
         return next;
       });
     },
@@ -1219,6 +1480,30 @@ const NPCSheet = ({
     patchNpcInvolvementFlags,
   ]);
 
+  const patchThisNpcInvolvementField = useCallback(
+    async (field, value) => {
+      if (!sessionInvolvementForNpc || !activeSessionDetail?.npc_involvements) {
+        return;
+      }
+      const id = npc?.id;
+      const next = activeSessionDetail.npc_involvements.map((i) => {
+        if (!npcInvMatches(i.npc, id)) return i;
+        const patch = { ...i, [field]: value };
+        if (field === "show_clocks_to_players") {
+          patch.show_vulnerability_clock_to_players = value ? true : false;
+        }
+        return patch;
+      });
+      await patchNpcInvolvementFlags(next);
+    },
+    [
+      sessionInvolvementForNpc,
+      activeSessionDetail,
+      npc?.id,
+      patchNpcInvolvementFlags,
+    ],
+  );
+
   // Optimistically track factions created inline (not yet in the campaigns prop)
   const [localExtraFactions, setLocalExtraFactions] = useState([]);
   const campaignFactions = useMemo(() => [
@@ -1306,6 +1591,12 @@ const NPCSheet = ({
   const [factionStatusData, setFactionStatusData] = useState({});
   const [factionCrewNotes, setFactionCrewNotes] = useState("");
   const [factionVisibleToPlayers, setFactionVisibleToPlayers] = useState(false);
+  const [factionPlayersSeeTier, setFactionPlayersSeeTier] = useState(true);
+  const [factionPlayersSeeHold, setFactionPlayersSeeHold] = useState(true);
+  const [factionPlayersSeeReputation, setFactionPlayersSeeReputation] =
+    useState(true);
+  const [factionPlayersSeeNotes, setFactionPlayersSeeNotes] = useState(true);
+  const [factionPlayersSeeNpcs, setFactionPlayersSeeNpcs] = useState(true);
   /** Last persisted/loaded faction_status — used to reverse-sync only changed keys. */
   const prevFactionStatusRef = useRef(null);
 
@@ -1351,6 +1642,11 @@ const NPCSheet = ({
         });
         setFactionCrewNotes(f.crew_notes || "");
         setFactionVisibleToPlayers(!!f.visible_to_players);
+        setFactionPlayersSeeTier(f.players_see_tier !== false);
+        setFactionPlayersSeeHold(f.players_see_hold !== false);
+        setFactionPlayersSeeReputation(f.players_see_reputation !== false);
+        setFactionPlayersSeeNotes(f.players_see_notes !== false);
+        setFactionPlayersSeeNpcs(f.players_see_npcs !== false);
       })
       .catch(() => {})
       .finally(() => {
@@ -1416,6 +1712,11 @@ const NPCSheet = ({
           faction_status: statusSnapshot,
           crew_notes: factionCrewNotes,
           visible_to_players: factionVisibleToPlayers,
+          players_see_tier: factionPlayersSeeTier,
+          players_see_hold: factionPlayersSeeHold,
+          players_see_reputation: factionPlayersSeeReputation,
+          players_see_notes: factionPlayersSeeNotes,
+          players_see_npcs: factionPlayersSeeNpcs,
         });
         setLocalExtraFactions((prev) => {
           const id = Number(faction);
@@ -1478,6 +1779,11 @@ const NPCSheet = ({
     factionStatusData,
     factionCrewNotes,
     factionVisibleToPlayers,
+    factionPlayersSeeTier,
+    factionPlayersSeeHold,
+    factionPlayersSeeReputation,
+    factionPlayersSeeNotes,
+    factionPlayersSeeNpcs,
   ]);
 
   // Reset faction-mounted flag when faction changes so first load doesn't trigger a spurious save
@@ -2244,6 +2550,8 @@ const NPCSheet = ({
       stand_type_custom: String(standTypeCustom || "").trim(),
       stand_forms: normalizeStandFormsList(standForms),
       stand_consciousness: normalizeStandConsciousnessLocal(standConsciousness),
+      visible_to_players: !!npcVisibleToPlayers,
+      players_see_inventory: !!playersSeeInventory,
       ...(imageFile ? { imageFile } : {}),
       ...(!imageFile && imageUrl ? { image: null } : {}),
     }),
@@ -2269,6 +2577,8 @@ const NPCSheet = ({
       campaign,
       faction,
       crew,
+      npcVisibleToPlayers,
+      playersSeeInventory,
       imageUrl,
       imageFile,
       contacts,
@@ -2960,33 +3270,82 @@ const NPCSheet = ({
         style={{
           display: "flex",
           justifyContent: "center",
-          gap: "0",
+          alignItems: "center",
+          gap: "8px",
           background: "#0d0d1a",
           borderBottom: "1px solid #2d1f52",
-          padding: "6px 0",
+          padding: "6px 12px",
+          position: "relative",
         }}
       >
-        {["NPC", "CREW"].map((mode) => (
+        <div style={{ display: "flex", gap: 0 }}>
+          {["NPC", "CREW"].map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => setActiveMode(mode)}
+              style={{
+                padding: "6px 24px",
+                fontSize: "12px",
+                fontFamily: "monospace",
+                fontWeight: "bold",
+                border: "1px solid #4b2d8f",
+                cursor: "pointer",
+                letterSpacing: "0.08em",
+                background: activeMode === mode ? "#7c3aed" : "#1a0533",
+                color: activeMode === mode ? "#fff" : "#9ca3af",
+                borderRadius: mode === "NPC" ? "4px 0 0 4px" : "0 4px 4px 0",
+              }}
+            >
+              {mode === "NPC" ? "NPC MODE" : "Faction Mode"}
+            </button>
+          ))}
+        </div>
+        {isGM && !readOnly ? (
           <button
-            key={mode}
-            onClick={() => setActiveMode(mode)}
+            type="button"
+            onClick={() => setVisibilityEditMode((v) => !v)}
+            aria-pressed={visibilityEditMode}
+            title={
+              visibilityEditMode
+                ? "Exit visibility edit — click sections to toggle what players see"
+                : "Visibility edit — click sections players may see"
+            }
             style={{
-              padding: "6px 24px",
-              fontSize: "12px",
-              fontFamily: "monospace",
-              fontWeight: "bold",
-              border: "1px solid #4b2d8f",
+              position: "absolute",
+              right: 12,
+              padding: "4px 10px",
+              fontSize: "14px",
+              lineHeight: 1,
+              border: visibilityEditMode
+                ? "1px solid #34d399"
+                : "1px solid #4b5563",
+              borderRadius: 4,
+              background: visibilityEditMode ? "#064e3b" : "#111827",
+              color: visibilityEditMode ? "#6ee7b7" : "#9ca3af",
               cursor: "pointer",
-              letterSpacing: "0.08em",
-              background: activeMode === mode ? "#7c3aed" : "#1a0533",
-              color: activeMode === mode ? "#fff" : "#9ca3af",
-              borderRadius: mode === "NPC" ? "4px 0 0 4px" : "0 4px 4px 0",
             }}
           >
-            {mode === "NPC" ? "NPC MODE" : "Faction Mode"}
+            ⚙
           </button>
-        ))}
+        ) : null}
       </div>
+      {visibilityEditMode && isGM ? (
+        <div
+          style={{
+            background: "#052e1a",
+            borderBottom: "1px solid #166534",
+            color: "#86efac",
+            fontSize: 11,
+            fontFamily: "monospace",
+            padding: "6px 12px",
+            textAlign: "center",
+          }}
+        >
+          Visibility edit on — click outlined sections to toggle what players
+          see (green = visible, red dashed = hidden).
+        </div>
+      ) : null}
 
       <div className="npc-sheet-body">
         {activeMode === "NPC" && (
@@ -2994,7 +3353,13 @@ const NPCSheet = ({
             <div className="npc-sheet-g2" style={S.g2}>
               {/* ════ LEFT — Identity + Clocks + Inventory + Healing + Notes ════ */}
               <div>
-              <div style={{ ...S.card, borderColor: "#4c1d95" }}>
+              <VisEditSection
+                active={visibilityEditMode && isGM}
+                visible={!!npcVisibleToPlayers}
+                label="NPC"
+                onToggle={() => setNpcVisibleToPlayers((v) => !v)}
+                style={{ ...S.card, borderColor: "#4c1d95" }}
+              >
               <div style={{ display: "flex", gap: "16px", alignItems: "flex-start", flexWrap: "wrap" }}>
                 {/* Left: portrait + level */}
                 <div
@@ -3316,12 +3681,129 @@ const NPCSheet = ({
                       ))}
                     </select>
                   </div>
+                  {isGM ? (
+                    <div style={{ marginTop: "8px" }}>
+                      <label
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          fontSize: "11px",
+                          color: "#d1d5db",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={!!npcVisibleToPlayers}
+                          onChange={(e) =>
+                            setNpcVisibleToPlayers(e.target.checked)
+                          }
+                        />
+                        Players can see this NPC
+                      </label>
+                      {sessionInvolvementForNpc ? (
+                        <div style={{ marginTop: "8px" }}>
+                          <div
+                            style={{
+                              fontSize: "10px",
+                              color: "#9ca3af",
+                              marginBottom: "4px",
+                            }}
+                          >
+                            Player visibility (this session)
+                            {vulnRevealSaving ? " · Saving…" : ""}
+                          </div>
+                          <div
+                            style={{
+                              display: "flex",
+                              flexWrap: "wrap",
+                              gap: "8px 14px",
+                            }}
+                          >
+                            {[
+                              [
+                                "show_clocks_to_players",
+                                "Clocks",
+                                !!sessionInvolvementForNpc.show_clocks_to_players,
+                              ],
+                              [
+                                "show_stand_coin_to_players",
+                                "Stand coin",
+                                !!sessionInvolvementForNpc.show_stand_coin_to_players,
+                              ],
+                              [
+                                "show_all_abilities_to_players",
+                                "All abilities",
+                                !!sessionInvolvementForNpc.show_all_abilities_to_players,
+                              ],
+                            ].map(([field, label, checked]) => (
+                              <label
+                                key={field}
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: "4px",
+                                  fontSize: "11px",
+                                  color: "#d1d5db",
+                                  cursor: vulnRevealSaving
+                                    ? "wait"
+                                    : "pointer",
+                                }}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  disabled={vulnRevealSaving}
+                                  onChange={() =>
+                                    patchThisNpcInvolvementField(
+                                      field,
+                                      !checked,
+                                    )
+                                  }
+                                />
+                                {label}
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      ) : activeSessionId && isGM && !activeSessionLoading ? (
+                        <div
+                          style={{
+                            fontSize: "10px",
+                            color: "#6b7280",
+                            marginTop: "6px",
+                          }}
+                        >
+                          Add this NPC to the active session to toggle
+                          clocks / stand coin / abilities for players.
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               </div>
-              </div>
+              </VisEditSection>
 
                 {/* Conflict Clocks — PCs roll to fill these */}
-                <div style={S.card}>
+                <VisEditSection
+                  active={
+                    visibilityEditMode &&
+                    isGM &&
+                    !!sessionInvolvementForNpc
+                  }
+                  visible={
+                    !!sessionInvolvementForNpc?.show_clocks_to_players
+                  }
+                  label="Clocks"
+                  onToggle={() =>
+                    patchThisNpcInvolvementField(
+                      "show_clocks_to_players",
+                      !sessionInvolvementForNpc?.show_clocks_to_players,
+                    )
+                  }
+                  style={S.card}
+                >
                   <button
                     type="button"
                     onClick={() =>
@@ -3990,11 +4472,40 @@ const NPCSheet = ({
                   </div>
                   </div>
                   ) : null}
-                </div>
+                </VisEditSection>
 
                 {/* Inventory — structured kit (same field as CREW mode when no faction) */}
-                <div style={S.card}>
+                {!(readOnly && playersSeeInventory === false) ? (
+                <VisEditSection
+                  active={visibilityEditMode && isGM}
+                  visible={!!playersSeeInventory}
+                  label="Inventory"
+                  onToggle={() => setPlayersSeeInventory((v) => !v)}
+                  style={S.card}
+                >
                   <span style={S.lbl}>INVENTORY</span>
+                  {isGM && !visibilityEditMode ? (
+                    <label
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                        fontSize: 11,
+                        color: "#d1d5db",
+                        marginBottom: 8,
+                        cursor: "pointer",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={!!playersSeeInventory}
+                        onChange={(e) =>
+                          setPlayersSeeInventory(e.target.checked)
+                        }
+                      />
+                      Players can see inventory
+                    </label>
+                  ) : null}
                   <div style={{ minWidth: 0 }}>
                     <CharacterSheetInventoryList
                       panelId="npc-sheet-inventory-panel"
@@ -4088,7 +4599,8 @@ const NPCSheet = ({
                       ) : null}
                     </div>
                   ) : null}
-                </div>
+                </VisEditSection>
+                ) : null}
                 {/* Healing and Recovery — GM reference (no PC-style dice pool on NPCs) */}
                 <div style={S.card}>
                   <button
@@ -5608,181 +6120,66 @@ const NPCSheet = ({
                       </div>
                     </div>
 
-                    <NpcsStandCoin
-                      grades={stats}
-                      readouts={standCoinReadouts}
-                      onStep={bumpStandCoinGrade}
-                      hideIdleHint
-                    />
+                    <VisEditSection
+                      active={
+                        visibilityEditMode &&
+                        isGM &&
+                        !!sessionInvolvementForNpc
+                      }
+                      visible={
+                        !!sessionInvolvementForNpc?.show_stand_coin_to_players
+                      }
+                      label="Stand coin"
+                      onToggle={() =>
+                        patchThisNpcInvolvementField(
+                          "show_stand_coin_to_players",
+                          !sessionInvolvementForNpc?.show_stand_coin_to_players,
+                        )
+                      }
+                    >
+                      <NpcsStandCoin
+                        grades={stats}
+                        readouts={standCoinReadouts}
+                        onStep={bumpStandCoinGrade}
+                        hideIdleHint
+                      />
+                    </VisEditSection>
                   </div>
                 )}
 
                 {/* Abilities — Stand-playbook NPCs only */}
                 {playbook === "STAND" && (
-                <div
+                <VisEditSection
+                  active={
+                    visibilityEditMode &&
+                    isGM &&
+                    !!sessionInvolvementForNpc
+                  }
+                  visible={
+                    !!sessionInvolvementForNpc?.show_all_abilities_to_players
+                  }
+                  label="Abilities"
+                  onToggle={() =>
+                    patchThisNpcInvolvementField(
+                      "show_all_abilities_to_players",
+                      !sessionInvolvementForNpc?.show_all_abilities_to_players,
+                    )
+                  }
                   style={{
                     marginTop: 14,
                     paddingTop: 14,
                     borderTop: "1px solid #2d1f52",
                   }}
                 >
-                  <span style={S.lbl}>Stand Abilities</span>
-                  <div
-                    style={{
-                      fontSize: "10px",
-                      color: "#6b7280",
-                      marginBottom: "8px",
-                    }}
-                  >
-                    Narrative descriptions only — no mechanical dots
-                  </div>
-                  {abilities.map((ab) => {
-                    const typeVal =
-                      String(ab.type || "").toLowerCase() === "passive"
-                        ? "passive"
-                        : "unique";
-                    return (
-                      <div
-                        key={ab.id}
-                        style={{
-                          background: "#1a1030",
-                          border: "1px solid #2d1f52",
-                          borderRadius: "4px",
-                          padding: "8px",
-                          marginBottom: "6px",
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            alignItems: "flex-start",
-                          }}
-                        >
-                          <div style={{ flex: 1 }}>
-                            <div
-                              style={{
-                                display: "flex",
-                                gap: "6px",
-                                alignItems: "center",
-                                marginBottom: "4px",
-                                flexWrap: "wrap",
-                              }}
-                            >
-                              <input
-                                value={ab.name}
-                                onChange={(e) =>
-                                  setAbilities((p) =>
-                                    p.map((a) =>
-                                      a.id === ab.id
-                                        ? { ...a, name: e.target.value }
-                                        : a,
-                                    ),
-                                  )
-                                }
-                                style={{
-                                  ...S.inp,
-                                  flex: 1,
-                                  minWidth: "140px",
-                                  fontWeight: "bold",
-                                  borderBottom: "1px solid #4b2d8f",
-                                  fontSize: "12px",
-                                }}
-                                placeholder="Ability name"
-                              />
-                              <select
-                                value={typeVal}
-                                onChange={(e) =>
-                                  setAbilities((p) =>
-                                    p.map((a) =>
-                                      a.id === ab.id
-                                        ? { ...a, type: e.target.value }
-                                        : a,
-                                    ),
-                                  )
-                                }
-                                style={{
-                                  ...S.sel,
-                                  fontSize: "10px",
-                                  padding: "2px 4px",
-                                }}
-                              >
-                                <option value="unique">Unique</option>
-                                <option value="passive">Passive</option>
-                              </select>
-                            </div>
-                            <textarea
-                              value={ab.description}
-                              onChange={(e) =>
-                                setAbilities((p) =>
-                                  p.map((a) =>
-                                    a.id === ab.id
-                                      ? { ...a, description: e.target.value }
-                                      : a,
-                                  ),
-                                )
-                              }
-                              placeholder="What does this ability do narratively?"
-                              style={{
-                                width: "100%",
-                                background: "transparent",
-                                color: "#d1d5db",
-                                border: "none",
-                                fontFamily: "monospace",
-                                fontSize: "11px",
-                                resize: "vertical",
-                                outline: "none",
-                                minHeight: "40px",
-                                boxSizing: "border-box",
-                              }}
-                            />
-                          </div>
-                          <button
-                            onClick={() =>
-                              setAbilities((p) =>
-                                p.filter((a) => a.id !== ab.id),
-                              )
-                            }
-                            style={{
-                              color: "#f87171",
-                              background: "none",
-                              border: "none",
-                              cursor: "pointer",
-                              fontSize: "15px",
-                              marginLeft: "6px",
-                              flexShrink: 0,
-                            }}
-                          >
-                            ×
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                  <button
-                    onClick={() =>
-                      setAbilities((p) => [
-                        ...p,
-                        {
-                          id: Date.now(),
-                          name: "",
-                          description: "",
-                          type: "unique",
-                        },
-                      ])
-                    }
-                    style={{
-                      ...S.btn,
-                      border: "2px dashed #2d1f52",
-                      background: "transparent",
-                      color: "#6b7280",
-                      width: "100%",
-                      padding: "6px",
-                    }}
-                  >
-                    + Add Ability
-                  </button>
-                </div>
+                  <NpcNarrativeAbilitiesEditor
+                    label="Stand Abilities"
+                    hint="Narrative descriptions only — no mechanical dots"
+                    abilities={abilities}
+                    setAbilities={setAbilities}
+                    showTypeSelect
+                    styles={S}
+                  />
+                </VisEditSection>
                 )}
 
                 {/* Playbook Abilities — Hamon / Spin / Non-Bizarre */}
@@ -5794,245 +6191,303 @@ const NPCSheet = ({
                       borderTop: "1px solid #2d1f52",
                     }}
                   >
-                    <span style={S.lbl}>
-                      {playbook === "HAMON"
-                        ? "Hamon Playbook Abilities"
-                        : playbook === "SPIN"
-                          ? "Spin Playbook Abilities"
-                          : "Non-Bizarre NPC"}
-                    </span>
-
-                    {playbook === "NON_BIZARRE" && (
-                      <div
-                        style={{
-                          background: "#0a0a14",
-                          border: "1px solid #374151",
-                          borderRadius: "4px",
-                          padding: "10px",
-                          fontSize: "11px",
-                          color: "#9ca3af",
-                          lineHeight: "1.6",
-                        }}
-                      >
+                    {playbook === "NON_BIZARRE" ? (
+                      <>
+                        <span style={S.lbl}>Non-Bizarre NPC</span>
                         <div
                           style={{
-                            fontWeight: "bold",
-                            color: "#fbbf24",
-                            marginBottom: "6px",
+                            background: "#0a0a14",
+                            border: "1px solid #374151",
+                            borderRadius: "4px",
+                            padding: "10px",
+                            fontSize: "11px",
+                            color: "#9ca3af",
+                            lineHeight: "1.6",
                           }}
                         >
-                          ⚠ Non-Bizarre NPC
-                        </div>
-                        <div>
-                          This NPC does not draw from the Hamon or Spin
-                          playbooks. Stand Ability blurbs in this sheet are
-                          narration only — they do <strong>not</strong>{" "}
-                          automatically grant a Stand; manifestation needs a GM
-                          beat.
-                        </div>
-                      </div>
-                    )}
-
-                    {playbook === "HAMON" && (
-                      <div>
-                        <div
-                          style={{
-                            fontSize: "10px",
-                            color: "#6b7280",
-                            marginBottom: "8px",
-                          }}
-                        >
-                          Select Hamon abilities from the playbook. Toggle to
-                          assign or remove.
-                        </div>
-                        {hamonAbilitiesList.length === 0 ? (
                           <div
                             style={{
-                              fontSize: "11px",
-                              color: "#6b7280",
-                              padding: "8px",
+                              fontWeight: "bold",
+                              color: "#fbbf24",
+                              marginBottom: "6px",
                             }}
                           >
-                            Loading abilities…
+                            ⚠ Non-Bizarre NPC
                           </div>
-                        ) : (
-                          hamonAbilitiesList.map((a) => {
-                            const selected = selectedHamonIds.includes(a.id);
-                            const desc = sanitizeNpcPlaybookAbilityDescription(
-                              a.description,
-                            );
-                            return (
-                              <div
-                                key={a.id}
-                                onClick={() => toggleHamonAbility(a.id)}
-                                style={{
-                                  display: "flex",
-                                  alignItems: "flex-start",
-                                  gap: "8px",
-                                  padding: "6px 8px",
-                                  marginBottom: "4px",
-                                  borderRadius: "4px",
-                                  cursor: "pointer",
-                                  background: selected
-                                    ? "#1a0a3a"
-                                    : "#0d0d1a",
-                                  border: `1px solid ${selected ? "#7c3aed" : "#2d1f52"}`,
-                                }}
-                              >
-                                <div
-                                  style={{
-                                    width: "14px",
-                                    height: "14px",
-                                    borderRadius: "3px",
-                                    border: "1px solid #7c3aed",
-                                    background: selected
-                                      ? "#7c3aed"
-                                      : "transparent",
-                                    flexShrink: 0,
-                                    marginTop: "1px",
-                                  }}
-                                />
-                                <div style={{ flex: 1 }}>
-                                  <div
-                                    style={{
-                                      fontWeight: "bold",
-                                      fontSize: "12px",
-                                      color: selected ? "#e9d5ff" : "#d1d5db",
-                                    }}
-                                  >
-                                    {a.name}
-                                    {a.hamon_type && (
-                                      <span
-                                        style={{
-                                          marginLeft: "6px",
-                                          fontSize: "10px",
-                                          color: "#a78bfa",
-                                          fontWeight: "normal",
-                                        }}
-                                      >
-                                        {a.hamon_type}
-                                      </span>
-                                    )}
-                                  </div>
-                                  {desc ? (
-                                    <div
-                                      style={{
-                                        fontSize: "11px",
-                                        color: "#6b7280",
-                                        marginTop: "2px",
-                                        lineHeight: "1.4",
-                                      }}
-                                    >
-                                      {desc}
-                                    </div>
-                                  ) : null}
-                                </div>
-                              </div>
-                            );
-                          })
-                        )}
-                      </div>
-                    )}
-
-                    {playbook === "SPIN" && (
-                      <div>
-                        <div
+                          <div>
+                            This NPC does not draw from the Hamon or Spin
+                            playbooks. Stand Ability blurbs in this sheet are
+                            narration only — they do <strong>not</strong>{" "}
+                            automatically grant a Stand; manifestation needs a GM
+                            beat.
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setPlaybookAbilitiesExpandedPersist((prev) => !prev)
+                          }
+                          aria-expanded={playbookAbilitiesExpanded}
+                          aria-controls="npc-sheet-playbook-abilities-panel"
                           style={{
-                            fontSize: "10px",
-                            color: "#6b7280",
-                            marginBottom: "8px",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            width: "100%",
+                            background: "none",
+                            border: "none",
+                            cursor: "pointer",
+                            padding: 0,
+                            marginBottom: playbookAbilitiesExpanded ? "8px" : 0,
+                            textAlign: "left",
                           }}
                         >
-                          Select Spin abilities from the playbook. Toggle to
-                          assign or remove.
-                        </div>
-                        {spinAbilitiesList.length === 0 ? (
-                          <div
+                          <span
+                            aria-hidden
                             style={{
-                              fontSize: "11px",
-                              color: "#6b7280",
-                              padding: "8px",
+                              color: "#9ca3af",
+                              fontSize: "10px",
+                              lineHeight: 1,
+                              width: "12px",
+                              flexShrink: 0,
+                              userSelect: "none",
                             }}
                           >
-                            Loading abilities…
-                          </div>
-                        ) : (
-                          spinAbilitiesList.map((a) => {
-                            const selected = selectedSpinIds.includes(a.id);
-                            const desc = sanitizeNpcPlaybookAbilityDescription(
-                              a.description,
-                            );
-                            return (
-                              <div
-                                key={a.id}
-                                onClick={() => toggleSpinAbility(a.id)}
-                                style={{
-                                  display: "flex",
-                                  alignItems: "flex-start",
-                                  gap: "8px",
-                                  padding: "6px 8px",
-                                  marginBottom: "4px",
-                                  borderRadius: "4px",
-                                  cursor: "pointer",
-                                  background: selected
-                                    ? "#0a1a0a"
-                                    : "#0d0d1a",
-                                  border: `1px solid ${selected ? "#16a34a" : "#2d1f52"}`,
-                                }}
-                              >
+                            {playbookAbilitiesExpanded ? "▼" : "►"}
+                          </span>
+                          <span
+                            style={{
+                              color: S.lbl.color,
+                              fontSize: S.lbl.fontSize,
+                              fontWeight: S.lbl.fontWeight,
+                            }}
+                          >
+                            {playbook === "HAMON"
+                              ? "HAMON PLAYBOOK ABILITIES"
+                              : "SPIN PLAYBOOK ABILITIES"}
+                            {!playbookAbilitiesExpanded
+                              ? ` · ${(
+                                  playbook === "HAMON"
+                                    ? selectedHamonIds
+                                    : selectedSpinIds
+                                ).length} selected`
+                              : ""}
+                          </span>
+                        </button>
+                        {playbookAbilitiesExpanded ? (
+                          <div id="npc-sheet-playbook-abilities-panel">
+                            <div
+                              style={{
+                                fontSize: "10px",
+                                color: "#6b7280",
+                                marginBottom: "8px",
+                              }}
+                            >
+                              {playbook === "HAMON"
+                                ? "Select Hamon abilities from the playbook. Toggle to assign or remove."
+                                : "Select Spin abilities from the playbook. Toggle to assign or remove."}
+                            </div>
+                            {playbook === "HAMON" ? (
+                              hamonAbilitiesList.length === 0 ? (
                                 <div
                                   style={{
-                                    width: "14px",
-                                    height: "14px",
-                                    borderRadius: "3px",
-                                    border: "1px solid #16a34a",
-                                    background: selected
-                                      ? "#16a34a"
-                                      : "transparent",
-                                    flexShrink: 0,
-                                    marginTop: "1px",
+                                    fontSize: "11px",
+                                    color: "#6b7280",
+                                    padding: "8px",
                                   }}
-                                />
-                                <div style={{ flex: 1 }}>
-                                  <div
-                                    style={{
-                                      fontWeight: "bold",
-                                      fontSize: "12px",
-                                      color: selected ? "#86efac" : "#d1d5db",
-                                    }}
-                                  >
-                                    {a.name}
-                                    {a.spin_type && (
-                                      <span
-                                        style={{
-                                          marginLeft: "6px",
-                                          fontSize: "10px",
-                                          color: "#34d399",
-                                          fontWeight: "normal",
-                                        }}
-                                      >
-                                        {a.spin_type}
-                                      </span>
-                                    )}
-                                  </div>
-                                  {desc ? (
+                                >
+                                  Loading abilities…
+                                </div>
+                              ) : (
+                                hamonAbilitiesList.map((a) => {
+                                  const selected = selectedHamonIds.includes(a.id);
+                                  const desc =
+                                    sanitizeNpcPlaybookAbilityDescription(
+                                      a.description,
+                                    );
+                                  return (
                                     <div
+                                      key={a.id}
+                                      onClick={() => toggleHamonAbility(a.id)}
                                       style={{
-                                        fontSize: "11px",
-                                        color: "#6b7280",
-                                        marginTop: "2px",
-                                        lineHeight: "1.4",
+                                        display: "flex",
+                                        alignItems: "flex-start",
+                                        gap: "8px",
+                                        padding: "6px 8px",
+                                        marginBottom: "4px",
+                                        borderRadius: "4px",
+                                        cursor: "pointer",
+                                        background: selected
+                                          ? "#1a0a3a"
+                                          : "#0d0d1a",
+                                        border: `1px solid ${selected ? "#7c3aed" : "#2d1f52"}`,
                                       }}
                                     >
-                                      {desc}
+                                      <div
+                                        style={{
+                                          width: "14px",
+                                          height: "14px",
+                                          borderRadius: "3px",
+                                          border: "1px solid #7c3aed",
+                                          background: selected
+                                            ? "#7c3aed"
+                                            : "transparent",
+                                          flexShrink: 0,
+                                          marginTop: "1px",
+                                        }}
+                                      />
+                                      <div style={{ flex: 1 }}>
+                                        <div
+                                          style={{
+                                            fontWeight: "bold",
+                                            fontSize: "12px",
+                                            color: selected
+                                              ? "#e9d5ff"
+                                              : "#d1d5db",
+                                          }}
+                                        >
+                                          {a.name}
+                                          {a.hamon_type && (
+                                            <span
+                                              style={{
+                                                marginLeft: "6px",
+                                                fontSize: "10px",
+                                                color: "#a78bfa",
+                                                fontWeight: "normal",
+                                              }}
+                                            >
+                                              {a.hamon_type}
+                                            </span>
+                                          )}
+                                        </div>
+                                        {desc ? (
+                                          <div
+                                            style={{
+                                              fontSize: "11px",
+                                              color: "#6b7280",
+                                              marginTop: "2px",
+                                              lineHeight: "1.4",
+                                            }}
+                                          >
+                                            {desc}
+                                          </div>
+                                        ) : null}
+                                      </div>
                                     </div>
-                                  ) : null}
-                                </div>
+                                  );
+                                })
+                              )
+                            ) : spinAbilitiesList.length === 0 ? (
+                              <div
+                                style={{
+                                  fontSize: "11px",
+                                  color: "#6b7280",
+                                  padding: "8px",
+                                }}
+                              >
+                                Loading abilities…
                               </div>
-                            );
-                          })
-                        )}
-                      </div>
+                            ) : (
+                              spinAbilitiesList.map((a) => {
+                                const selected = selectedSpinIds.includes(a.id);
+                                const desc =
+                                  sanitizeNpcPlaybookAbilityDescription(
+                                    a.description,
+                                  );
+                                return (
+                                  <div
+                                    key={a.id}
+                                    onClick={() => toggleSpinAbility(a.id)}
+                                    style={{
+                                      display: "flex",
+                                      alignItems: "flex-start",
+                                      gap: "8px",
+                                      padding: "6px 8px",
+                                      marginBottom: "4px",
+                                      borderRadius: "4px",
+                                      cursor: "pointer",
+                                      background: selected
+                                        ? "#0a1a0a"
+                                        : "#0d0d1a",
+                                      border: `1px solid ${selected ? "#16a34a" : "#2d1f52"}`,
+                                    }}
+                                  >
+                                    <div
+                                      style={{
+                                        width: "14px",
+                                        height: "14px",
+                                        borderRadius: "3px",
+                                        border: "1px solid #16a34a",
+                                        background: selected
+                                          ? "#16a34a"
+                                          : "transparent",
+                                        flexShrink: 0,
+                                        marginTop: "1px",
+                                      }}
+                                    />
+                                    <div style={{ flex: 1 }}>
+                                      <div
+                                        style={{
+                                          fontWeight: "bold",
+                                          fontSize: "12px",
+                                          color: selected
+                                            ? "#86efac"
+                                            : "#d1d5db",
+                                        }}
+                                      >
+                                        {a.name}
+                                        {a.spin_type && (
+                                          <span
+                                            style={{
+                                              marginLeft: "6px",
+                                              fontSize: "10px",
+                                              color: "#34d399",
+                                              fontWeight: "normal",
+                                            }}
+                                          >
+                                            {a.spin_type}
+                                          </span>
+                                        )}
+                                      </div>
+                                      {desc ? (
+                                        <div
+                                          style={{
+                                            fontSize: "11px",
+                                            color: "#6b7280",
+                                            marginTop: "2px",
+                                            lineHeight: "1.4",
+                                          }}
+                                        >
+                                          {desc}
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
+                        ) : null}
+                        <div
+                          style={{
+                            marginTop: playbookAbilitiesExpanded ? 14 : 8,
+                            paddingTop: 14,
+                            borderTop: "1px solid #2d1f52",
+                          }}
+                        >
+                          <NpcNarrativeAbilitiesEditor
+                            label="Custom abilities"
+                            hint="Narrative descriptions only — no mechanical dots"
+                            abilities={abilities}
+                            setAbilities={setAbilities}
+                            showTypeSelect
+                            styles={S}
+                          />
+                        </div>
+                      </>
                     )}
                   </div>
                 )}
@@ -6386,26 +6841,109 @@ const NPCSheet = ({
                       : "Faction this NPC belongs to (also in campaign management)."}
                   </div>
                   {isGM && campaignId && faction ? (
-                    <label
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "6px",
-                        marginTop: "8px",
-                        fontSize: "11px",
-                        color: "#d1d5db",
-                        cursor: "pointer",
-                      }}
+                    <VisEditSection
+                      active={visibilityEditMode}
+                      visible={!!factionVisibleToPlayers}
+                      label="Faction"
+                      onToggle={() =>
+                        setFactionVisibleToPlayers((v) => !v)
+                      }
+                      style={{ marginTop: "8px" }}
                     >
-                      <input
-                        type="checkbox"
-                        checked={factionVisibleToPlayers}
-                        onChange={(e) =>
-                          setFactionVisibleToPlayers(e.target.checked)
-                        }
-                      />
-                      Players can see this faction
-                    </label>
+                      <label
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          fontSize: "11px",
+                          color: "#d1d5db",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={factionVisibleToPlayers}
+                          onChange={(e) =>
+                            setFactionVisibleToPlayers(e.target.checked)
+                          }
+                        />
+                        Players can see this faction
+                      </label>
+                      <div
+                        style={{
+                          fontSize: "10px",
+                          color: "#9ca3af",
+                          marginTop: "6px",
+                          marginBottom: "4px",
+                        }}
+                      >
+                        Players may also see
+                      </div>
+                      <div
+                        style={{
+                          display: "flex",
+                          flexWrap: "wrap",
+                          gap: "8px 14px",
+                          opacity: factionVisibleToPlayers ? 1 : 0.5,
+                          pointerEvents: visibilityEditMode ? "none" : "auto",
+                        }}
+                      >
+                        {[
+                          [
+                            "tier",
+                            "Tier",
+                            factionPlayersSeeTier,
+                            setFactionPlayersSeeTier,
+                          ],
+                          [
+                            "hold",
+                            "Hold",
+                            factionPlayersSeeHold,
+                            setFactionPlayersSeeHold,
+                          ],
+                          [
+                            "reputation",
+                            "Rep",
+                            factionPlayersSeeReputation,
+                            setFactionPlayersSeeReputation,
+                          ],
+                          [
+                            "notes",
+                            "Notes",
+                            factionPlayersSeeNotes,
+                            setFactionPlayersSeeNotes,
+                          ],
+                          [
+                            "npcs",
+                            "NPCs",
+                            factionPlayersSeeNpcs,
+                            setFactionPlayersSeeNpcs,
+                          ],
+                        ].map(([key, label, checked, setter]) => (
+                          <label
+                            key={key}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "4px",
+                              fontSize: "11px",
+                              color: "#d1d5db",
+                              cursor: factionVisibleToPlayers
+                                ? "pointer"
+                                : "not-allowed",
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              disabled={!factionVisibleToPlayers}
+                              checked={checked !== false}
+                              onChange={(e) => setter(e.target.checked)}
+                            />
+                            {label}
+                          </label>
+                        ))}
+                      </div>
+                    </VisEditSection>
                   ) : null}
                 </div>
                 <div style={{ flex: "1 1 200px", minWidth: 0 }}>

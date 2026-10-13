@@ -134,10 +134,33 @@ class RollViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_400_BAD_REQUEST
                 )
             updates['outcome'] = raw_outcome
+        became_desperate = (
+            updates.get("position") == "desperate"
+            and (roll.position or "").lower() != "desperate"
+        )
         if updates:
             for k, v in updates.items():
                 setattr(roll, k, v)
             roll.save(update_fields=list(updates.keys()))
+        # GM set position → desperate after the fact: award if not already granted.
+        if became_desperate and (roll.roll_type or "").upper() == "ACTION":
+            action_name = roll.action_name or ""
+            if action_name:
+                award_desperate_action_xp(
+                    roll.character,
+                    roll.session,
+                    roll,
+                    action_name,
+                    request.user,
+                )
+                award_innate_stand_dice_xp(
+                    roll.character,
+                    roll.session,
+                    roll,
+                    action_name,
+                    request.user,
+                )
+                roll.character.refresh_from_db()
         return Response(RollSerializer(roll).data)
 
     @action(detail=True, methods=['post'], url_path='grant-xp')
