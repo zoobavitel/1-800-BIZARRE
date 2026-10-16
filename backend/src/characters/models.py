@@ -802,10 +802,6 @@ class Character(models.Model):
         else:  # F or other
             return 0
 
-    @property
-    def level(self):
-        return 1 + (self.total_xp_spent // 10)
-
     level = models.IntegerField(default=1)
 
     heritage = models.ForeignKey(Heritage, on_delete=models.SET_NULL, null=True)

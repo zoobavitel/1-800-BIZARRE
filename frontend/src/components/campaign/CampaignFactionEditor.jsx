@@ -51,7 +51,8 @@ const CampaignFactionEditor = ({
 
   return (
     <div
-      id={editorId}
+      id={embedded ? undefined : editorId}
+      className="campaign-faction-editor"
       style={{
         border: "1px solid var(--hftf-purple)",
         borderLeft: "4px solid var(--hftf-purple)",
@@ -205,14 +206,7 @@ const CampaignFactionEditor = ({
           ) : null}
         </div>
       </div>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: "8px",
-          marginBottom: "8px",
-        }}
-      >
+      <div className="campaign-faction-editor-fields">
         <div>
           <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
             Name
@@ -466,17 +460,7 @@ const CampaignFactionEditor = ({
             </div>
           ) : null}
           {(factionForm.npcs || []).map((n) => (
-            <div
-              key={n.id}
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                gap: 8,
-                padding: "4px 0",
-                fontSize: "12px",
-              }}
-            >
+            <div key={n.id} className="campaign-faction-npc-row">
               {typeof onNavigateToNPC === "function" && n?.id != null ? (
                 <a
                   href={buildRouteHref("npcs", { npcId: n.id })}

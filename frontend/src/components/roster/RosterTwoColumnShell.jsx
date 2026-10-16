@@ -1,8 +1,8 @@
 import React from "react";
-import { rosterTwoColumnGridStyle } from "./rosterShared";
 
 /**
- * Two-column roster layout (Factions/NPCs | Players/Crew) used on campaign and session views.
+ * Campaign roster columns. Wide screens: NPCs left, PCs right.
+ * At max-width 640px both columns stack, PCs first (see Home.css).
  */
 export default function RosterTwoColumnShell({
   showLeftColumn = true,
@@ -12,11 +12,18 @@ export default function RosterTwoColumnShell({
 }) {
   const showRight = showSecondColumn;
   const both = showLeftColumn && showRight;
+  const className = both
+    ? "campaign-roster-columns is-both"
+    : "campaign-roster-columns";
   return (
     <div style={{ minWidth: 0 }}>
-      <div style={rosterTwoColumnGridStyle(both)}>
-        {showLeftColumn ? leftColumn : null}
-        {showRight ? rightColumn : null}
+      <div className={className}>
+        {showLeftColumn ? (
+          <div className="campaign-roster-npc">{leftColumn}</div>
+        ) : null}
+        {showRight ? (
+          <div className="campaign-roster-pc">{rightColumn}</div>
+        ) : null}
       </div>
     </div>
   );
