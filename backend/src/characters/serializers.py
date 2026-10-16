@@ -1943,6 +1943,9 @@ class CharacterSerializer(serializers.ModelSerializer):
             data["effective_stash_slots"] = list(
                 instance.stash_slots or _default_stash_slots()
             )
+        from characters.services.xp_allocation import compute_pc_level
+
+        data["level"] = compute_pc_level(instance)
         return data
 
     def validate_coin_boxes(self, value):
@@ -2756,6 +2759,12 @@ class CharacterSummarySerializer(serializers.ModelSerializer):
     crew_id = serializers.IntegerField(source="crew.id", read_only=True, default=None)
     crew_name = serializers.CharField(source="crew.name", read_only=True, default=None)
     assist_help_pending = serializers.SerializerMethodField()
+    level = serializers.SerializerMethodField()
+
+    def get_level(self, obj):
+        from characters.services.xp_allocation import compute_pc_level
+
+        return compute_pc_level(obj)
 
     def get_assist_help_pending(self, obj):
         """Active campaign session only; one pending +1d per beneficiary per session."""
@@ -3330,7 +3339,7 @@ class CampaignSerializer(serializers.ModelSerializer):
 
     def get_campaign_characters(self, obj):
         qs = obj.characters.all().select_related(
-            "heritage", "crew", "user"
+            "heritage", "crew", "user", "stand"
         ).order_by("id")
         sess_id = getattr(obj, "active_session_id", None)
         pmap = {}

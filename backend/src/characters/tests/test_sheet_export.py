@@ -115,7 +115,7 @@ class SheetExportServiceTests(TestCase):
         values = build_pc_field_values(self.character)
         self.assertEqual(values["pc_playbook"], "Stand")
         self.assertEqual(values["pc_alias"], "JoJo")
-        self.assertEqual(values["pc_level"], "3")
+        self.assertEqual(values["pc_level"], "15")
         self.assertIn("Phenomena", values["pc_playbook_archetypes"])
         self.assertIn("Shared", values["pc_playbook_archetypes"])
         self.assertNotIn("PHENOMENA", values["pc_playbook_archetypes"])

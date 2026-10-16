@@ -120,6 +120,51 @@ def _grade_index(grade):
         return 0
 
 
+def _sheet_action_dot_total(character):
+    """Sum the 12 sheet action ratings. attune and legacy bizarre count once."""
+    dots = dict(getattr(character, "action_dots", None) or {})
+    total = 0
+    for key in (
+        "hunt",
+        "study",
+        "survey",
+        "tinker",
+        "finesse",
+        "prowl",
+        "skirmish",
+        "wreck",
+        "command",
+        "consort",
+        "sway",
+    ):
+        try:
+            total += max(0, int(dots.get(key) or 0))
+        except (TypeError, ValueError):
+            continue
+    attune = bizarre = 0
+    try:
+        attune = max(0, int(dots.get("attune") or 0))
+    except (TypeError, ValueError):
+        attune = 0
+    try:
+        bizarre = max(0, int(dots.get("bizarre") or 0))
+    except (TypeError, ValueError):
+        bizarre = 0
+    return total + max(attune, bizarre)
+
+
+def compute_pc_level(character):
+    """Sheet LEVEL: 95 XP is level 1 (6 coin pts + 7 dots). +10 XP per level.
+
+    Reads Stand grades and action dots. Does not read or write Character.level.
+    Missing grades count as D, matching gradeToIndex.
+    """
+    grades = _get_stand_grades(character)
+    stand_points = sum(_grade_index(grades.get(field)) for field in STAND_STAT_FIELDS)
+    spent = stand_points * 10 + _sheet_action_dot_total(character) * 5
+    return max(1, 1 + (spent - 95) // 10)
+
+
 def _bump_grade(grade):
     idx = _grade_index(grade)
     if idx >= len(GRADES) - 1:

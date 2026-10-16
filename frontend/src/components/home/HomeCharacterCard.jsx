@@ -1,8 +1,33 @@
 import React from "react";
+import { computePcLevelFromSheet } from "../../features/character-sheet/utils/characterUtils";
 import { getCharacterPortraitSrc } from "../../utils/homeAvatar";
 import { buildRouteHref, handleSpaNavClick } from "../../utils/spaNavigation";
 import HomeCardThumb from "./HomeCardThumb";
 import HomeFullBleedBg, { useHomeCardImage } from "./HomeFullBleedBg";
+
+function homeCardHeritage(character) {
+  const heritageRaw =
+    character?.heritage_name ||
+    character?.heritageName ||
+    character?.heritage_details?.name ||
+    (typeof character?.heritage === "object" && character?.heritage?.name) ||
+    (typeof character?.heritage === "string" ? character.heritage : null);
+  return String(heritageRaw || "").trim() || "—";
+}
+
+function homeCardLevel(character) {
+  if (character?.standStats || character?.actionRatings) {
+    return computePcLevelFromSheet({
+      standStats: character.standStats,
+      actionRatings: character.actionRatings,
+    });
+  }
+  const levelRaw = character?.level;
+  if (levelRaw != null && levelRaw !== "" && Number.isFinite(Number(levelRaw))) {
+    return Number(levelRaw);
+  }
+  return null;
+}
 
 /**
  * Home page PC token card — 3:4 portrait slot; full-bleed when art exists.
@@ -77,10 +102,10 @@ export default function HomeCharacterCard({
             「{character?.standName || "—"}」
           </div>
           <div className="p-card-tags">
+            <span className="p-tag">{homeCardHeritage(character)}</span>
             <span className="p-tag">
-              {character?.heritageName || character?.heritage || "—"}
+              Lv {homeCardLevel(character) ?? "—"}
             </span>
-            <span className="p-tag">Lv {character?.level ?? "—"}</span>
           </div>
         </div>
       </div>
