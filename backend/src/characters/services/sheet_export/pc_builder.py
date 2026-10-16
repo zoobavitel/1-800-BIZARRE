@@ -9,6 +9,7 @@ from characters.roll_helpers import max_stress_slots_for_character
 from characters.services.playbook_xp_archetype import (
     resolve_playbook_xp_archetype_labels,
 )
+from characters.services.xp_allocation import compute_pc_level
 
 from .field_maps import (
     ACTION_KEYS,
@@ -349,7 +350,7 @@ def build_pc_field_values(character: Character) -> dict[str, str]:
     values["pc_campaign"] = character.campaign.name if character.campaign_id else ""
     values["pc_playbook"] = _playbook_label(character.playbook)
     values["pc_secondary_playbook"] = _playbook_label(character.secondary_playbook)
-    values["pc_level"] = str(max(0, int(character.level or 0)))
+    values["pc_level"] = str(compute_pc_level(character))
     values["pc_playbook_archetypes"] = resolve_playbook_xp_archetype_labels(character)
     values["pc_close_friend"] = character.close_friend or ""
     values["pc_rival"] = character.rival or ""

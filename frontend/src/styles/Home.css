@@ -2815,3 +2815,58 @@
   color: var(--cream-dim);
   opacity: .4;
 }
+
+/* Campaign roster: side by side until a normal phone width.
+   Unfolded Fold stays two columns. PCs stack above NPCs when narrow. */
+.campaign-roster-columns {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  margin-bottom: 12px;
+  align-items: stretch;
+  min-width: 0;
+}
+.campaign-roster-columns.is-both {
+  grid-template-columns: 1fr 1fr;
+}
+.campaign-roster-columns > .campaign-roster-npc,
+.campaign-roster-columns > .campaign-roster-pc {
+  min-width: 0;
+}
+@media (max-width: 640px) {
+  .campaign-roster-columns.is-both {
+    grid-template-columns: 1fr;
+  }
+  .campaign-roster-columns > .campaign-roster-pc {
+    order: 1;
+  }
+  .campaign-roster-columns > .campaign-roster-npc {
+    order: 2;
+  }
+}
+
+.campaign-faction-editor {
+  container-type: inline-size;
+}
+.campaign-faction-editor-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.campaign-faction-npc-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 12px;
+}
+@container (max-width: 320px) {
+  .campaign-faction-editor-fields {
+    grid-template-columns: 1fr;
+  }
+  .campaign-faction-npc-row {
+    flex-wrap: wrap;
+  }
+}
