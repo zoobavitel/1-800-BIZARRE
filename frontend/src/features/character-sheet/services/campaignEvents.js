@@ -2,8 +2,11 @@
  * Subscribe to server-sent campaign updates (position/effect, rolls, character saves).
  * Uses DRF token in the query string because EventSource cannot send Authorization headers.
  *
- * On error, reconnects with exponential backoff (capped) instead of closing forever —
+ * On error, reconnects with backoff instead of closing forever —
  * Firefox / extensions can drop the stream; permanent close left panels stale until reload.
+ * A stream that dies before a heartbeat, or before it has been open a few seconds,
+ * backs off (3s, 6s, … 60s). A stream that lived waits 3s. Never reconnect at 0ms:
+ * that loop burned the gunicorn request cap.
  *
  * Returns an unsubscribe function with `getLastEventAt()` attached so callers can skip
  * redundant poll sync while the stream is healthy (server sends heartbeat data events ~15s
@@ -11,9 +14,7 @@
  * response does not always trigger native EventSource retry.
  */
 import { getApiBaseUrl } from "../../../config/apiConfig";
-
-const RECONNECT_BASE_MS = 3000;
-const RECONNECT_MAX_MS = 60000;
+import { nextReconnectDelay } from "./campaignEventsReconnect.mjs";
 
 /**
  * @param {number} campaignId
@@ -39,6 +40,8 @@ export function subscribeCampaignEvents(campaignId, { onUpdate } = {}) {
   let closed = false;
   let lastEventAt = 0;
   let sawConnected = false;
+  let openedAt = 0;
+  let sawHeartbeat = false;
 
   const touchTraffic = () => {
     lastEventAt = Date.now();
@@ -54,15 +57,17 @@ export function subscribeCampaignEvents(campaignId, { onUpdate } = {}) {
   const scheduleReconnect = () => {
     if (closed) return;
     clearReconnect();
-    const delay = Math.min(
-      RECONNECT_MAX_MS,
-      RECONNECT_BASE_MS * 2 ** Math.min(attempt, 5),
-    );
-    attempt += 1;
+    const decision = nextReconnectDelay({
+      attempt,
+      openedAt,
+      now: Date.now(),
+      sawHeartbeat,
+    });
+    attempt = decision.nextAttempt;
     reconnectTimer = setTimeout(() => {
       reconnectTimer = null;
       connect();
-    }, delay);
+    }, decision.delayMs);
   };
 
   const connect = () => {
@@ -75,6 +80,8 @@ export function subscribeCampaignEvents(campaignId, { onUpdate } = {}) {
       }
       es = null;
     }
+    openedAt = Date.now();
+    sawHeartbeat = false;
     let next;
     try {
       next = new EventSource(url);
@@ -104,13 +111,9 @@ export function subscribeCampaignEvents(campaignId, { onUpdate } = {}) {
         if (data && data.type === "campaign_update") {
           onUpdate?.(data.reason || "update");
         }
-        // Successful traffic: reset backoff so transient blips recover quickly.
-        if (
-          data &&
-          (data.type === "campaign_update" ||
-            data.type === "connected" ||
-            data.type === "heartbeat")
-        ) {
+        // Opening frame is not proof the stream lived. Reset only after a heartbeat.
+        if (data && data.type === "heartbeat") {
+          sawHeartbeat = true;
           attempt = 0;
         }
       } catch {
@@ -124,18 +127,6 @@ export function subscribeCampaignEvents(campaignId, { onUpdate } = {}) {
         /* ignore */
       }
       if (es === next) es = null;
-      const healthy = lastEventAt > 0 && Date.now() - lastEventAt < 60000;
-      if (healthy) {
-        // Do not trust native retry after a clean HTTP end (Firefox often stays CLOSED).
-        attempt = 0;
-        if (closed) return;
-        clearReconnect();
-        reconnectTimer = setTimeout(() => {
-          reconnectTimer = null;
-          connect();
-        }, 0);
-        return;
-      }
       scheduleReconnect();
     };
   };
