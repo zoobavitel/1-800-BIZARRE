@@ -155,9 +155,16 @@ CORS_ALLOW_HEADERS = list(default_headers) + [
 SSE_STREAM_MAX_SECONDS = float(os.environ.get("SSE_STREAM_MAX_SECONDS", "45"))
 SSE_HEARTBEAT_SECONDS = float(os.environ.get("SSE_HEARTBEAT_SECONDS", "15"))
 SSE_CLIENT_RETRY_MS = int(os.environ.get("SSE_CLIENT_RETRY_MS", "2000"))
+# Live default. Perf sets perf:bizarre:campaign: so pub/sub cannot hit real campaigns.
+REALTIME_CHANNEL_PREFIX = os.environ.get(
+    "REALTIME_CHANNEL_PREFIX", "bizarre:campaign:"
+)
 
 # Celery (used when worker runs; dev uses eager mode — see CELERY_TASK_ALWAYS_EAGER)
 CELERY_BROKER_URL = os.environ.get("REDIS_URL", "redis://127.0.0.1:6379/0")
 CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", CELERY_BROKER_URL)
+# SSE pub/sub. Defaults to the broker so existing env files keep working.
+# Point this at Redis when the broker moves off Redis.
+REALTIME_REDIS_URL = os.environ.get("REALTIME_REDIS_URL", CELERY_BROKER_URL)
 CELERY_TASK_ALWAYS_EAGER = os.environ.get("CELERY_TASK_ALWAYS_EAGER", "true").lower() == "true"
 CELERY_TASK_EAGER_PROPAGATES = True

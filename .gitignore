@@ -77,6 +77,8 @@ db.sqlite3
 media/
 staticfiles/
 debug.log
+# Old prod log dir (now LOG_DIR outside the tree). Keeps a stray one from failing the deploy guard.
+backend/src/logs/
 
 # Backend specific
 backend/src/db.sqlite3

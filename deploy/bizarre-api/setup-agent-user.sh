@@ -75,6 +75,10 @@ if id -u "$DEPLOY_USER" >/dev/null 2>&1 && getent group "$DEPLOY_GROUP" >/dev/nu
   chown -R "${DEPLOY_USER}:${DEPLOY_GROUP}" "$PROD_TREE" 2>/dev/null || true
   find "$PROD_TREE" -type d -exec chmod g+s {} + 2>/dev/null || true
 fi
+# Django logs live outside the git tree (settings_prod LOG_DIR). Group-writable
+# so migrate as the deploy user and gunicorn as root share one file. After the
+# go-w pass above, which would strip this.
+install -d -m 2775 -o root -g "$DEPLOY_GROUP" "${LOG_DIR:-/var/lib/bizarre/logs}"
 
 echo "==> sudoers: status/journal only (no restart)"
 # PATH resolves to /usr/bin/*; trailing * allows --no-pager / -n N.
