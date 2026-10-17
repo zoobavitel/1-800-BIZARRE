@@ -138,8 +138,10 @@ import {
   inventorySpecialArmorCount,
 } from "../features/character-sheet/utils/loadoutUtils";
 import {
+  lastSavedKeyAfterPollTick,
   markPcAutosaveBusyCollision,
   schedulePcPendingResaveDrain,
+  shouldBaselineUnsavedPayload,
 } from "../features/character-sheet/utils/pcAutosaveQueue";
 import {
   canDirectStandUpgrade,
@@ -161,6 +163,14 @@ import {
   outcomeApiToSheetDisplay,
 } from "../features/character-sheet/utils/actionRollOutcome";
 import { resistanceStressCost } from "../features/character-sheet/utils/resistanceStressCost";
+import {
+  harmHasFilledText,
+  normalizeHarmResisted,
+  reduceHarmOnce,
+  resistableHarmOptions,
+  resistedAfterTextEdit,
+  shiftAllHarmDown,
+} from "../features/character-sheet/utils/harmResistance";
 import {
   bumpEffectTier,
   normalizeEffectTier,
@@ -1392,8 +1402,17 @@ const CharacterSheetWrapper = ({
   }, [character?.id]);
 
   useEffect(() => {
-    lastSavedPayloadRef.current = null;
-  }, [sessionDataPollTick]);
+    const saveFailed = saveStatus === "error";
+    if (lastSavedPayloadRef.current == null && !saveFailed) return;
+    const liveKey = sheetPayloadDedupeKey(buildPayloadRef.current?.() || {}, {
+      ignorePendingImageFile: true,
+    });
+    lastSavedPayloadRef.current = lastSavedKeyAfterPollTick({
+      lastSavedKey: lastSavedPayloadRef.current,
+      liveKey,
+      saveFailed,
+    });
+  }, [sessionDataPollTick, saveStatus]);
 
   const openPortraitUrlModal = useCallback(() => {
     setPortraitUrlDraft(String(imageUrl || "").trim());
@@ -1933,6 +1952,13 @@ const CharacterSheetWrapper = ({
   const [harm, setHarm] = useState(() =>
     normalizeHarmObject(character?.harm || character?.harmEntries),
   );
+  const [harmResisted, setHarmResisted] = useState(() =>
+    normalizeHarmResisted(character?.harmResisted),
+  );
+  const harmRef = useRef(harm);
+  harmRef.current = harm;
+  const harmResistedRef = useRef(harmResisted);
+  harmResistedRef.current = harmResisted;
   const [healingClock, setHealingClock] = useState(
     character?.healingClock ?? 0,
   );
@@ -2109,10 +2135,12 @@ const CharacterSheetWrapper = ({
       );
       return same ? prev : { ...prev, ...next };
     });
+    setHarmResisted(normalizeHarmResisted(character?.harmResisted));
   }, [
     character?.id,
     character?.harm,
     character?.harmEntries,
+    character?.harmResisted,
     sheetDraftIsDirty,
   ]);
 
@@ -6104,27 +6132,10 @@ const CharacterSheetWrapper = ({
   const harmLevel3Used =
     ((harm?.level3?.[0] ?? "")?.toString?.()?.trim?.() ?? "") !== "";
 
-  const filledHarmOptions = useMemo(() => {
-    const levels = [
-      ["level1", "Level 1"],
-      ["level2", "Level 2"],
-      ["level3", "Level 3"],
-      ["level4", "Level 4"],
-    ];
-    const out = [];
-    levels.forEach(([level, label]) => {
-      const slots = Array.isArray(harm?.[level]) ? harm[level] : [];
-      slots.forEach((value, idx) => {
-        if (String(value || "").trim()) {
-          out.push({
-            value: `${level}:${idx}`,
-            label: `${label}${slots.length > 1 ? String.fromCharCode(65 + idx) : ""} — ${String(value).trim()}`,
-          });
-        }
-      });
-    });
-    return out;
-  }, [harm]);
+  const filledHarmOptions = useMemo(
+    () => resistableHarmOptions(harm, harmResisted),
+    [harm, harmResisted],
+  );
 
   /** True when manual vice dice highest exceeds current marked stress → must pick consequence */
   const viceManualWouldOverindulge = useMemo(() => {
@@ -6139,60 +6150,77 @@ const CharacterSheetWrapper = ({
     return hi > (Number(stressFilled) || 0);
   }, [historyManual.rollType, historyManual.dice, stressFilled]);
 
-  const clearHarmSlot = useCallback((target) => {
-    const downgradeMap = {
-      level4: "level3",
-      level3: "level2",
-      level2: "level1",
-      level1: null,
-    };
-    const [level, idxRaw] = String(target || "").split(":");
-    const idx = parseInt(String(idxRaw || ""), 10);
-    if (!level || !Number.isFinite(idx)) return false;
-    const cur = {
-      level4: Array.isArray(harm?.level4) ? [...harm.level4] : [""],
-      level3: Array.isArray(harm?.level3) ? [...harm.level3] : [""],
-      level2: Array.isArray(harm?.level2) ? [...harm.level2] : ["", ""],
-      level1: Array.isArray(harm?.level1) ? [...harm.level1] : ["", ""],
-    };
-    const row = cur[level];
-    if (!Array.isArray(row) || idx < 0 || idx >= row.length) return false;
-    const value = String(row[idx] || "").trim();
-    if (!value) return false;
-
-    const nextLevel = downgradeMap[level];
-    row[idx] = "";
-    if (!nextLevel) {
-      setHarm(cur);
-      return true;
-    }
-
-    const toRow = cur[nextLevel];
-    if (!Array.isArray(toRow) || toRow.length === 0) return false;
-    const preferredSlot = idx < toRow.length ? idx : -1;
-    let targetSlot = preferredSlot;
-    if (targetSlot < 0 || String(toRow[targetSlot] || "").trim()) {
-      targetSlot = toRow.findIndex((v) => !String(v || "").trim());
-    }
-    if (targetSlot < 0) return false;
-    toRow[targetSlot] = value;
-    setHarm(cur);
+  const applyResistanceToHarm = useCallback((target) => {
+    const result = reduceHarmOnce(
+      harmRef.current,
+      harmResistedRef.current,
+      target,
+    );
+    if (!result.ok) return false;
+    markDirtyIntent();
+    harmRef.current = result.harm;
+    harmResistedRef.current = result.resisted;
+    setHarm(result.harm);
+    setHarmResisted(result.resisted);
     return true;
-  }, [harm]);
+  }, [markDirtyIntent]);
 
-  const downgradeAllHarmByOneLevel = useCallback((prev) => {
-    const p = normalizeHarmObject(prev);
-    const keep = (v) => String(v || "").trim().length > 0;
-    const l4 = keep(p.level4?.[0]) ? p.level4[0] : "";
-    const l3 = keep(p.level3?.[0]) ? p.level3[0] : "";
-    const l2a = keep(p.level2?.[0]) ? p.level2[0] : "";
-    const l2b = keep(p.level2?.[1]) ? p.level2[1] : "";
-    return {
-      level4: [""],
-      level3: [l4],
-      level2: [l3, ""],
-      level1: [l2a, l2b],
-    };
+  const lowerHarmFromThisRoll = useCallback(() => {
+    setResistanceApplyErr(null);
+    if (diceResult?.resistanceApplied) return;
+    if (!resistanceHarmTarget) {
+      setResistanceApplyErr("Choose a harm entry to lower.");
+      return;
+    }
+    const reduced = applyResistanceToHarm(resistanceHarmTarget);
+    if (!reduced) {
+      setResistanceApplyErr("Selected harm slot is empty or already resisted.");
+      return;
+    }
+    if (diceResult?.isCritical) {
+      setStressFilled((prev) => {
+        const next = Math.max(0, (Number(prev) || 0) - 1);
+        stressTraumaTruthRef.current = {
+          stressFilled: next,
+          trauma: stressTraumaTruthRef.current?.trauma || null,
+        };
+        onCharacterStressTraumaSync?.({ stressFilled: next });
+        if (characterId) {
+          void characterAPI
+            .patchCharacter(characterId, { stress: next })
+            .catch(() => {});
+        }
+        return next;
+      });
+    } else if (!activeSessionId) {
+      const cost =
+        diceResult?.resistanceTotalStressCost ?? diceResult?.stressCost ?? 0;
+      applyStressCost(cost);
+    }
+    setResistanceHarmTarget("");
+    setDiceResult((prev) =>
+      prev
+        ? {
+            ...prev,
+            resistanceApplied: true,
+            resistanceHarmReductionCount: 1,
+            mitigationAbility: resistanceMitigationChoice || "",
+          }
+        : prev,
+    );
+  }, [
+    diceResult,
+    resistanceHarmTarget,
+    applyResistanceToHarm,
+    characterId,
+    activeSessionId,
+    applyStressCost,
+    onCharacterStressTraumaSync,
+    resistanceMitigationChoice,
+  ]);
+
+  const downgradeAllHarmByOneLevel = useCallback((prevHarm, prevResisted) => {
+    return shiftAllHarmDown(prevHarm, prevResisted);
   }, []);
 
   const handleHealingClockAdjust = useCallback(
@@ -6206,13 +6234,17 @@ const CharacterSheetWrapper = ({
         const completions = Math.floor(next / cap) - Math.floor(cur / cap);
         const remainder = next % cap;
         if (completions > 0) {
-          setHarm((hPrev) => {
-            let out = normalizeHarmObject(hPrev);
-            for (let i = 0; i < completions; i += 1) {
-              out = downgradeAllHarmByOneLevel(out);
-            }
-            return out;
-          });
+          let out = normalizeHarmObject(harmRef.current);
+          let resisted = normalizeHarmResisted(harmResistedRef.current);
+          for (let i = 0; i < completions; i += 1) {
+            const next = downgradeAllHarmByOneLevel(out, resisted);
+            out = next.harm;
+            resisted = next.resisted;
+          }
+          harmRef.current = out;
+          harmResistedRef.current = resisted;
+          setHarm(out);
+          setHarmResisted(resisted);
         }
         return remainder;
       });
@@ -6233,13 +6265,17 @@ const CharacterSheetWrapper = ({
           segmentCap: cap,
         });
         if (completions > 0) {
-          setHarm((hPrev) => {
-            let out = normalizeHarmObject(hPrev);
-            for (let i = 0; i < completions; i += 1) {
-              out = downgradeAllHarmByOneLevel(out);
-            }
-            return out;
-          });
+          let out = normalizeHarmObject(harmRef.current);
+          let resisted = normalizeHarmResisted(harmResistedRef.current);
+          for (let i = 0; i < completions; i += 1) {
+            const next = downgradeAllHarmByOneLevel(out, resisted);
+            out = next.harm;
+            resisted = next.resisted;
+          }
+          harmRef.current = out;
+          harmResistedRef.current = resisted;
+          setHarm(out);
+          setHarmResisted(resisted);
         }
         return nextFilled;
       });
@@ -6248,7 +6284,7 @@ const CharacterSheetWrapper = ({
   );
 
   const applyRecoverySegmentsToTrack = useCallback(
-    (currentClock, currentHarm, segmentsToAdd, segmentCap = healingClockSegments) => {
+    (currentClock, currentHarm, segmentsToAdd, segmentCap = healingClockSegments, currentResisted) => {
       const cap = Math.min(5, Math.max(4, Math.floor(Number(segmentCap) || 4)));
       const { nextFilled, completions } = computeHealingClockAfterSegments({
         currentFilled: currentClock,
@@ -6259,15 +6295,20 @@ const CharacterSheetWrapper = ({
         return {
           nextClock: nextFilled,
           nextHarm: normalizeHarmObject(currentHarm),
+          nextResisted: normalizeHarmResisted(currentResisted),
         };
       }
       let nextHarm = normalizeHarmObject(currentHarm);
+      let nextResisted = normalizeHarmResisted(currentResisted);
       for (let i = 0; i < completions; i += 1) {
-        nextHarm = downgradeAllHarmByOneLevel(nextHarm);
+        const shifted = downgradeAllHarmByOneLevel(nextHarm, nextResisted);
+        nextHarm = shifted.harm;
+        nextResisted = shifted.resisted;
       }
       return {
         nextClock: nextFilled,
         nextHarm,
+        nextResisted,
       };
     },
     [downgradeAllHarmByOneLevel, healingClockSegments],
@@ -6275,32 +6316,70 @@ const CharacterSheetWrapper = ({
 
   const extractHarmFromBackendCharacter = useCallback((rawCharacter) => {
     const slot = (used, name) => (used ? String(name ?? "") : "");
-    return normalizeHarmObject({
-      level4: [
-        slot(rawCharacter?.harm_level4_used, rawCharacter?.harm_level4_name),
-      ],
-      level3: [
-        slot(rawCharacter?.harm_level3_used, rawCharacter?.harm_level3_name),
-      ],
-      level2: [
-        slot(rawCharacter?.harm_level2_used, rawCharacter?.harm_level2_name),
-        slot(
-          rawCharacter?.harm_level2_slot2_used,
-          rawCharacter?.harm_level2_slot2_name,
-        ),
-      ],
-      level1: [
-        slot(rawCharacter?.harm_level1_used, rawCharacter?.harm_level1_name),
-        slot(
-          rawCharacter?.harm_level1_slot2_used,
-          rawCharacter?.harm_level1_slot2_name,
-        ),
-      ],
-    });
+    const flag = (used, resisted) => !!used && !!resisted;
+    return {
+      harm: normalizeHarmObject({
+        level4: [
+          slot(rawCharacter?.harm_level4_used, rawCharacter?.harm_level4_name),
+        ],
+        level3: [
+          slot(rawCharacter?.harm_level3_used, rawCharacter?.harm_level3_name),
+        ],
+        level2: [
+          slot(rawCharacter?.harm_level2_used, rawCharacter?.harm_level2_name),
+          slot(
+            rawCharacter?.harm_level2_slot2_used,
+            rawCharacter?.harm_level2_slot2_name,
+          ),
+        ],
+        level1: [
+          slot(rawCharacter?.harm_level1_used, rawCharacter?.harm_level1_name),
+          slot(
+            rawCharacter?.harm_level1_slot2_used,
+            rawCharacter?.harm_level1_slot2_name,
+          ),
+        ],
+      }),
+      resisted: normalizeHarmResisted({
+        level4: [
+          flag(
+            rawCharacter?.harm_level4_used,
+            rawCharacter?.harm_level4_resisted,
+          ),
+        ],
+        level3: [
+          flag(
+            rawCharacter?.harm_level3_used,
+            rawCharacter?.harm_level3_resisted,
+          ),
+        ],
+        level2: [
+          flag(
+            rawCharacter?.harm_level2_used,
+            rawCharacter?.harm_level2_resisted,
+          ),
+          flag(
+            rawCharacter?.harm_level2_slot2_used,
+            rawCharacter?.harm_level2_slot2_resisted,
+          ),
+        ],
+        level1: [
+          flag(
+            rawCharacter?.harm_level1_used,
+            rawCharacter?.harm_level1_resisted,
+          ),
+          flag(
+            rawCharacter?.harm_level1_slot2_used,
+            rawCharacter?.harm_level1_slot2_resisted,
+          ),
+        ],
+      }),
+    };
   }, []);
 
-  const buildHarmPatchPayload = useCallback((nextHarm) => {
+  const buildHarmPatchPayload = useCallback((nextHarm, nextResisted) => {
     const normalizeSlot = (value) => String(value ?? "").trim();
+    const flags = normalizeHarmResisted(nextResisted);
     const l1a = normalizeSlot(nextHarm?.level1?.[0]);
     const l1b = normalizeSlot(nextHarm?.level1?.[1]);
     const l2a = normalizeSlot(nextHarm?.level2?.[0]);
@@ -6310,16 +6389,22 @@ const CharacterSheetWrapper = ({
     return {
       harm_level1_used: !!l1a,
       harm_level1_name: l1a,
+      harm_level1_resisted: !!l1a && flags.level1[0],
       harm_level1_slot2_used: !!l1b,
       harm_level1_slot2_name: l1b,
+      harm_level1_slot2_resisted: !!l1b && flags.level1[1],
       harm_level2_used: !!l2a,
       harm_level2_name: l2a,
+      harm_level2_resisted: !!l2a && flags.level2[0],
       harm_level2_slot2_used: !!l2b,
       harm_level2_slot2_name: l2b,
+      harm_level2_slot2_resisted: !!l2b && flags.level2[1],
       harm_level3_used: !!l3,
       harm_level3_name: l3,
+      harm_level3_resisted: !!l3 && flags.level3[0],
       harm_level4_used: !!l4,
       harm_level4_name: l4,
+      harm_level4_resisted: !!l4 && flags.level4[0],
     };
   }, []);
 
@@ -9124,13 +9209,17 @@ const CharacterSheetWrapper = ({
             const targetHarm = extractHarmFromBackendCharacter(targetRaw);
             const targetRecovery = applyRecoverySegmentsToTrack(
               targetClock,
-              targetHarm,
+              targetHarm.harm,
               segments,
               targetSegCap,
+              targetHarm.resisted,
             );
             await characterAPI.patchCharacter(patientId, {
               healing_clock_filled: targetRecovery.nextClock,
-              ...buildHarmPatchPayload(targetRecovery.nextHarm),
+              ...buildHarmPatchPayload(
+                targetRecovery.nextHarm,
+                targetRecovery.nextResisted,
+              ),
             });
             onCampaignRefresh?.();
           } catch {
@@ -9958,6 +10047,7 @@ const CharacterSheetWrapper = ({
       hamonArmorUsed,
       specialArmorUsed: inventoryHasSpecial ? specialArmorUsed : 0,
       harm,
+      harmResisted,
       healingClock,
       healingClockSegments,
       coinFilled,
@@ -9999,6 +10089,7 @@ const CharacterSheetWrapper = ({
     inventoryHasSpecial,
     specialArmorUsed,
     harm,
+    harmResisted,
     healingClock,
     healingClockSegments,
     coinFilled,
@@ -10030,8 +10121,14 @@ const CharacterSheetWrapper = ({
     if (!onDraftMetaChange) return;
     const payload = buildPayload();
     const payloadKey = sheetPayloadDedupeKey(payload);
-    if (payload.id && lastSavedPayloadRef.current == null) {
-      // Never baseline a pending upload as already-saved (poll resets lastSaved).
+    if (
+      payload.id &&
+      shouldBaselineUnsavedPayload({
+        lastSavedKey: lastSavedPayloadRef.current,
+        saveFailed: saveStatus === "error",
+      })
+    ) {
+      // Ignore a pending portrait file so a poll does not treat the upload as saved.
       lastSavedPayloadRef.current = sheetPayloadDedupeKey(payload, {
         ignorePendingImageFile: true,
       });
@@ -10236,6 +10333,7 @@ const CharacterSheetWrapper = ({
     inventorySpecialCount,
     specialArmorUsed,
     harm,
+    harmResisted,
     healingClock,
     healingClockSegments,
     coinFilled,
@@ -11794,7 +11892,7 @@ const CharacterSheetWrapper = ({
                                                   }}
                                                 >
                                                   <option value="">
-                                                    Harm to reduce…
+                                                    No harm to lower
                                                   </option>
                                                   {filledHarmOptions.map((opt) => (
                                                     <option
@@ -12690,15 +12788,6 @@ const CharacterSheetWrapper = ({
                                                     computeViceManualSummary(
                                                       diceResults,
                                                     );
-                                                  if (
-                                                    isResistanceManual &&
-                                                    !historyManual.resistanceHarmTarget
-                                                  ) {
-                                                    setHistoryWriteError(
-                                                      "Choose which harm slot this resistance roll reduces.",
-                                                    );
-                                                    return;
-                                                  }
                                                   const viceOverAtSave =
                                                     isViceManual &&
                                                     viceSummary.highest >
@@ -12729,15 +12818,17 @@ const CharacterSheetWrapper = ({
                                                   }
                                                   setHistoryManualSaving(true);
                                                   if (isResistanceManual) {
-                                                    const reduced = clearHarmSlot(
-                                                      historyManual.resistanceHarmTarget,
-                                                    );
-                                                    if (!reduced) {
-                                                      setHistoryWriteError(
-                                                        "Selected harm slot is empty or invalid.",
+                                                    if (historyManual.resistanceHarmTarget) {
+                                                      const reduced = applyResistanceToHarm(
+                                                        historyManual.resistanceHarmTarget,
                                                       );
-                                                      setHistoryManualSaving(false);
-                                                      return;
+                                                      if (!reduced) {
+                                                        setHistoryWriteError(
+                                                          "Selected harm slot is empty or already resisted.",
+                                                        );
+                                                        setHistoryManualSaving(false);
+                                                        return;
+                                                      }
                                                     }
                                                     if (resistanceSummary.stressCost > 0)
                                                       applyStressCost(
@@ -12886,7 +12977,9 @@ const CharacterSheetWrapper = ({
                                                             }),
                                                       description:
                                                         isResistanceManual
-                                                          ? `Manual resistance record from history panel. Reduced harm slot ${historyManual.resistanceHarmTarget}. Stress marked: ${Math.max(0, resistanceSummary.stressCost)}.`
+                                                          ? historyManual.resistanceHarmTarget
+                                                            ? `Manual resistance record from history panel. Reduced harm slot ${historyManual.resistanceHarmTarget}. Stress marked: ${Math.max(0, resistanceSummary.stressCost)}.`
+                                                            : `Manual resistance record from history panel. No harm reduced. Stress marked: ${Math.max(0, resistanceSummary.stressCost)}.`
                                                           : isViceManual
                                                             ? `Manual vice record from history panel. Stress cleared (highest die): ${viceSummary.highest}.${viceOverAtSave && String(historyManual.viceOverindulge || "").trim() ? ` Overindulgence: ${viceOverindulgeLabel(historyManual.viceOverindulge)}` : ""}`
                                                             : "Manual record from history panel",
@@ -15100,21 +15193,35 @@ const CharacterSheetWrapper = ({
                             onChange={(e) => {
                               const nextText = e.target.value;
                               editField(() => {
+                                const prevText = harmRef.current?.[key]?.[0] ?? "";
                                 const resetHealingClock =
                                   applyHarmSlotTextChange(
-                                    harm,
+                                    harmRef.current,
                                     key,
                                     0,
                                     nextText,
                                   ).resetHealingClock;
-                                setHarm((prev) =>
-                                  applyHarmSlotTextChange(
+                                setHarm((prev) => {
+                                  const nextHarm = applyHarmSlotTextChange(
                                     prev,
                                     key,
                                     0,
                                     nextText,
-                                  ).nextHarm,
-                                );
+                                  ).nextHarm;
+                                  harmRef.current = nextHarm;
+                                  return nextHarm;
+                                });
+                                setHarmResisted((prev) => {
+                                  const nextFlags = resistedAfterTextEdit(
+                                    prev,
+                                    key,
+                                    0,
+                                    prevText,
+                                    nextText,
+                                  );
+                                  harmResistedRef.current = nextFlags;
+                                  return nextFlags;
+                                });
                                 if (resetHealingClock) {
                                   markFieldTouch("healingClock");
                                   setHealingClock(0);
@@ -15195,21 +15302,36 @@ const CharacterSheetWrapper = ({
                                 onChange={(e) => {
                                   const nextText = e.target.value;
                                   editField(() => {
+                                    const prevText =
+                                      harmRef.current?.[key]?.[idx] ?? "";
                                     const resetHealingClock =
                                       applyHarmSlotTextChange(
-                                        harm,
+                                        harmRef.current,
                                         key,
                                         idx,
                                         nextText,
                                       ).resetHealingClock;
-                                    setHarm((prev) =>
-                                      applyHarmSlotTextChange(
+                                    setHarm((prev) => {
+                                      const nextHarm = applyHarmSlotTextChange(
                                         prev,
                                         key,
                                         idx,
                                         nextText,
-                                      ).nextHarm,
-                                    );
+                                      ).nextHarm;
+                                      harmRef.current = nextHarm;
+                                      return nextHarm;
+                                    });
+                                    setHarmResisted((prev) => {
+                                      const nextFlags = resistedAfterTextEdit(
+                                        prev,
+                                        key,
+                                        idx,
+                                        prevText,
+                                        nextText,
+                                      );
+                                      harmResistedRef.current = nextFlags;
+                                      return nextFlags;
+                                    });
                                     if (resetHealingClock) {
                                       markFieldTouch("healingClock");
                                       setHealingClock(0);
@@ -19868,110 +19990,65 @@ const CharacterSheetWrapper = ({
                                 Pay no stress AND remove one previously filled
                                 stress box.
                               </div>
-                              <div
-                                style={{
-                                  marginTop: "8px",
-                                  display: "grid",
-                                  gridTemplateColumns: "1fr auto",
-                                  gap: "8px",
-                                  alignItems: "center",
-                                }}
-                              >
-                                <select
-                                  value={resistanceHarmTarget}
-                                  onChange={(e) =>
-                                    setResistanceHarmTarget(e.target.value)
-                                  }
-                                  style={{ ...S.sel, fontSize: "11px" }}
-                                >
-                                  <option value="">Harm to reduce…</option>
-                                  {filledHarmOptions.map((opt) => (
-                                    <option key={opt.value} value={opt.value}>
-                                      {opt.label}
-                                    </option>
-                                  ))}
-                                </select>
-                                <button
-                                  onClick={() => {
-                                    setResistanceApplyErr(null);
-                                    if (!resistanceHarmTarget) {
-                                      setResistanceApplyErr(
-                                        "Choose a harm level to reduce before resolving resistance.",
-                                      );
-                                      return;
-                                    }
-                                    const reduced =
-                                      clearHarmSlot(resistanceHarmTarget);
-                                    if (!reduced) {
-                                      setResistanceApplyErr(
-                                        "Selected harm slot is empty.",
-                                      );
-                                      return;
-                                    }
-                                    if (!diceResult.resistanceApplied) {
-                                      // Critical: clear 1 stress via server PATCH.
-                                      // Push (if any) already applied on createRoll — do not re-add.
-                                      // Do NOT mark field touch — omit+merge contract.
-                                      setStressFilled((prev) => {
-                                        const next = Math.max(
-                                          0,
-                                          (Number(prev) || 0) - 1,
-                                        );
-                                        stressTraumaTruthRef.current = {
-                                          stressFilled: next,
-                                          trauma:
-                                            stressTraumaTruthRef.current?.trauma ||
-                                            null,
-                                        };
-                                        onCharacterStressTraumaSync?.({
-                                          stressFilled: next,
-                                        });
-                                        if (characterId) {
-                                          void characterAPI
-                                            .patchCharacter(characterId, {
-                                              stress: next,
-                                            })
-                                            .catch(() => {});
-                                        }
-                                        return next;
-                                      });
-                                    }
-                                    setDiceResult((prev) =>
-                                      prev
-                                        ? {
-                                            ...prev,
-                                            resistanceApplied: true,
-                                            resistanceHarmReductionCount:
-                                              (Number(
-                                                prev.resistanceHarmReductionCount,
-                                              ) || 0) + 1,
-                                          }
-                                        : prev,
-                                    );
-                                  }}
-                                  style={{
-                                    ...S.btn,
-                                    background: "#92400e",
-                                    color: "#fff",
-                                    fontSize: "11px",
-                                  }}
-                                >
-                                  Reduce selected harm
-                                </button>
-                              </div>
-                              {(Number(diceResult.resistanceHarmReductionCount) ||
-                                0) >= 2 ? (
+                              {diceResult.resistanceApplied ? (
                                 <div
                                   style={{
-                                    marginTop: "6px",
-                                    fontSize: "10px",
-                                    color: "#fcd34d",
+                                    marginTop: "8px",
+                                    fontSize: "11px",
+                                    color: "#d1d5db",
                                   }}
                                 >
-                                  Stress clear already applied for this roll. You can still
-                                  choose another harm slot or use post-roll options.
+                                  This roll already lowered that harm.
                                 </div>
-                              ) : null}
+                              ) : filledHarmOptions.length === 0 ? (
+                                <div
+                                  style={{
+                                    marginTop: "8px",
+                                    fontSize: "11px",
+                                    color: "#d1d5db",
+                                  }}
+                                >
+                                  {harmHasFilledText(harm)
+                                    ? "Nothing on the sheet can drop one level."
+                                    : "Mark the harm on the sheet, then lower it here."}
+                                </div>
+                              ) : (
+                                <div
+                                  style={{
+                                    marginTop: "8px",
+                                    display: "grid",
+                                    gridTemplateColumns: "1fr auto",
+                                    gap: "8px",
+                                    alignItems: "center",
+                                  }}
+                                >
+                                  <select
+                                    value={resistanceHarmTarget}
+                                    onChange={(e) =>
+                                      setResistanceHarmTarget(e.target.value)
+                                    }
+                                    style={{ ...S.sel, fontSize: "11px" }}
+                                  >
+                                    <option value="">Harm to reduce…</option>
+                                    {filledHarmOptions.map((opt) => (
+                                      <option key={opt.value} value={opt.value}>
+                                        {opt.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <button
+                                    onClick={lowerHarmFromThisRoll}
+                                    style={{
+                                      ...S.btn,
+                                      background: "#92400e",
+                                      color: "#fff",
+                                      fontSize: "11px",
+                                    }}
+                                  >
+                                    Reduce selected harm
+                                  </button>
+                                </div>
+                              )}
                             </>
                           ) : (
                             <>
@@ -19999,94 +20076,64 @@ const CharacterSheetWrapper = ({
                                 Consequence reduced by 1 level (or fully negated
                                 at the table&apos;s discretion).
                               </div>
-                              <div
-                                style={{
-                                  display: "grid",
-                                  gridTemplateColumns: "1fr auto",
-                                  gap: "8px",
-                                  alignItems: "center",
-                                }}
-                              >
-                                <select
-                                  value={resistanceHarmTarget}
-                                  onChange={(e) =>
-                                    setResistanceHarmTarget(e.target.value)
-                                  }
-                                  style={{ ...S.sel, fontSize: "11px" }}
-                                >
-                                  <option value="">Harm to reduce…</option>
-                                  {filledHarmOptions.map((opt) => (
-                                    <option key={opt.value} value={opt.value}>
-                                      {opt.label}
-                                    </option>
-                                  ))}
-                                </select>
-                                <button
-                                  onClick={() => {
-                                    setResistanceApplyErr(null);
-                                    if (!resistanceHarmTarget) {
-                                      setResistanceApplyErr(
-                                        "Choose a harm level to reduce before marking stress.",
-                                      );
-                                      return;
-                                    }
-                                    const reduced =
-                                      clearHarmSlot(resistanceHarmTarget);
-                                    if (!reduced) {
-                                      setResistanceApplyErr(
-                                        "Selected harm slot is empty.",
-                                      );
-                                      return;
-                                    }
-                                    if (!diceResult.resistanceApplied) {
-                                      // Stress applied server-side on createRoll when session
-                                      // present. Offline (no session): apply via truth lock, no touch.
-                                      if (!activeSessionId) {
-                                        const cost =
-                                          diceResult.resistanceTotalStressCost ??
-                                          diceResult.stressCost ??
-                                          0;
-                                        applyStressCost(cost);
-                                      }
-                                    }
-                                    setDiceResult((prev) =>
-                                      prev
-                                        ? {
-                                            ...prev,
-                                            resistanceApplied: true,
-                                            mitigationAbility:
-                                              resistanceMitigationChoice || "",
-                                            resistanceHarmReductionCount:
-                                              (Number(
-                                                prev.resistanceHarmReductionCount,
-                                              ) || 0) + 1,
-                                          }
-                                        : prev,
-                                    );
-                                  }}
-                                  style={{
-                                    ...S.btn,
-                                    background: "#b45309",
-                                    color: "#fff",
-                                    fontSize: "11px",
-                                  }}
-                                >
-                                  Reduce selected harm
-                                </button>
-                              </div>
-                              {(Number(diceResult.resistanceHarmReductionCount) ||
-                                0) >= 2 ? (
+                              {diceResult.resistanceApplied ? (
                                 <div
                                   style={{
-                                    marginTop: "6px",
-                                    fontSize: "10px",
-                                    color: "#fcd34d",
+                                    marginTop: "8px",
+                                    fontSize: "11px",
+                                    color: "#d1d5db",
                                   }}
                                 >
-                                  Stress already marked for this roll. You can still pick
-                                  another harm slot or use a post-roll ability option.
+                                  This roll already lowered that harm.
                                 </div>
-                              ) : null}
+                              ) : filledHarmOptions.length === 0 ? (
+                                <div
+                                  style={{
+                                    marginTop: "8px",
+                                    fontSize: "11px",
+                                    color: "#d1d5db",
+                                  }}
+                                >
+                                  {harmHasFilledText(harm)
+                                    ? "Nothing on the sheet can drop one level."
+                                    : "Mark the harm on the sheet, then lower it here."}
+                                </div>
+                              ) : (
+                                <div
+                                  style={{
+                                    display: "grid",
+                                    gridTemplateColumns: "1fr auto",
+                                    gap: "8px",
+                                    alignItems: "center",
+                                  }}
+                                >
+                                  <select
+                                    value={resistanceHarmTarget}
+                                    onChange={(e) =>
+                                      setResistanceHarmTarget(e.target.value)
+                                    }
+                                    style={{ ...S.sel, fontSize: "11px" }}
+                                  >
+                                    <option value="">Harm to reduce…</option>
+                                    {filledHarmOptions.map((opt) => (
+                                      <option key={opt.value} value={opt.value}>
+                                        {opt.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <button
+                                    onClick={lowerHarmFromThisRoll}
+                                    style={{
+                                      ...S.btn,
+                                      background: "#b45309",
+                                      color: "#fff",
+                                      fontSize: "11px",
+                                    }}
+                                  >
+                                    Reduce selected harm
+                                  </button>
+                                </div>
+                              )}
                               {resistanceAbilityOptions.some(
                                 (opt) =>
                                   opt.mitigationOnly &&

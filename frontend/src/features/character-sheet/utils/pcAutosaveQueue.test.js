@@ -1,7 +1,9 @@
 import {
+  lastSavedKeyAfterPollTick,
   markPcAutosaveBusyCollision,
-  takePcAutosavePending,
   schedulePcPendingResaveDrain,
+  shouldBaselineUnsavedPayload,
+  takePcAutosavePending,
 } from "./pcAutosaveQueue";
 
 describe("pcAutosaveQueue", () => {
@@ -133,5 +135,46 @@ describe("pcAutosaveQueue", () => {
       schedule: (fn) => fn(),
     });
     expect(taken).toBe(1);
+  });
+});
+
+describe("lastSavedKeyAfterPollTick", () => {
+  const saved = {
+    harm: { level3: [""], level2: ["", ""] },
+    stressFilled: 0,
+  };
+  const live = {
+    harm: { level3: ["Gut stab"], level2: ["", ""] },
+    stressFilled: 2,
+  };
+  const key = (payload) =>
+    JSON.stringify({ harm: payload.harm, stressFilled: payload.stressFilled });
+
+  test("a failed save plus a poll tick stays dirty", () => {
+    const lastSavedKey = key(saved);
+    const liveKey = key(live);
+    const next = lastSavedKeyAfterPollTick({
+      lastSavedKey,
+      liveKey,
+      saveFailed: true,
+    });
+    expect(next).toBe(lastSavedKey);
+    expect(liveKey === next).toBe(false);
+    expect(
+      shouldBaselineUnsavedPayload({ lastSavedKey: next, saveFailed: true }),
+    ).toBe(false);
+  });
+
+  test("a successful save then a poll may baseline", () => {
+    const liveKey = key(live);
+    const next = lastSavedKeyAfterPollTick({
+      lastSavedKey: liveKey,
+      liveKey,
+      saveFailed: false,
+    });
+    expect(next).toBe(null);
+    expect(
+      shouldBaselineUnsavedPayload({ lastSavedKey: next, saveFailed: false }),
+    ).toBe(true);
   });
 });

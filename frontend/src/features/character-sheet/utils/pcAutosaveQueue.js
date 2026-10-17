@@ -19,6 +19,32 @@ export function takePcAutosavePending(pendingResaveRef) {
 }
 
 /**
+ * Poll may forget the last successful save key only when the live draft matches
+ * it and the last autosave did not fail. Otherwise the draft stays dirty and a
+ * server snapshot cannot uncheck it.
+ * @returns {string|null}
+ */
+export function lastSavedKeyAfterPollTick({
+  lastSavedKey = null,
+  liveKey,
+  saveFailed = false,
+} = {}) {
+  if (saveFailed) return lastSavedKey ?? null;
+  if (lastSavedKey == null) return null;
+  if (liveKey !== lastSavedKey) return lastSavedKey;
+  return null;
+}
+
+/** A null baseline may adopt the live payload, except after a failed save. */
+export function shouldBaselineUnsavedPayload({
+  lastSavedKey = null,
+  saveFailed = false,
+} = {}) {
+  if (saveFailed) return false;
+  return lastSavedKey == null;
+}
+
+/**
  * After an in-flight save finishes: if pending, schedule follow-up with a fresh buildPayload().
  * Does not capture/store payload at busy-mark time.
  *

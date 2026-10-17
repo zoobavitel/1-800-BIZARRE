@@ -257,6 +257,12 @@ describe("transformFrontendToBackend playbook and playbook abilities", () => {
           level2: ["mod-a", "mod-b"],
           level1: ["l1a", "l1b"],
         },
+        harmResisted: {
+          level4: [false],
+          level3: [false],
+          level2: [true, false],
+          level1: [false, false],
+        },
       }),
     );
     expect(out.harm_level4_used).toBe(true);
@@ -267,6 +273,9 @@ describe("transformFrontendToBackend playbook and playbook abilities", () => {
     expect(out.harm_level1_slot2_name).toBe("l1b");
     expect(out.harm_level2_used).toBe(true);
     expect(out.harm_level2_name).toBe("mod-a");
+    expect(out.harm_level2_resisted).toBe(true);
+    expect(out.harm_level3_resisted).toBe(false);
+    expect(out.harm_level4_resisted).toBe(false);
     expect(out.harm_level2_slot2_used).toBe(true);
     expect(out.harm_level2_slot2_name).toBe("mod-b");
   });
@@ -551,6 +560,20 @@ describe("transformBackendToFrontend coin and crew stash", () => {
     expect(fe.harm.level3).toEqual(["sev"]);
     expect(fe.harm.level4).toEqual(["fat"]);
     expect(fe.harmEntries).toEqual(fe.harm);
+    expect(fe.harmResisted.level3).toEqual([false]);
+  });
+
+  test("maps a resisted harm slot and drops the flag when the slot is empty", () => {
+    const fe = transformBackendToFrontend({
+      harm_level3_used: true,
+      harm_level3_name: "Gut stab",
+      harm_level3_resisted: true,
+      harm_level2_used: false,
+      harm_level2_name: "",
+      harm_level2_resisted: true,
+    });
+    expect(fe.harmResisted.level3).toEqual([true]);
+    expect(fe.harmResisted.level2[0]).toBe(false);
   });
 });
 
