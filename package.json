@@ -33,6 +33,8 @@
     "test:load:saturday": "PERF_LOAD_TIER=target node scripts/perf/saturday-table.mjs",
     "test:load:saturday:floor": "PERF_LOAD_TIER=floor node scripts/perf/saturday-table.mjs",
     "test:load:saturday:stretch": "PERF_LOAD_TIER=stretch node scripts/perf/saturday-table.mjs",
+    "test:load:probe": "PERF_ROLL_P95_MS=500 PERF_WARMUP_MS=15000 node scripts/perf/saturday-table.mjs",
+    "test:load:ramp": "PERF_LOAD_TIER=ramp PERF_LOAD_DURATION_MS=480000 PERF_ROLL_P95_MS=500 node scripts/perf/saturday-table.mjs",
     "build": "cd frontend && npm run build",
     "lint": "npm run lint:frontend",
     "lint:frontend": "cd frontend && npx eslint src/",
