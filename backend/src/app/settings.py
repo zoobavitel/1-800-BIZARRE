@@ -14,8 +14,6 @@ ALLOWED_HOSTS = [
     'localhost',
     '127.0.0.1',
     '0.0.0.0',
-    '.ngrok-free.app',   # ngrok free tier (e.g. xxx.ngrok-free.app)
-    '.ngrok-free.dev',   # ngrok free tier (e.g. xxx.ngrok-free.dev)
 ]
 
 # Application definition
@@ -145,7 +143,6 @@ CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOW_HEADERS = list(default_headers) + [
     'authorization',
-    'ngrok-skip-browser-warning',  # required for ngrok free tier API calls
 ]
 
 # Dev-only: allow all origins (optional fallback, comment out in production)

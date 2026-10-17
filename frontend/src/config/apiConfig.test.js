@@ -23,4 +23,10 @@ describe("apiConfig local default", () => {
     setApiBaseUrl("http://[::1]:8000/api");
     expect(getApiBaseUrl()).toBe("http://127.0.0.1:8000/api");
   });
+
+  test("drops a stored ngrok URL and uses the default host", () => {
+    localStorage.setItem("apiBaseUrl", "https://example.ngrok-free.dev/api");
+    expect(getApiBaseUrl()).toBe("http://127.0.0.1:8000/api");
+    expect(localStorage.getItem("apiBaseUrl")).toBeNull();
+  });
 });
