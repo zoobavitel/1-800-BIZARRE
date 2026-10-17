@@ -74,10 +74,26 @@ MEDIA_ROOT = config("MEDIA_ROOT", default="/var/lib/bizarre/media")
 
 CELERY_BROKER_URL = config("REDIS_URL", default="redis://127.0.0.1:6379/0")
 CELERY_RESULT_BACKEND = config("CELERY_RESULT_BACKEND", default=CELERY_BROKER_URL)
+REALTIME_REDIS_URL = config("REALTIME_REDIS_URL", default=CELERY_BROKER_URL)
 CELERY_TASK_ALWAYS_EAGER = False
+# Decouple reads the env file. os.environ in settings.py does not see it.
+REALTIME_CHANNEL_PREFIX = config(
+    "REALTIME_CHANNEL_PREFIX", default="bizarre:campaign:"
+)
 
-_logs_dir = Path(BASE_DIR) / "logs"
-_logs_dir.mkdir(parents=True, exist_ok=True)
+# Outside the git tree, like MEDIA_ROOT. A logs/ dir inside /opt/bizarre-prod
+# made `git status` dirty and blocked deploy-lxc.
+LOG_DIR = Path(config("LOG_DIR", default="/var/lib/bizarre/logs"))
+try:
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    _log_file = LOG_DIR / "django.log"
+    _file_logging = os.access(LOG_DIR, os.W_OK) and (
+        not _log_file.exists() or os.access(_log_file, os.W_OK)
+    )
+except OSError:
+    _file_logging = False
+# Without a writable LOG_DIR (migrate runs as the deploy user, gunicorn as
+# root), log to the console only so manage.py still runs.
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -91,7 +107,7 @@ LOGGING = {
         "file": {
             "level": "INFO",
             "class": "logging.handlers.RotatingFileHandler",
-            "filename": str(_logs_dir / "django.log"),
+            "filename": str(LOG_DIR / "django.log"),
             "maxBytes": 1024 * 1024 * 5,
             "backupCount": 5,
             "formatter": "verbose",
@@ -107,8 +123,14 @@ LOGGING = {
         "level": "INFO",
     },
 }
+if not _file_logging:
+    del LOGGING["handlers"]["file"]
+    LOGGING["root"]["handlers"] = ["console"]
 
-EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_BACKEND = config(
+    "EMAIL_BACKEND",
+    default="django.core.mail.backends.smtp.EmailBackend",
+)
 EMAIL_HOST = config("EMAIL_HOST", default="smtp.gmail.com")
 EMAIL_PORT = config("EMAIL_PORT", default=587, cast=int)
 EMAIL_USE_TLS = True

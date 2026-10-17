@@ -1,0 +1,28 @@
+[Unit]
+Description=gunicorn for 1-800-BIZARRE perf probe (not live traffic)
+After=network.target postgresql.service redis-server.service
+
+[Service]
+User=root
+Group=root
+LimitNOFILE=65536
+WorkingDirectory=/opt/bizarre-prod/backend/src
+Environment="PATH=/opt/bizarre-prod/.venv/bin"
+Environment="DJANGO_SETTINGS_MODULE=app.settings_prod"
+# Separate env. Do not point this unit at /etc/bizarre/prod.env.
+Environment="BIZARRE_ENV_FILE=/etc/bizarre/perf.env"
+ExecStart=/opt/bizarre-prod/.venv/bin/gunicorn app.wsgi:application \
+  --bind 127.0.0.1:8001 \
+  --worker-class gthread \
+  --workers 2 \
+  --threads 32 \
+  --timeout 120 \
+  --graceful-timeout 60 \
+  --max-requests 5000 \
+  --max-requests-jitter 500
+TimeoutStopSec=90
+KillMode=mixed
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
