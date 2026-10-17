@@ -146,6 +146,12 @@ def reset_character_sheet(character):
             character.harm_level3_name = None
             character.harm_level4_used = False
             character.harm_level4_name = None
+            character.harm_level1_resisted = False
+            character.harm_level1_slot2_resisted = False
+            character.harm_level2_resisted = False
+            character.harm_level2_slot2_resisted = False
+            character.harm_level3_resisted = False
+            character.harm_level4_resisted = False
 
             character.fed_today = None
             character.disguised_as_human = None

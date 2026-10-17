@@ -1228,6 +1228,28 @@ function harmSlotToBackend(text) {
   return { used: t !== "", name: t };
 }
 
+function harmResistedFromBackend(backendCharacter) {
+  const flag = (key, used) => !!used && !!backendCharacter?.[key];
+  return {
+    level4: [flag("harm_level4_resisted", backendCharacter?.harm_level4_used)],
+    level3: [flag("harm_level3_resisted", backendCharacter?.harm_level3_used)],
+    level2: [
+      flag("harm_level2_resisted", backendCharacter?.harm_level2_used),
+      flag(
+        "harm_level2_slot2_resisted",
+        backendCharacter?.harm_level2_slot2_used,
+      ),
+    ],
+    level1: [
+      flag("harm_level1_resisted", backendCharacter?.harm_level1_used),
+      flag(
+        "harm_level1_slot2_resisted",
+        backendCharacter?.harm_level1_slot2_used,
+      ),
+    ],
+  };
+}
+
 const EMPTY_HARM_SHAPE = {
   level4: [""],
   level3: [""],
@@ -1480,6 +1502,7 @@ export const transformBackendToFrontend = (backendCharacter) => {
         ),
       ],
     },
+    harmResisted: harmResistedFromBackend(backendCharacter),
 
     // Coin (character); stash on crew when linked, else personal Character.stash_slots
     coin: normalizeCoinBoxes(backendCharacter.coin_boxes),
@@ -1946,19 +1969,39 @@ export const transformFrontendToBackend = (frontendCharacter) => {
       const s2b = harmSlotToBackend(H.level2[1]);
       const s3 = harmSlotToBackend(H.level3[0]);
       const s4 = harmSlotToBackend(H.level4[0]);
+      const flags = harmResistedFromBackend({
+        harm_level4_used: s4.used,
+        harm_level4_resisted: frontendCharacter.harmResisted?.level4?.[0],
+        harm_level3_used: s3.used,
+        harm_level3_resisted: frontendCharacter.harmResisted?.level3?.[0],
+        harm_level2_used: s2a.used,
+        harm_level2_resisted: frontendCharacter.harmResisted?.level2?.[0],
+        harm_level2_slot2_used: s2b.used,
+        harm_level2_slot2_resisted: frontendCharacter.harmResisted?.level2?.[1],
+        harm_level1_used: s1a.used,
+        harm_level1_resisted: frontendCharacter.harmResisted?.level1?.[0],
+        harm_level1_slot2_used: s1b.used,
+        harm_level1_slot2_resisted: frontendCharacter.harmResisted?.level1?.[1],
+      });
       return {
         harm_level1_used: s1a.used,
         harm_level1_name: s1a.name,
+        harm_level1_resisted: flags.level1[0],
         harm_level1_slot2_used: s1b.used,
         harm_level1_slot2_name: s1b.name,
+        harm_level1_slot2_resisted: flags.level1[1],
         harm_level2_used: s2a.used,
         harm_level2_name: s2a.name,
+        harm_level2_resisted: flags.level2[0],
         harm_level2_slot2_used: s2b.used,
         harm_level2_slot2_name: s2b.name,
+        harm_level2_slot2_resisted: flags.level2[1],
         harm_level3_used: s3.used,
         harm_level3_name: s3.name,
+        harm_level3_resisted: flags.level3[0],
         harm_level4_used: s4.used,
         harm_level4_name: s4.name,
+        harm_level4_resisted: flags.level4[0],
       };
     })(),
 

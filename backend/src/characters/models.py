@@ -930,6 +930,13 @@ class Character(models.Model):
     harm_level3_name = models.CharField(max_length=100, blank=True, null=True)
     harm_level4_used = models.BooleanField(default=False)
     harm_level4_name = models.CharField(max_length=100, blank=True, null=True)
+    # Set when a resistance roll already lowered this entry. A renamed slot clears it.
+    harm_level1_resisted = models.BooleanField(default=False)
+    harm_level1_slot2_resisted = models.BooleanField(default=False)
+    harm_level2_resisted = models.BooleanField(default=False)
+    harm_level2_slot2_resisted = models.BooleanField(default=False)
+    harm_level3_resisted = models.BooleanField(default=False)
+    harm_level4_resisted = models.BooleanField(default=False)
 
     xp_clocks = models.JSONField(default=dict, blank=True)
     total_xp_spent = models.IntegerField(default=0)
