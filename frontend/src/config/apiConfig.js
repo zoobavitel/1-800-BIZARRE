@@ -1,7 +1,6 @@
 /**
  * Runtime API base URL for the game backend.
- * When playing remotely, the host runs the backend and shares a URL (e.g. ngrok).
- * Stored in localStorage so one deployment works for any server.
+ * GitHub Pages bakes the public host. A stored URL overrides that host.
  */
 
 const STORAGE_KEY = "apiBaseUrl";
@@ -34,16 +33,13 @@ function getRuntimeDefaultBase() {
   return `${protocol}//${hostname}:8000/api`;
 }
 
-/** Force https for ngrok (avoids SSL_ERROR_RX_RECORD_TOO_LONG from http://). */
-function ensureHttpsForNgrok(url) {
-  const lower = url.toLowerCase();
-  if (
-    (lower.includes("ngrok") || lower.includes("ngrok-free")) &&
-    lower.startsWith("http://")
-  ) {
-    return "https://" + url.slice(7);
+/** Drop a saved tunnel URL so the baked host is used instead. */
+function discardStoredNgrokUrl() {
+  if (typeof localStorage === "undefined") return;
+  const stored = localStorage.getItem(STORAGE_KEY);
+  if (stored && stored.toLowerCase().includes("ngrok")) {
+    localStorage.removeItem(STORAGE_KEY);
   }
-  return url;
 }
 
 /** Map loopback hostname to 127.0.0.1 so IPv6 localhost does not steal :8000. */
@@ -58,13 +54,14 @@ function preferIpv4Loopback(url) {
 function normalizeBaseUrl(url) {
   let trimmed = url.trim().replace(/\/+$/, "");
   if (!trimmed) return trimmed;
-  trimmed = preferIpv4Loopback(ensureHttpsForNgrok(trimmed));
+  trimmed = preferIpv4Loopback(trimmed);
   const lower = trimmed.toLowerCase();
   if (lower === LOCAL_API_DEFAULT || lower.endsWith("/api")) return trimmed;
   return trimmed + "/api";
 }
 
 export function getApiBaseUrl() {
+  discardStoredNgrokUrl();
   const stored = localStorage.getItem(STORAGE_KEY);
   if (stored && stored.trim() !== "") {
     return normalizeBaseUrl(stored);
@@ -81,7 +78,7 @@ export function requireApiBaseUrl() {
     return base.trim();
   }
   throw new Error(
-    "Game server URL is not set. On github.io, expand Server URL on the login page, enter your host’s API base (e.g. https://xxxx.ngrok-free.app/api), then sign in. Local play: http://127.0.0.1:8000/api",
+    "Game server URL is not set. On github.io the host is baked into the build; if this build has none, set the Game server URL on the login page. Local play: http://127.0.0.1:8000/api",
   );
 }
 
@@ -95,6 +92,7 @@ export function setApiBaseUrl(url) {
 }
 
 export function getStoredApiBaseUrl() {
+  discardStoredNgrokUrl();
   const stored = localStorage.getItem(STORAGE_KEY);
   return stored ? stored.trim() : "";
 }

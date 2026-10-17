@@ -219,7 +219,6 @@ async function downloadBinaryExport(endpoint, filename) {
   const url = `${base}${path}`;
   const headers = {};
   if (token) headers.Authorization = `Token ${token}`;
-  if (url.includes("ngrok")) headers["ngrok-skip-browser-warning"] = "1";
 
   const response = await fetch(url, { headers });
   if (!response.ok) {
@@ -281,7 +280,6 @@ const apiRequest = async (endpoint, options = {}) => {
     headers: {
       "Content-Type": "application/json",
       ...(token && { Authorization: `Token ${token}` }),
-      ...(url.includes("ngrok") && { "ngrok-skip-browser-warning": "1" }),
       ...options.headers,
     },
     ...options,
@@ -902,7 +900,6 @@ const apiRequestMultipart = async (
   const url = `${base}${path}`;
   const headers = {};
   if (token) headers["Authorization"] = `Token ${token}`;
-  if (url.includes("ngrok")) headers["ngrok-skip-browser-warning"] = "1";
   const response = await fetch(url, {
     method,
     headers,
