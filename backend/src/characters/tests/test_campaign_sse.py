@@ -1,4 +1,5 @@
 """Campaign SSE endpoint: token auth and GM/player access."""
+
 from django.test import Client, TestCase, override_settings
 from django.contrib.auth.models import User
 from rest_framework.authtoken.models import Token

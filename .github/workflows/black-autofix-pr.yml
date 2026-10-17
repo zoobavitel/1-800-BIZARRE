@@ -1,44 +1,47 @@
 name: Black (autofix PR)
 
 on:
-  workflow_dispatch:
+  pull_request:
+    branches: [master]
 
 permissions:
   contents: write
-  pull-requests: write
+  actions: write
 
 jobs:
   autofix:
+    # Fork PRs cannot be pushed to with GITHUB_TOKEN. Those still fail CI via black --check.
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      # Pin Python 3.11 (same as ci.yml). Do not use rickstaa/action-black:
-      # its Docker image tracks python:3-slim (now 3.15) and black==23.11.0
-      # cannot run there.
-      - name: Setup Python
-        uses: actions/setup-python@v6
+      - uses: actions/checkout@v5
         with:
-          python-version: "3.11"
-
-      - name: Install black
-        run: pip install "black==23.11.0"
-
-      - name: Format backend/src with black
-        run: black backend/src
-
-      # create-pull-request no-ops when the working tree is clean.
-      - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v6
-        with:
+          ref: ${{ github.head_ref }}
           token: ${{ secrets.GITHUB_TOKEN }}
-          title: "chore(black): format backend/src"
-          commit-message: "chore(black): format backend/src"
-          body: |
-            Automated Black formatting.
 
-            Triggered by: ${{ github.actor }}
-            Source SHA: ${{ github.sha }}
-          base: "master"
-          branch: "actions/black-format"
-          delete-branch: true
+      # `--verbose` keeps the action off its default `--check --diff` (that mode
+      # does not write files). An empty options string is easy to drop, which would
+      # bring the default back. psf/black 26.10.1 advertises is_formatted but never
+      # writes GITHUB_OUTPUT, so the commit action's dirty check is the signal.
+      - name: Format backend/src with Black
+        uses: psf/black@stable
+        with:
+          options: "--verbose"
+          src: "./backend/src"
+          version: "~= 26.0"
+
+      - name: Commit Black formatting
+        id: auto-commit
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "style: black format backend/src"
+          file_pattern: backend/src
+          branch: ${{ github.head_ref }}
+
+      # GITHUB_TOKEN pushes do not start pull_request workflows. Dispatch CI so the
+      # formatted commit is tested. lxc_action stays at its default (none).
+      - name: Re-run CI on the formatted commit
+        if: steps.auto-commit.outputs.changes_detected == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run ci.yml --ref "${{ github.head_ref }}"

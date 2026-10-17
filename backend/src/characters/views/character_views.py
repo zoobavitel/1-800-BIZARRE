@@ -48,7 +48,10 @@ from ..roll_helpers import (
     award_struggle_for_new_traumas,
 )
 from ..serializers import CharacterSerializer, CharacterXPAllocationSerializer
-from ..history_context import bind_character_history_editor, reset_character_history_editor
+from ..history_context import (
+    bind_character_history_editor,
+    reset_character_history_editor,
+)
 from ..services.xp_allocation import (
     XPAllocationError,
     allocation_summary,
@@ -78,6 +81,7 @@ from ..services.character_history_undo import (
 )
 from ..services.character_sheet_reset import reset_character_sheet
 
+
 def _character_queryset_for_user(user):
     """Own PCs plus campaign-visible PCs for this user (staff sees all)."""
     if user.is_staff:
@@ -86,12 +90,15 @@ def _character_queryset_for_user(user):
         Q(user=user) | Q(campaign__gm=user) | Q(campaign__players=user)
     ).distinct()
 
+
 # Backward-compatible name for code that imported the old detail-only helper.
 _character_queryset_detail = _character_queryset_for_user
+
 
 def _max_stress_for_character(character):
     """Stress track length. Durability does not change box count (always 9)."""
     return max_stress_slots_for_character(character)
+
 
 def _user_may_edit_character(user, character):
     if user.is_staff:
@@ -101,6 +108,7 @@ def _user_may_edit_character(user, character):
     if character.campaign_id and character.campaign.gm_id == user.id:
         return True
     return False
+
 
 def _allocation_list_response(character):
     qs = list_allocations(character, include_undone=True)
@@ -124,8 +132,10 @@ def _allocation_list_response(character):
     )
     return serializer.data
 
+
 def _character_response(character):
     return CharacterSerializer(character).data
+
 
 class CharacterViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
@@ -389,9 +399,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
         stress_overflow_accepted = _as_bool(
             request.data.get("stress_overflow_accepted", False)
         )
-        fortune_reveal_outcome = bool(
-            request.data.get("fortune_reveal_outcome", False)
-        )
+        fortune_reveal_outcome = bool(request.data.get("fortune_reveal_outcome", False))
         fortune_public_label = str(
             request.data.get("fortune_public_label", "") or ""
         ).strip()
@@ -410,7 +418,9 @@ class CharacterViewSet(viewsets.ModelViewSet):
             "ability_bonuses"
         )  # optional list for audit string
         heritage_bonuses_raw = request.data.get("heritage_bonuses")
-        pool_source = str(request.data.get("pool_source") or "action_dots").strip().lower()
+        pool_source = (
+            str(request.data.get("pool_source") or "action_dots").strip().lower()
+        )
         stand_stat_requested = str(request.data.get("stand_stat") or "").strip().lower()
         group_action_id = request.data.get("group_action_id")
         assist_helper_id_raw = request.data.get("assist_helper_id")
@@ -461,7 +471,9 @@ class CharacterViewSet(viewsets.ModelViewSet):
         modifier_sources += _normalize_source_rows(
             request.data.get("resistance_sources"), "resistance"
         )
-        stress_sources = _normalize_source_rows(request.data.get("stress_sources"), "stress")
+        stress_sources = _normalize_source_rows(
+            request.data.get("stress_sources"), "stress"
+        )
         position_effect_sources = _normalize_source_rows(
             request.data.get("position_effect_sources"), "position_effect"
         )
@@ -481,8 +493,8 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 session = None
 
         recovery_ctx_sheet = (
-            request.data.get("recovery_context") or ""
-        ).strip().lower()
+            (request.data.get("recovery_context") or "").strip().lower()
+        )
         if recovery_ctx_sheet in ("self_downtime", "self_mid_action"):
             if recovery_ctx_sheet == "self_mid_action" and not session_id:
                 return Response(
@@ -608,9 +620,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 position = normalize_position(
                     entry.get("position") or session.default_position
                 )
-                effect = normalize_effect(
-                    entry.get("effect") or session.default_effect
-                )
+                effect = normalize_effect(entry.get("effect") or session.default_effect)
             else:
                 position = normalize_position(session.default_position)
                 effect = normalize_effect(session.default_effect)
@@ -618,7 +628,9 @@ class CharacterViewSet(viewsets.ModelViewSet):
             if not isinstance(gl_map, dict):
                 gl_map = {}
             gl = (
-                str(gl_map.get(str(character.id)) or gl_map.get(character.id) or "").strip()
+                str(
+                    gl_map.get(str(character.id)) or gl_map.get(character.id) or ""
+                ).strip()
                 or (getattr(session, "roll_goal_label", None) or "").strip()
             )
             if gl and not goal_label:
@@ -658,7 +670,9 @@ class CharacterViewSet(viewsets.ModelViewSet):
                     healer_npc_id = 0
                 if healer_npc_id <= 0:
                     return Response(
-                        {"error": "npc_healer_npc_id is required for npc_heal_fortune."},
+                        {
+                            "error": "npc_healer_npc_id is required for npc_heal_fortune."
+                        },
                         status=status.HTTP_400_BAD_REQUEST,
                     )
                 if not session.npcs_involved.filter(pk=healer_npc_id).exists():
@@ -689,9 +703,12 @@ class CharacterViewSet(viewsets.ModelViewSet):
                         pcid_chk = int(pch_raw)
                     except (TypeError, ValueError):
                         pcid_chk = 0
-                    if pcid_chk > 0 and not Character.objects.filter(
-                        pk=pcid_chk, campaign_id=character.campaign_id
-                    ).exists():
+                    if (
+                        pcid_chk > 0
+                        and not Character.objects.filter(
+                            pk=pcid_chk, campaign_id=character.campaign_id
+                        ).exists()
+                    ):
                         return Response(
                             {
                                 "error": (
@@ -707,9 +724,10 @@ class CharacterViewSet(viewsets.ModelViewSet):
                         pnid_chk = int(pnpc_raw_pre)
                     except (TypeError, ValueError):
                         pnid_chk = 0
-                    if pnid_chk > 0 and not session.npcs_involved.filter(
-                        pk=pnid_chk
-                    ).exists():
+                    if (
+                        pnid_chk > 0
+                        and not session.npcs_involved.filter(pk=pnid_chk).exists()
+                    ):
                         return Response(
                             {
                                 "error": (
@@ -770,7 +788,9 @@ class CharacterViewSet(viewsets.ModelViewSet):
                     )
                 npc_heal_coin_remaining = _personal_coin_filled_count(character)
                 dice_pool = max(1, min(6, base_fortune + bump))
-                healer_label = (getattr(healer_npc, "name", None) or "").strip() or "NPC"
+                healer_label = (
+                    getattr(healer_npc, "name", None) or ""
+                ).strip() or "NPC"
                 modifier_sources.append(
                     {
                         "kind": "npc_healer",
@@ -1095,11 +1115,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
                     )
 
             # Forfeit pending crew-assist (+1d) when the beneficiary commits an ACTION roll without assist.
-            if (
-                roll_type.upper() == "ACTION"
-                and session
-                and ahid_requested is None
-            ):
+            if roll_type.upper() == "ACTION" and session and ahid_requested is None:
                 AssistHelpPending.objects.filter(
                     session_id=session.id, recipient_id=character.id
                 ).delete()
@@ -1134,7 +1150,10 @@ class CharacterViewSet(viewsets.ModelViewSet):
                         .first()
                     )
                     prepaid = pending_row is not None
-                    if pending_row is not None and pending_row.helper_id != ahid_requested:
+                    if (
+                        pending_row is not None
+                        and pending_row.helper_id != ahid_requested
+                    ):
                         ph = getattr(pending_row, "helper", None)
                         hn = (getattr(ph, "true_name", None) or "").strip()
                         hn = hn or (getattr(ph, "alias", None) or "").strip()
@@ -1150,7 +1169,9 @@ class CharacterViewSet(viewsets.ModelViewSet):
                             status=status.HTTP_400_BAD_REQUEST,
                         )
 
-                    assist_helper = Character.objects.select_for_update().get(pk=ahid_requested)
+                    assist_helper = Character.objects.select_for_update().get(
+                        pk=ahid_requested
+                    )
                     if character.id == assist_helper.id:
                         return Response(
                             {"error": "Cannot help yourself"},
@@ -1217,12 +1238,8 @@ class CharacterViewSet(viewsets.ModelViewSet):
             dice_results = [d1, d2]
 
         # action_rating: dots in rolled action only (Fortune path sets 0 above).
-        ar_for_tier = (
-            action_rating if roll_type.upper() != "FORTUNE" else 0
-        )
-        outcome = outcome_from_action_roll(
-            dice_results, pool_before_roll, ar_for_tier
-        )
+        ar_for_tier = action_rating if roll_type.upper() != "FORTUNE" else 0
+        outcome = outcome_from_action_roll(dice_results, pool_before_roll, ar_for_tier)
         max_result = tier_die_from_action_pool(
             dice_results, pool_before_roll, ar_for_tier
         )
@@ -1501,7 +1518,8 @@ class CharacterViewSet(viewsets.ModelViewSet):
             helper = Character.objects.select_related("campaign").get(pk=int(helper_id))
         except (TypeError, ValueError):
             return Response(
-                {"error": "Invalid helper_character_id"}, status=status.HTTP_400_BAD_REQUEST
+                {"error": "Invalid helper_character_id"},
+                status=status.HTTP_400_BAD_REQUEST,
             )
         except Character.DoesNotExist:
             return Response(
@@ -1561,9 +1579,11 @@ class CharacterViewSet(viewsets.ModelViewSet):
             )
 
         with transaction.atomic():
-            if AssistHelpPending.objects.select_for_update().filter(
-                session_id=session_obj.id, recipient_id=actor.id
-            ).exists():
+            if (
+                AssistHelpPending.objects.select_for_update()
+                .filter(session_id=session_obj.id, recipient_id=actor.id)
+                .exists()
+            ):
                 return Response(
                     {
                         "error": (
@@ -1805,9 +1825,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("You cannot edit this character's advancement plan.")
 
         try:
-            item = AdvancementPlanItem.objects.get(
-                pk=int(item_id), character=character
-            )
+            item = AdvancementPlanItem.objects.get(pk=int(item_id), character=character)
         except (AdvancementPlanItem.DoesNotExist, TypeError, ValueError):
             return Response(
                 {"error": "Plan item not found."},
@@ -1834,12 +1852,14 @@ class CharacterViewSet(viewsets.ModelViewSet):
         try:
             item = update_plan_item(
                 item,
-                payload=request.data.get("payload")
-                if "payload" in request.data
-                else None,
-                blocked_reason=request.data.get("blocked_reason")
-                if "blocked_reason" in request.data
-                else None,
+                payload=(
+                    request.data.get("payload") if "payload" in request.data else None
+                ),
+                blocked_reason=(
+                    request.data.get("blocked_reason")
+                    if "blocked_reason" in request.data
+                    else None
+                ),
             )
         except PlanQueueError as exc:
             return Response({"error": exc.message}, status=status.HTTP_400_BAD_REQUEST)
@@ -1956,9 +1976,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
         """
         character = self.get_object()
         user = request.user
-        is_gm = bool(
-            character.campaign_id and character.campaign.gm_id == user.id
-        )
+        is_gm = bool(character.campaign_id and character.campaign.gm_id == user.id)
         if not (user.is_staff or is_gm):
             raise PermissionDenied(
                 "Only the campaign GM can force a Stand Coin advance."
@@ -2163,9 +2181,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
         if not _user_may_edit_character(request.user, character):
             raise PermissionDenied("You cannot undo allocations for this character.")
 
-        allocation = (
-            list_allocations(character).order_by("-created_at", "-id").first()
-        )
+        allocation = list_allocations(character).order_by("-created_at", "-id").first()
         if not allocation:
             return Response(
                 {"error": "No XP allocation to undo."},
@@ -2192,7 +2208,10 @@ class CharacterViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["get"], url_path="respec-status")
     def respec_status(self, request, pk=None):
         """Whether Respec mode is allowed for this character."""
-        from characters.services.respec import diff_fold_vs_live, ensure_chargen_baseline
+        from characters.services.respec import (
+            diff_fold_vs_live,
+            ensure_chargen_baseline,
+        )
 
         character = self.get_object()
         if not _user_may_edit_character(request.user, character):
@@ -2249,10 +2268,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
         allow_acquire = bool(request.data.get("allow_acquire_stand_drop"))
         if allow_acquire and not (
             request.user.is_staff
-            or (
-                character.campaign_id
-                and character.campaign.gm_id == request.user.id
-            )
+            or (character.campaign_id and character.campaign.gm_id == request.user.id)
         ):
             return Response(
                 {"error": "Only the campaign GM may drop Acquire Stand."},
@@ -2486,17 +2502,13 @@ class CharacterViewSet(viewsets.ModelViewSet):
         character = self.get_object()
         user = request.user
         is_owner = character.user_id == user.id
-        is_gm = bool(
-            character.campaign_id and character.campaign.gm_id == user.id
-        )
+        is_gm = bool(character.campaign_id and character.campaign.gm_id == user.id)
         if not (user.is_staff or is_owner or is_gm):
             raise PermissionDenied(
                 "You may only allocate pool XP for your own character or as the campaign GM."
             )
 
-        track = (
-            request.data.get("track") or request.data.get("xp_type") or ""
-        )
+        track = request.data.get("track") or request.data.get("xp_type") or ""
         if not isinstance(track, str):
             return Response(
                 {"error": "track is required"},
@@ -2591,17 +2603,13 @@ class CharacterViewSet(viewsets.ModelViewSet):
         character = self.get_object()
         user = request.user
         is_owner = character.user_id == user.id
-        is_gm = bool(
-            character.campaign_id and character.campaign.gm_id == user.id
-        )
+        is_gm = bool(character.campaign_id and character.campaign.gm_id == user.id)
         if not (user.is_staff or is_owner or is_gm):
             raise PermissionDenied(
                 "You may only deallocate pool XP for your own character or as the campaign GM."
             )
 
-        track = (
-            request.data.get("track") or request.data.get("xp_type") or ""
-        )
+        track = request.data.get("track") or request.data.get("xp_type") or ""
         if not isinstance(track, str):
             return Response(
                 {"error": "track is required"},
@@ -2710,9 +2718,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
         character = self.get_object()
         user = request.user
         is_owner = character.user_id == user.id
-        is_gm = bool(
-            character.campaign_id and character.campaign.gm_id == user.id
-        )
+        is_gm = bool(character.campaign_id and character.campaign.gm_id == user.id)
         if not (user.is_staff or is_owner or is_gm):
             raise PermissionDenied(
                 "You may only add XP for your own character or as the campaign GM."
@@ -2735,12 +2741,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
         ]
         if track not in valid_tracks:
             return Response(
-                {
-                    "error": (
-                        "Invalid track. Use one of: "
-                        + ", ".join(valid_tracks)
-                    )
-                },
+                {"error": ("Invalid track. Use one of: " + ", ".join(valid_tracks))},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -2758,17 +2759,13 @@ class CharacterViewSet(viewsets.ModelViewSet):
             )
 
         description = (
-            request.data.get("description")
-            or request.data.get("reason")
-            or ""
+            request.data.get("description") or request.data.get("reason") or ""
         ).strip()
         if len(description) < 3:
             description = "Manual XP award"
 
         session_obj = None
-        session_raw = request.data.get("session") or request.data.get(
-            "session_id"
-        )
+        session_raw = request.data.get("session") or request.data.get("session_id")
         if session_raw not in (None, "", False):
             try:
                 sid = int(session_raw)
@@ -2911,9 +2908,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
         character = self.get_object()
         user = request.user
         is_owner = character.user_id == user.id
-        is_gm = bool(
-            character.campaign_id and character.campaign.gm_id == user.id
-        )
+        is_gm = bool(character.campaign_id and character.campaign.gm_id == user.id)
         if not (user.is_staff or is_owner or is_gm):
             raise PermissionDenied(
                 "You may only train for your own character or as the campaign GM."
@@ -2937,9 +2932,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
 
         amount = training_xp_amount(character, track)
         session_obj = None
-        session_raw = request.data.get("session") or request.data.get(
-            "session_id"
-        )
+        session_raw = request.data.get("session") or request.data.get("session_id")
         if session_raw not in (None, "", False):
             try:
                 sid = int(session_raw)
@@ -3039,10 +3032,8 @@ class CharacterViewSet(viewsets.ModelViewSet):
         pending_id = request.data.get("pending_id")
 
         with transaction.atomic():
-            locked = (
-                Character.objects.select_for_update(of=("self",)).get(
-                    pk=character.pk
-                )
+            locked = Character.objects.select_for_update(of=("self",)).get(
+                pk=character.pk
             )
             try:
                 result = cancel_pending_advance(

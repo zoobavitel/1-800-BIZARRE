@@ -1,4 +1,5 @@
 """roll_action rejects more than one of push_effect, push_dice, devil_bargain_dice."""
+
 from django.test import TestCase
 from django.contrib.auth.models import User
 from rest_framework.test import APIClient
@@ -41,9 +42,7 @@ class RollActionPushExclusiveTests(TestCase):
             action_dots=dots,
             stress=6,
         )
-        self.session = Session.objects.create(
-            campaign=self.campaign, name="PushEx S1"
-        )
+        self.session = Session.objects.create(campaign=self.campaign, name="PushEx S1")
 
     def test_rejects_push_effect_and_push_dice_together(self):
         self.client.force_authenticate(user=self.user)

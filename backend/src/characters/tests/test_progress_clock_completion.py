@@ -1,4 +1,5 @@
 """ProgressClock completion, soft-dismiss, and sheet sync guards."""
+
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.utils import timezone
@@ -26,9 +27,7 @@ class ProgressClockCompletionTests(TestCase):
         self.vice = Vice.objects.create(name="VComp", description="")
         self.campaign = Campaign.objects.create(name="Comp Camp", gm=self.gm)
         self.campaign.players.add(self.user)
-        self.session = Session.objects.create(
-            campaign=self.campaign, name="S1"
-        )
+        self.session = Session.objects.create(campaign=self.campaign, name="S1")
         self.campaign.active_session = self.session
         self.campaign.save(update_fields=["active_session"])
         dots = {
@@ -212,14 +211,14 @@ class ProgressClockCompletionTests(TestCase):
             {"campaign": self.campaign.id, "completed": 1, "include_dismissed": 1},
         )
         self.assertEqual(res.status_code, status.HTTP_200_OK, res.content)
-        results = res.data if isinstance(res.data, list) else res.data.get("results", [])
+        results = (
+            res.data if isinstance(res.data, list) else res.data.get("results", [])
+        )
         ids = [c["id"] for c in results]
         self.assertIn(clock.id, ids)
 
     def test_recomplete_across_sessions_fresh_timestamp(self):
-        s2 = Session.objects.create(
-            campaign=self.campaign, name="S2"
-        )
+        s2 = Session.objects.create(campaign=self.campaign, name="S2")
         clock = ProgressClock.objects.create(
             name="Heat",
             clock_type="COUNTDOWN",

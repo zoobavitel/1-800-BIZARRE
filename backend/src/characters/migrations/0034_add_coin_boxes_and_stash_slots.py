@@ -7,18 +7,26 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('characters', '0033_seed_srd_reference_catalog_if_empty'),
+        ("characters", "0033_seed_srd_reference_catalog_if_empty"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='character',
-            name='coin_boxes',
-            field=models.JSONField(blank=True, default=characters.models._default_coin_boxes, help_text='Four personal coin boxes (booleans).'),
+            model_name="character",
+            name="coin_boxes",
+            field=models.JSONField(
+                blank=True,
+                default=characters.models._default_coin_boxes,
+                help_text="Four personal coin boxes (booleans).",
+            ),
         ),
         migrations.AddField(
-            model_name='crew',
-            name='stash_slots',
-            field=models.JSONField(blank=True, default=characters.models._default_stash_slots, help_text='Shared crew stash grid: 40 booleans (Blades-style).'),
+            model_name="crew",
+            name="stash_slots",
+            field=models.JSONField(
+                blank=True,
+                default=characters.models._default_stash_slots,
+                help_text="Shared crew stash grid: 40 booleans (Blades-style).",
+            ),
         ),
     ]

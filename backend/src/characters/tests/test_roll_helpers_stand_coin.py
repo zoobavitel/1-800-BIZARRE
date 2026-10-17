@@ -43,7 +43,9 @@ class StandCoinRollHelperTests(SimpleTestCase):
 
 class StandCoinActionKeysTests(SimpleTestCase):
     def test_durability_is_resist_not_coin_action(self):
-        self.assertEqual(STAND_ACTION_STAT_KEYS, frozenset({"power", "speed", "precision"}))
+        self.assertEqual(
+            STAND_ACTION_STAT_KEYS, frozenset({"power", "speed", "precision"})
+        )
         self.assertEqual(STAND_RESIST_STAT_KEYS, frozenset({"durability"}))
         self.assertNotIn("durability", STAND_ACTION_STAT_KEYS)
 

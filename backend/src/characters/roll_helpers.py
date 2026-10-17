@@ -5,34 +5,33 @@ import random
 from .models import ExperienceTracker
 from .services.session_xp_settlement import grant_encoded_trigger_xp
 
-
-EFFECT_ORDER = ['limited', 'standard', 'extreme']
+EFFECT_ORDER = ["limited", "standard", "extreme"]
 
 
 def normalize_position(raw):
-    p = (raw or 'risky').lower()
-    if p in ('controlled', 'risky', 'desperate'):
+    p = (raw or "risky").lower()
+    if p in ("controlled", "risky", "desperate"):
         return p
-    return 'risky'
+    return "risky"
 
 
 def normalize_effect(raw):
     """Map API/legacy values to limited | standard | extreme."""
     if not raw:
-        return 'standard'
+        return "standard"
     e = str(raw).strip().lower()
-    if e in ('great', 'greater'):
-        return 'extreme'
+    if e in ("great", "greater"):
+        return "extreme"
     if e in EFFECT_ORDER:
         return e
-    return 'standard'
+    return "standard"
 
 
 def bump_effect(effect, steps):
     """Move effect tier by integer steps (can be negative)."""
     eff = normalize_effect(effect)
     if eff not in EFFECT_ORDER:
-        eff = 'standard'
+        eff = "standard"
     i = EFFECT_ORDER.index(eff)
     j = max(0, min(len(EFFECT_ORDER) - 1, i + int(steps)))
     return EFFECT_ORDER[j]
@@ -57,9 +56,7 @@ def recovery_healing_clock_segments(pool_before_roll, dice_results=None):
             dice_results = [random.randint(1, 6) for _ in range(pool)]
         cleaned = [int(x) for x in dice_results[: pool + 24]]
         if len(cleaned) < pool:
-            cleaned.extend(
-                random.randint(1, 6) for _ in range(pool - len(cleaned))
-            )
+            cleaned.extend(random.randint(1, 6) for _ in range(pool - len(cleaned)))
         highest = max(cleaned)
         sixes = sum(1 for d in cleaned if int(d) == 6)
         critical = pool >= 2 and sixes >= 2
@@ -101,6 +98,7 @@ def resistance_stress_cost(dice, *, zero_dice=False):
     if sixes >= 2:
         return -1
     return max(0, 6 - highest)
+
 
 _STAND_GRADE_TO_DICE = {"F": 0, "D": 1, "C": 2, "B": 3, "A": 4, "S": 4}
 
@@ -270,7 +268,11 @@ def award_desperate_action_xp(character, session, roll, action_name, request_use
     del request_user
     position = (roll.position or "").lower()
     roll_type = (roll.roll_type or "").upper()
-    if position != "desperate" or roll_type != "ACTION" or not (action_name or "").strip():
+    if (
+        position != "desperate"
+        or roll_type != "ACTION"
+        or not (action_name or "").strip()
+    ):
         return 0, None
 
     track = xp_track_for_action_name(action_name)
@@ -376,10 +378,7 @@ def award_heritage_expression_xp(character, session, roll, heritage_bonuses_raw)
     labels = heritage_bonus_labels(heritage_bonuses_raw)
     if not labels or session is None or roll is None or character is None:
         return 0
-    desc = (
-        "Auto (heritage benefit on roll): "
-        + ", ".join(labels)
-    )[:500]
+    desc = ("Auto (heritage benefit on roll): " + ", ".join(labels))[:500]
     return grant_encoded_trigger_xp(
         character,
         session,
@@ -392,9 +391,7 @@ def award_heritage_expression_xp(character, session, roll, heritage_bonuses_raw)
     )
 
 
-def tier_die_from_action_pool(
-    results, pool_before_roll, pool_action_rating=None
-):
+def tier_die_from_action_pool(results, pool_before_roll, pool_action_rating=None):
     """
     Tier die following SRD: normally highest rolled die.
 
@@ -407,19 +404,11 @@ def tier_die_from_action_pool(
     if not results:
         return 0
     try:
-        pool_int = (
-            int(pool_before_roll)
-            if pool_before_roll is not None
-            else 0
-        )
+        pool_int = int(pool_before_roll) if pool_before_roll is not None else 0
     except (TypeError, ValueError):
         pool_int = 0
     try:
-        par = (
-            int(pool_action_rating)
-            if pool_action_rating is not None
-            else None
-        )
+        par = int(pool_action_rating) if pool_action_rating is not None else None
     except (TypeError, ValueError):
         par = None
     try:
@@ -439,17 +428,10 @@ def action_roll_counts_as_failure_for_group(
     """Tier 1–3 on the tier die ⇒ counts as failure for group-action leader stress and board."""
     if not results:
         return True
-    return (
-        tier_die_from_action_pool(
-            results, pool_before_roll, pool_action_rating
-        )
-        <= 3
-    )
+    return tier_die_from_action_pool(results, pool_before_roll, pool_action_rating) <= 3
 
 
-def outcome_from_action_roll(
-    results, pool_before_roll, pool_action_rating=None
-):
+def outcome_from_action_roll(results, pool_before_roll, pool_action_rating=None):
     """
     SRD-aligned buckets: critical if ≥2 sixes; otherwise 6 = full success, 4–5 = partial with
     consequence, 1–3 = failure (`docs/1-(800)-BIZARRE SRD.md`: read highest; 4–5 mixed; 1–3 fail).
@@ -460,9 +442,7 @@ def outcome_from_action_roll(
     sixes = sum(1 for r in results if r == 6)
     if sixes >= 2:
         return "CRITICAL_SUCCESS"
-    tier = tier_die_from_action_pool(
-        results, pool_before_roll, pool_action_rating
-    )
+    tier = tier_die_from_action_pool(results, pool_before_roll, pool_action_rating)
     if tier >= 6:
         return "FULL_SUCCESS"
     if tier >= 4:

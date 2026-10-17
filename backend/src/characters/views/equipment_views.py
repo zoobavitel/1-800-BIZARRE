@@ -39,11 +39,15 @@ class EquipmentItemViewSet(viewsets.ModelViewSet):
                 | models.Q(campaign__characters__user=user)
             )
             if cid:
-                vis = models.Q(scope="TEMPLATE") | models.Q(scope="SITE") | (
-                    models.Q(scope="CAMPAIGN", campaign_id=cid)
-                    & (
-                        models.Q(campaign__gm=user)
-                        | models.Q(campaign__characters__user=user)
+                vis = (
+                    models.Q(scope="TEMPLATE")
+                    | models.Q(scope="SITE")
+                    | (
+                        models.Q(scope="CAMPAIGN", campaign_id=cid)
+                        & (
+                            models.Q(campaign__gm=user)
+                            | models.Q(campaign__characters__user=user)
+                        )
                     )
                 )
             base = qs.filter(vis).distinct()
@@ -80,10 +84,7 @@ class EquipmentItemViewSet(viewsets.ModelViewSet):
                 "item_id", flat=True
             )
             base = base.filter(
-                (
-                    models.Q(scope="TEMPLATE")
-                    & ~models.Q(id__in=disabled_template_ids)
-                )
+                (models.Q(scope="TEMPLATE") & ~models.Q(id__in=disabled_template_ids))
                 | models.Q(scope="SITE", id__in=enabled_site_ids)
                 | models.Q(
                     scope="CAMPAIGN",
@@ -212,7 +213,9 @@ class EquipmentItemViewSet(viewsets.ModelViewSet):
             available_when_adding=True,
         )
         return Response(
-            EquipmentItemSerializer(site_item, context=self.get_serializer_context()).data,
+            EquipmentItemSerializer(
+                site_item, context=self.get_serializer_context()
+            ).data,
             status=status.HTTP_201_CREATED,
         )
 
@@ -230,7 +233,9 @@ class EquipmentItemViewSet(viewsets.ModelViewSet):
         self._assert_gm(request, campaign)
         name = str(request.data.get("name") or "").strip()
         if not name:
-            return Response({"error": "name is required."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "name is required."}, status=status.HTTP_400_BAD_REQUEST
+            )
         existing = (
             EquipmentItem.objects.filter(name__iexact=name)
             .filter(
@@ -249,7 +254,9 @@ class EquipmentItemViewSet(viewsets.ModelViewSet):
         source_character_id = request.data.get("source_character")
         item = EquipmentItem.objects.create(
             name=name,
-            description=str(request.data.get("detail") or request.data.get("description") or ""),
+            description=str(
+                request.data.get("detail") or request.data.get("description") or ""
+            ),
             category=str(request.data.get("category") or "other"),
             load_slots=min(2, max(0, int(request.data.get("load", 1) or 1))),
             quality=min(3, max(0, int(request.data.get("quality", 1) or 1))),

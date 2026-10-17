@@ -137,9 +137,7 @@ def sync_srd_equipment_templates(*, prune_obsolete: bool = True) -> dict:
         obj.save()
         updated += 1
         if len(matches) > 1:
-            EquipmentItem.objects.filter(
-                id__in=[m.id for m in matches[1:]]
-            ).delete()
+            EquipmentItem.objects.filter(id__in=[m.id for m in matches[1:]]).delete()
 
     deleted = 0
     if prune_obsolete:

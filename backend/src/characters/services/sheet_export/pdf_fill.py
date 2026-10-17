@@ -151,7 +151,9 @@ def export_pc_pdf(character) -> tuple[bytes, str]:
     pdf_bytes = fill_pdf(pc_path, field_values, portrait_bytes=portrait)
     append_bytes = build_standing_crew_pdf_bytes(character)
     pdf_bytes = merge_pdf_bytes(pdf_bytes, append_bytes)
-    filename = f"{sanitize_filename(character.true_name, 'character')}-character-sheet.pdf"
+    filename = (
+        f"{sanitize_filename(character.true_name, 'character')}-character-sheet.pdf"
+    )
     return pdf_bytes, filename
 
 

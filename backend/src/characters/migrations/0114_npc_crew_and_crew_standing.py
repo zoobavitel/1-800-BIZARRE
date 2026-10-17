@@ -38,9 +38,7 @@ def remove_gm_from_campaign_players(apps, schema_editor):
     Campaign = apps.get_model("characters", "Campaign")
     Through = Campaign.players.through
     for campaign in Campaign.objects.exclude(gm_id=None).iterator():
-        Through.objects.filter(
-            campaign_id=campaign.id, user_id=campaign.gm_id
-        ).delete()
+        Through.objects.filter(campaign_id=campaign.id, user_id=campaign.gm_id).delete()
 
 
 def noop_reverse(apps, schema_editor):

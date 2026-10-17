@@ -1,4 +1,5 @@
 """Celery application (optional; add @shared_task in apps when needed)."""
+
 import os
 
 from celery import Celery

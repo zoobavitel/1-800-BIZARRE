@@ -1,10 +1,19 @@
 """POST /characters/{id}/roll-action/ with pool_source stand_coin (SRD_DEV)."""
+
 from django.test import TestCase
 from django.contrib.auth.models import User
 from rest_framework.test import APIClient
 from rest_framework import status
 
-from characters.models import Campaign, Character, Crew, GroupAction, Heritage, Roll, Session
+from characters.models import (
+    Campaign,
+    Character,
+    Crew,
+    GroupAction,
+    Heritage,
+    Roll,
+    Session,
+)
 
 
 class RollActionStandCoinTests(TestCase):
@@ -49,7 +58,9 @@ class RollActionStandCoinTests(TestCase):
                 "development": "D",
             },
         )
-        self.session = Session.objects.create(campaign=self.campaign, name="StandCoin S1")
+        self.session = Session.objects.create(
+            campaign=self.campaign, name="StandCoin S1"
+        )
 
     def test_stand_coin_speed_uses_grade_not_skirmish_dots(self):
         self.client.force_authenticate(user=self.user)

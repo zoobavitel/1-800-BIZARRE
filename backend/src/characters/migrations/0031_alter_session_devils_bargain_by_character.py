@@ -6,13 +6,17 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('characters', '0030_roll_pool_breakdown_devils_bargain'),
+        ("characters", "0030_roll_pool_breakdown_devils_bargain"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='session',
-            name='devils_bargain_by_character',
-            field=models.JSONField(blank=True, default=dict, help_text="Map of character id (string) to GM-written devil's bargain consequence; player must confirm before rolling with +1d."),
+            model_name="session",
+            name="devils_bargain_by_character",
+            field=models.JSONField(
+                blank=True,
+                default=dict,
+                help_text="Map of character id (string) to GM-written devil's bargain consequence; player must confirm before rolling with +1d.",
+            ),
         ),
     ]

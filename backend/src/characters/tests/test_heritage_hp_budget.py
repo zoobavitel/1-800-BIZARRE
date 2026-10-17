@@ -1,4 +1,5 @@
 """Heritage HP: optional detriments add hp_value; optional benefits spend hp_cost; required rows are ignored for budgeting."""
+
 from django.test import TestCase
 from django.contrib.auth.models import User
 from rest_framework.test import APIRequestFactory
@@ -121,7 +122,9 @@ class HeritageHpBudgetSerializerTests(TestCase):
         )
         self.assertFalse(serializer.is_valid())
         self.assertIn("non_field_errors", serializer.errors)
-        self.assertIn("HP budget exceeded", str(serializer.errors["non_field_errors"][0]))
+        self.assertIn(
+            "HP budget exceeded", str(serializer.errors["non_field_errors"][0])
+        )
 
     def test_optional_detriment_covers_optional_benefit_cost(self):
         ben_second = Benefit.objects.create(

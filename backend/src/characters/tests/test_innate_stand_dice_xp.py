@@ -1,4 +1,5 @@
 """Innate stand-dice XP: desperate Power/Speed/Precision → +1 playbook, uncapped."""
+
 from django.contrib.auth.models import User
 from django.test import TestCase
 from rest_framework import status

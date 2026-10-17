@@ -97,9 +97,7 @@ class XPAllocationServiceTests(TestCase):
         self.character.action_dots = dots
         self.character.save(update_fields=["xp_clocks", "action_dots"])
 
-        apply_minor_advance(
-            self.character, xp_track="resolve", action="BIZARRE"
-        )
+        apply_minor_advance(self.character, xp_track="resolve", action="BIZARRE")
         self.character.refresh_from_db()
         self.assertEqual(self.character.action_dots.get("attune"), 2)
         self.assertNotIn("bizarre", self.character.action_dots)
@@ -116,9 +114,7 @@ class XPAllocationServiceTests(TestCase):
         self.character.action_dots = dots
         self.character.save(update_fields=["xp_clocks", "action_dots"])
 
-        apply_minor_advance(
-            self.character, xp_track="resolve", action="bizarre"
-        )
+        apply_minor_advance(self.character, xp_track="resolve", action="bizarre")
         self.character.refresh_from_db()
         self.assertEqual(self.character.action_dots.get("attune"), 3)
         self.assertNotIn("bizarre", self.character.action_dots)
@@ -143,9 +139,7 @@ class XPAllocationServiceTests(TestCase):
             "insight": 5,
         }
         self.character.save(update_fields=["xp_clocks"])
-        alloc = apply_minor_advance(
-            self.character, xp_track="insight", action="HUNT"
-        )
+        alloc = apply_minor_advance(self.character, xp_track="insight", action="HUNT")
         self.character.refresh_from_db()
         self.assertEqual(self.character.xp_clocks["insight"], 0)
         self.assertEqual(self.character.action_dots["hunt"], 3)
@@ -162,9 +156,7 @@ class XPAllocationServiceTests(TestCase):
             "insight": 5,
         }
         self.character.save(update_fields=["xp_clocks"])
-        alloc = apply_minor_advance(
-            self.character, xp_track="insight", action="HUNT"
-        )
+        alloc = apply_minor_advance(self.character, xp_track="insight", action="HUNT")
         self.character.refresh_from_db()
         undo_allocation(self.character, alloc, user=self.user)
         self.character.refresh_from_db()
@@ -202,9 +194,7 @@ class XPAllocationServiceTests(TestCase):
         self.character.refresh_from_db()
         self.assertEqual(self.character.stand.power, "B")
         self.assertEqual(self.character.xp_clocks["playbook"], 10)
-        ids_after = set(
-            self.character.standard_abilities.values_list("id", flat=True)
-        )
+        ids_after = set(self.character.standard_abilities.values_list("id", flat=True))
         self.assertNotIn(self.std_a.id, ids_after)
         self.assertNotIn(self.std_b.id, ids_after)
 
@@ -253,7 +243,10 @@ class XPAllocationServiceTests(TestCase):
             self.assertEqual(grant["custom_ability_type"], "single_with_1_use")
             self.assertEqual(len(grant["uses"]), 1)
         self.assertEqual([g["uses"][0] for g in grants], ["Use one", "Use two"])
-        self.assertIn(self.std_c.id, list(self.character.standard_abilities.values_list("id", flat=True)))
+        self.assertIn(
+            self.std_c.id,
+            list(self.character.standard_abilities.values_list("id", flat=True)),
+        )
 
         undo_allocation(self.character, alloc, user=self.user)
         self.character.refresh_from_db()
@@ -450,9 +443,7 @@ class XPAllocationServiceTests(TestCase):
         self.character.unallocated_xp = 30
         self.character.save(update_fields=["unallocated_xp"])
         with self.assertRaises(XPAllocationError):
-            apply_unlock_second_playbook(
-                self.character, secondary_playbook="HAMON"
-            )
+            apply_unlock_second_playbook(self.character, secondary_playbook="HAMON")
 
 
 class XPAllocationAPITests(TestCase):
@@ -467,12 +458,28 @@ class XPAllocationAPITests(TestCase):
             user=self.user,
             true_name="API XP",
             heritage=self.heritage,
-            action_dots={"hunt": 2, "study": 1, "survey": 1, "tinker": 1,
-                         "finesse": 1, "prowl": 1, "skirmish": 0, "wreck": 0,
-                         "bizarre": 0, "command": 0, "consort": 0, "sway": 0},
+            action_dots={
+                "hunt": 2,
+                "study": 1,
+                "survey": 1,
+                "tinker": 1,
+                "finesse": 1,
+                "prowl": 1,
+                "skirmish": 0,
+                "wreck": 0,
+                "bizarre": 0,
+                "command": 0,
+                "consort": 0,
+                "sway": 0,
+            },
             stress=9,
-            xp_clocks={"heritage": 10, "playbook": 0, "insight": 0,
-                       "prowess": 0, "resolve": 0},
+            xp_clocks={
+                "heritage": 10,
+                "playbook": 0,
+                "insight": 0,
+                "prowess": 0,
+                "resolve": 0,
+            },
         )
         Stand.objects.create(
             character=self.character,
@@ -605,7 +612,9 @@ class XPAllocationAPITests(TestCase):
             ).count(),
             0,
         )
-        self.assertEqual(data["character"]["pending_advance_counts"].get("playbook", 0), 0)
+        self.assertEqual(
+            data["character"]["pending_advance_counts"].get("playbook", 0), 0
+        )
         self.assertEqual(data["character"]["stand"]["power"], "C")
 
     def test_apply_level_up_heritage_api(self):
@@ -630,7 +639,15 @@ class XPAllocationAPITests(TestCase):
             true_name="Spin XP",
             heritage=self.heritage,
             playbook="SPIN",
-            action_dots={"hunt": 1, "study": 1, "survey": 1, "tinker": 1, "finesse": 1, "prowl": 1, "skirmish": 1},
+            action_dots={
+                "hunt": 1,
+                "study": 1,
+                "survey": 1,
+                "tinker": 1,
+                "finesse": 1,
+                "prowl": 1,
+                "skirmish": 1,
+            },
             stress=9,
             xp_clocks={
                 "insight": 0,
@@ -655,7 +672,15 @@ class XPAllocationAPITests(TestCase):
             true_name="Spin Undo",
             heritage=self.heritage,
             playbook="HAMON",
-            action_dots={"hunt": 1, "study": 1, "survey": 1, "tinker": 1, "finesse": 1, "prowl": 1, "skirmish": 1},
+            action_dots={
+                "hunt": 1,
+                "study": 1,
+                "survey": 1,
+                "tinker": 1,
+                "finesse": 1,
+                "prowl": 1,
+                "skirmish": 1,
+            },
             stress=9,
             xp_clocks={"playbook": 10},
         )

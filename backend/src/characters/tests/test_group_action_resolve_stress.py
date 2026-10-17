@@ -1,18 +1,31 @@
 """Group action resolve: leader marks 1 stress per failed non-leader roll (filled count)."""
+
 from django.contrib.auth.models import User
 from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from characters.models import Campaign, Character, Crew, GroupAction, Heritage, Roll, Session
+from characters.models import (
+    Campaign,
+    Character,
+    Crew,
+    GroupAction,
+    Heritage,
+    Roll,
+    Session,
+)
 
 
 class GroupActionResolveLeaderStressTests(TestCase):
     def setUp(self):
         self.client = APIClient()
         self.gm = User.objects.create_user(username="gm_gar", password="pass")
-        self.leader_user = User.objects.create_user(username="leader_gar", password="pass")
-        self.follower_user = User.objects.create_user(username="follow_gar", password="pass")
+        self.leader_user = User.objects.create_user(
+            username="leader_gar", password="pass"
+        )
+        self.follower_user = User.objects.create_user(
+            username="follow_gar", password="pass"
+        )
         self.campaign = Campaign.objects.create(name="GAR Camp", gm=self.gm)
         self.crew = Crew.objects.create(name="GAR Crew", campaign=self.campaign)
         self.h, _ = Heritage.objects.get_or_create(

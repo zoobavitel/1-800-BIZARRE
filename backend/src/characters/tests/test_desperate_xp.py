@@ -1,4 +1,5 @@
 """award_desperate_action_xp: +1 attribute XP, +2 at zero dots; routes through credit_xp."""
+
 from django.contrib.auth.models import User
 from django.test import TestCase
 

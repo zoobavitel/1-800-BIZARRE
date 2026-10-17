@@ -50,6 +50,7 @@ class Command(BaseCommand):
             default="F",
             help="Stand Development Potential rating (S, A, B, C, D, F).",
         )
+
     def handle(self, *args, **options):
         name = options["name"]
         campaign_id = options["campaign_id"]

@@ -1,10 +1,18 @@
 """Crew assist-help pending row: one per recipient per session; roll consumes prepaid stress once."""
+
 from django.test import TestCase
 from django.contrib.auth.models import User
 from rest_framework.test import APIClient
 from rest_framework import status
 
-from characters.models import AssistHelpPending, Campaign, Character, Crew, Heritage, Session
+from characters.models import (
+    AssistHelpPending,
+    Campaign,
+    Character,
+    Crew,
+    Heritage,
+    Session,
+)
 
 
 class AssistHelpPendingTests(TestCase):
@@ -147,9 +155,7 @@ class AssistHelpPendingTests(TestCase):
 
     def test_assist_help_rejects_helper_in_different_crew(self):
         """SRD Teamwork Assist: same campaign + same crew required."""
-        other_crew = Crew.objects.create(
-            name="Other Crew AHP", campaign=self.campaign
-        )
+        other_crew = Crew.objects.create(name="Other Crew AHP", campaign=self.campaign)
         outsider = Character.objects.create(
             user=User.objects.create_user(username="outsider_ahp", password="pass"),
             campaign=self.campaign,

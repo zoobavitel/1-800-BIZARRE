@@ -9,13 +9,19 @@ class Migration(migrations.Migration):
 
     dependencies = [
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
-        ('characters', '0014_add_harm_slot2_fields'),
+        ("characters", "0014_add_harm_slot2_fields"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='roll',
-            name='rolled_by',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='rolls_made', to=settings.AUTH_USER_MODEL),
+            model_name="roll",
+            name="rolled_by",
+            field=models.ForeignKey(
+                blank=True,
+                null=True,
+                on_delete=django.db.models.deletion.SET_NULL,
+                related_name="rolls_made",
+                to=settings.AUTH_USER_MODEL,
+            ),
         ),
     ]

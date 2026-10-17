@@ -167,11 +167,11 @@ Notes:
 From `.github/workflows/`:
 - `ci.yml`:
   - `test-frontend`: `npm ci` → frontend tests → `npm run lint` → frontend build.
-  - `test-backend`: pip install → Django tests → `makemigrations --check --dry-run`.
+  - `test-backend`: Black `~=26.0` `--check` on `backend/src` → pip install → Django tests → `makemigrations --check --dry-run`.
   - `integration-test`: install both → migrate + loaddata → runserver + curl wait → Jest integration tests.
   - `deploy-github-pages` (pushes to `master` only): builds and publishes `frontend/build`.
   - `deploy-lxc` (manual only): SSH/Tailscale deploy to **`/opt/bizarre-prod`** (`git checkout --detach origin/master`), secrets from `/etc/bizarre/prod.env`, media at `/var/lib/bizarre/media`. Never touches agent workspace `/opt/bizarre`. See `deploy/bizarre-api/README.md`.
-- `black.yml`: Black `--check` on `backend/src` (version pinned in workflow).
+- `black-autofix-pr.yml`: on same-repo PRs, `psf/black` (`~= 26.0`) formats `backend/src` and commits onto the PR head, then dispatches CI. `ci.yml` `black --check` is the merge gate.
 
 ## When exploring / making changes
 

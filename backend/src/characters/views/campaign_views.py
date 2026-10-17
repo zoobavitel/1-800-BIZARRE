@@ -140,9 +140,7 @@ class CampaignViewSet(viewsets.ModelViewSet):
                             credit_crew_xp_triggers_for_session,
                         )
 
-                        credit_crew_xp_triggers_for_session(
-                            old_sess, self.request.user
-                        )
+                        credit_crew_xp_triggers_for_session(old_sess, self.request.user)
                     except Exception:
                         logger.exception(
                             "Crew XP trigger credit failed after "
@@ -327,9 +325,9 @@ class CampaignViewSet(viewsets.ModelViewSet):
                 {"error": "That user is not in this campaign."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        for ch in Character.objects.filter(campaign=campaign, user_id=user_id).select_related(
-            "crew"
-        ):
+        for ch in Character.objects.filter(
+            campaign=campaign, user_id=user_id
+        ).select_related("crew"):
             update_fields = ["campaign"]
             ch.campaign = None
             if ch.crew_id and ch.crew.campaign_id == campaign.id:
@@ -477,9 +475,7 @@ class CampaignViewSet(viewsets.ModelViewSet):
             update_fields.append("personal_crew_name")
         character.save(update_fields=update_fields)
         char_user = character.user
-        remaining = Character.objects.filter(
-            campaign=campaign, user=char_user
-        ).exists()
+        remaining = Character.objects.filter(campaign=campaign, user=char_user).exists()
         if not remaining and char_user != campaign.gm:
             campaign.players.remove(char_user)
         return Response(
@@ -552,10 +548,9 @@ class CampaignViewSet(viewsets.ModelViewSet):
 
         if kind == "sheet":
             total = ch_qs.count()
-            page_qs = (
-                ch_qs.select_related("character", "editor")
-                .order_by("-timestamp")[start : start + page_size]
-            )
+            page_qs = ch_qs.select_related("character", "editor").order_by(
+                "-timestamp"
+            )[start : start + page_size]
             page_rows = [_gm_history_character_row(h) for h in page_qs]
         elif kind == "clocks":
             total = aud_qs.count()
@@ -598,9 +593,7 @@ class CampaignViewSet(viewsets.ModelViewSet):
             with connection.cursor() as cursor:
                 cursor.execute(count_sql, union_params)
                 total = cursor.fetchone()[0]
-                cursor.execute(
-                    page_sql, union_params + [page_size, start]
-                )
+                cursor.execute(page_sql, union_params + [page_size, start])
                 merged_rows = cursor.fetchall()
 
             char_ids = [rid for rt, rid, _ts in merged_rows if rt == "character"]
@@ -608,15 +601,15 @@ class CampaignViewSet(viewsets.ModelViewSet):
 
             hist_by_id = {
                 h.id: h
-                for h in CharacterHistory.objects.filter(id__in=char_ids).select_related(
-                    "character", "editor"
-                )
+                for h in CharacterHistory.objects.filter(
+                    id__in=char_ids
+                ).select_related("character", "editor")
             }
             aud_by_id = {
                 a.id: a
-                for a in CampaignAuditLog.objects.filter(id__in=clock_ids).select_related(
-                    "actor"
-                )
+                for a in CampaignAuditLog.objects.filter(
+                    id__in=clock_ids
+                ).select_related("actor")
             }
 
             page_rows = []

@@ -1,4 +1,5 @@
 """SRD_DEV: stress track length follows Stand Durability grade."""
+
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.test import TestCase

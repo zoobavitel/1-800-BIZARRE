@@ -6,9 +6,8 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('characters', '0040_merge_20260410_1653'),
-        ('characters', '0041_alter_npc_relationships'),
+        ("characters", "0040_merge_20260410_1653"),
+        ("characters", "0041_alter_npc_relationships"),
     ]
 
-    operations = [
-    ]
+    operations = []

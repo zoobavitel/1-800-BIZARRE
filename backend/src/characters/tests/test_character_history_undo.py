@@ -133,18 +133,14 @@ class ExperienceTrackerSheetUndoGuardTests(TestCase):
         self.client.force_authenticate(user=self.user)
         res = self.client.delete(f"/api/experience-tracker/{entry.id}/")
         self.assertEqual(res.status_code, 403)
-        self.assertTrue(
-            ExperienceTracker.objects.filter(pk=entry.id).exists()
-        )
+        self.assertTrue(ExperienceTracker.objects.filter(pk=entry.id).exists())
 
     def test_player_can_delete_self_toggle(self):
         entry = self._tracker("PLAYER")
         self.client.force_authenticate(user=self.user)
         res = self.client.delete(f"/api/experience-tracker/{entry.id}/")
         self.assertEqual(res.status_code, 204)
-        self.assertFalse(
-            ExperienceTracker.objects.filter(pk=entry.id).exists()
-        )
+        self.assertFalse(ExperienceTracker.objects.filter(pk=entry.id).exists())
 
     def test_gm_can_delete_gm_award(self):
         entry = self._tracker("GM")
@@ -292,8 +288,13 @@ class GmUndoLatestChangeTests(TestCase):
         self.assertEqual(res.status_code, 400)
 
     def test_gm_undo_manual_xp_award(self):
-        self.character.xp_clocks = {"playbook": 1, "insight": 0, "prowess": 0,
-                                   "resolve": 0, "heritage": 0}
+        self.character.xp_clocks = {
+            "playbook": 1,
+            "insight": 0,
+            "prowess": 0,
+            "resolve": 0,
+            "heritage": 0,
+        }
         self.character.save()
         self.client.force_authenticate(user=self.gm)
         add_res = self.client.post(

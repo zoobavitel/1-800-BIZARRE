@@ -6,9 +6,9 @@ GitHub Actions definitions for the 1-800-BIZARRE repo. The high-level overview, 
 
 | Workflow | Trigger | What it does |
 |----------|---------|--------------|
-| [`ci.yml`](ci.yml) | Push + PR to `master` / `main` | Frontend job (`npm ci`, `jest --coverage`, `eslint`, `npm run build`), backend job (`pip install`, `manage.py test`, `makemigrations --check`), integration job (boots Django, runs `RUN_BACKEND_INTEGRATION=1` Jest suite). On `master` / `main` pushes also runs `deploy-github-pages`. Optional manual `workflow_dispatch` → `deploy-lxc` updates **`/opt/bizarre-prod`** (detached `origin/master`) only — never the agent workspace `/opt/bizarre`. |
+| [`ci.yml`](ci.yml) | Push + PR to `master` / `main` | Frontend job (`npm ci`, `jest --coverage`, `eslint`, `npm run build`), backend job (Black `~=26.0` `--check` on `backend/src`, `pip install`, `manage.py test`, `makemigrations --check`), integration job (boots Django, runs `RUN_BACKEND_INTEGRATION=1` Jest suite). On `master` / `main` pushes also runs `deploy-github-pages`. Optional manual `workflow_dispatch` → `deploy-lxc` updates **`/opt/bizarre-prod`** (detached `origin/master`) only — never the agent workspace `/opt/bizarre`. |
 | [`secret-scan.yml`](secret-scan.yml) | Push + PR | Runs `gitleaks` with the repo-root [`.gitleaks.toml`](../../.gitleaks.toml) rule set. |
-| [`black-autofix-pr.yml`](black-autofix-pr.yml) | Manual (`workflow_dispatch`) | Runs `black==23.11.0` on Python 3.11 against `backend/src`, then opens a PR on `actions/black-format` if anything changed. |
+| [`black-autofix-pr.yml`](black-autofix-pr.yml) | PR to `master` (same repo) | Runs `psf/black` (`version: ~= 26.0`) on `backend/src` and commits formatting onto the PR head. Then dispatches `ci.yml` on that branch. Fork PRs are not pushed; `ci.yml` still fails them via `black --check`. |
 | [`daily-critical-bug-review.yml`](daily-critical-bug-review.yml) | Scheduled (daily) | Runs [`scripts/daily_critical_bug_review.py`](../../scripts/daily_critical_bug_review.py) to surface high-risk diffs from the last day. |
 
 ## Versions of record
@@ -17,6 +17,7 @@ CI is authoritative for tool versions:
 
 - **Node** 24 (`node-version` in `ci.yml`).
 - **Python** 3.11.
+- **Black** `~= 26.0` (`psf/black@stable` in `ci.yml` and `black-autofix-pr.yml`).
 
 Root `package.json` lists `engines.node` as `>=18` for local convenience; CI is the source of truth.
 

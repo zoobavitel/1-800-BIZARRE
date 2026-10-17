@@ -7,14 +7,32 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from ..models import (
-    Heritage, Vice, Ability, Stand, StandAbility, HamonAbility, SpinAbility,
-    Trauma, CharacterHistory, CrewHistory, Character, ExperienceTracker, Campaign,
+    Heritage,
+    Vice,
+    Ability,
+    Stand,
+    StandAbility,
+    HamonAbility,
+    SpinAbility,
+    Trauma,
+    CharacterHistory,
+    CrewHistory,
+    Character,
+    ExperienceTracker,
+    Campaign,
     Crew,
 )
 from ..serializers import (
-    HeritageSerializer, ViceSerializer, AbilitySerializer, StandSerializer,
-    StandAbilitySerializer, HamonAbilitySerializer, SpinAbilitySerializer,
-    TraumaSerializer, CharacterHistorySerializer, CrewHistorySerializer,
+    HeritageSerializer,
+    ViceSerializer,
+    AbilitySerializer,
+    StandSerializer,
+    StandAbilitySerializer,
+    HamonAbilitySerializer,
+    SpinAbilitySerializer,
+    TraumaSerializer,
+    CharacterHistorySerializer,
+    CrewHistorySerializer,
     ExperienceTrackerSerializer,
 )
 from ..services.session_xp_settlement import grant_encoded_trigger_xp
@@ -31,6 +49,7 @@ SESSION_TRIGGER_DESCRIPTION_PREFIX = "Session XP trigger"
 # the rename data migration applied. New rows are written with the new prefix.
 LEGACY_MANUAL_TOGGLE_DESCRIPTION_PREFIX = "Manual session XP toggle"
 
+
 class HeritageViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = Heritage.objects.all()
@@ -40,41 +59,50 @@ class HeritageViewSet(viewsets.ModelViewSet):
         # Junk test heritages — not part of the SRD catalog.
         return Heritage.objects.exclude(name__in=["H", "H2"])
 
+
 class ViceViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = Vice.objects.all()
     serializer_class = ViceSerializer
+
 
 class AbilityViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = Ability.objects.all()
     serializer_class = AbilitySerializer
 
+
 class StandViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = Stand.objects.all()
     serializer_class = StandSerializer
+
 
 class StandAbilityViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = StandAbility.objects.all()
     serializer_class = StandAbilitySerializer
 
+
 class HamonAbilityViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = HamonAbility.objects.all()
     serializer_class = HamonAbilitySerializer
+
 
 class SpinAbilityViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = SpinAbility.objects.all()
     serializer_class = SpinAbilitySerializer
 
+
 class TraumaViewSet(viewsets.ReadOnlyModelViewSet):
     """Read-only endpoint for trauma conditions."""
+
     permission_classes = [IsAuthenticated]
     queryset = Trauma.objects.all()
     serializer_class = TraumaSerializer
+
 
 class CharacterHistoryViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
@@ -173,6 +201,7 @@ class CharacterHistoryViewSet(viewsets.ReadOnlyModelViewSet):
             }
         )
 
+
 class CrewHistoryViewSet(viewsets.ReadOnlyModelViewSet):
     """Audit of crew sheet scalar changes; filter with ?crew=<id>."""
 
@@ -187,9 +216,9 @@ class CrewHistoryViewSet(viewsets.ReadOnlyModelViewSet):
         if user.is_staff:
             base = qs
         else:
-            member_crew_ids = Crew.objects.filter(
-                members__user=user
-            ).values_list("id", flat=True)
+            member_crew_ids = Crew.objects.filter(members__user=user).values_list(
+                "id", flat=True
+            )
             gm_crew_ids = Crew.objects.filter(campaign__gm=user).values_list(
                 "id", flat=True
             )
@@ -202,6 +231,7 @@ class CrewHistoryViewSet(viewsets.ReadOnlyModelViewSet):
             base = base.filter(crew_id=crew_id)
         return base.order_by("-timestamp")
 
+
 class ExperienceTrackerViewSet(
     mixins.DestroyModelMixin,
     viewsets.ReadOnlyModelViewSet,
@@ -213,6 +243,7 @@ class ExperienceTrackerViewSet(
     GMs and players can remove *any* XP record (manual, auto, mid-session or
     end-of-session settlement) during an active session.
     """
+
     permission_classes = [IsAuthenticated]
     queryset = ExperienceTracker.objects.all()
     serializer_class = ExperienceTrackerSerializer
@@ -223,16 +254,21 @@ class ExperienceTrackerViewSet(
         return context
 
     def get_queryset(self):
-        qs = ExperienceTracker.objects.filter(
-            revoked_at__isnull=True
-        ).select_related('character', 'session', 'character__campaign')
+        qs = ExperienceTracker.objects.filter(revoked_at__isnull=True).select_related(
+            "character", "session", "character__campaign"
+        )
         user = self.request.user
         if user.is_staff:
             return qs
-        char_id = self.request.query_params.get('character')
+        char_id = self.request.query_params.get("character")
         if char_id:
-            char = Character.objects.filter(pk=char_id).select_related('campaign').first()
-            if char and (char.user_id == user.id or (char.campaign_id and char.campaign.gm_id == user.id)):
+            char = (
+                Character.objects.filter(pk=char_id).select_related("campaign").first()
+            )
+            if char and (
+                char.user_id == user.id
+                or (char.campaign_id and char.campaign.gm_id == user.id)
+            ):
                 return qs.filter(character_id=char_id)
             return ExperienceTracker.objects.none()
         return qs.filter(
@@ -288,10 +324,7 @@ class ExperienceTrackerViewSet(
         character, session, trigger = self._resolve_toggle_context(request)
         user = request.user
         is_owner = character.user_id == user.id
-        is_gm = bool(
-            character.campaign_id
-            and character.campaign.gm_id == user.id
-        )
+        is_gm = bool(character.campaign_id and character.campaign.gm_id == user.id)
         source = "GM" if (is_gm and not is_owner) else "PLAYER"
         desc = f"{SESSION_TRIGGER_DESCRIPTION_PREFIX}: {trigger}"
         if trigger == "PLAYBOOK_SPECIFIC":
@@ -335,7 +368,9 @@ class ExperienceTrackerViewSet(
         character, session, trigger = self._resolve_toggle_context(request)
         with transaction.atomic():
             base = ExperienceTracker.objects.select_for_update().filter(
-                character=character, session=session, trigger=trigger,
+                character=character,
+                session=session,
+                trigger=trigger,
             )
             toggle_q = Q(
                 description__startswith=SESSION_TRIGGER_DESCRIPTION_PREFIX,
@@ -343,9 +378,7 @@ class ExperienceTrackerViewSet(
                 description__startswith=LEGACY_MANUAL_TOGGLE_DESCRIPTION_PREFIX,
             )
             entry = (
-                base.filter(toggle_q)
-                .order_by("-session_date", "-id")
-                .first()
+                base.filter(toggle_q).order_by("-session_date", "-id").first()
             ) or base.order_by("-session_date", "-id").first()
             if entry is None:
                 return Response(
@@ -379,16 +412,15 @@ class ExperienceTrackerViewSet(
         delete GM or automatic session XP from the character sheet — use the
         campaign scorecard instead.
         """
-        from ..services.character_history_undo import experience_tracker_undoable_from_sheet
+        from ..services.character_history_undo import (
+            experience_tracker_undoable_from_sheet,
+        )
 
         entry = self.get_object()
         character = entry.character
         user = request.user
         is_owner = character.user_id == user.id
-        is_gm = bool(
-            character.campaign_id
-            and character.campaign.gm_id == user.id
-        )
+        is_gm = bool(character.campaign_id and character.campaign.gm_id == user.id)
         if not (user.is_staff or is_owner or is_gm):
             raise PermissionDenied(
                 "Only the character owner or campaign GM can delete XP entries."
@@ -401,9 +433,7 @@ class ExperienceTrackerViewSet(
             locked_entry = ExperienceTracker.objects.select_for_update().get(
                 pk=entry.pk
             )
-            locked_char = Character.objects.select_for_update().get(
-                pk=character.pk
-            )
+            locked_char = Character.objects.select_for_update().get(pk=character.pk)
             amount = int(locked_entry.xp_gained or 0)
             clock_key = (locked_entry.clock_key or "").strip()
             desc = locked_entry.description or ""
@@ -414,6 +444,7 @@ class ExperienceTrackerViewSet(
                 elif "Session end (pool)" in desc:
                     _rollback_xp_destination(locked_char, "pool", amount)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
 
 def _rollback_xp_destination(character, clock_key: str, amount: int) -> None:
     """Decrement free pool or ``xp_clocks[clock_key]`` by ``amount`` (clamped)."""
@@ -428,6 +459,7 @@ def _rollback_xp_destination(character, clock_key: str, amount: int) -> None:
     clocks[key] = max(0, cur - int(amount))
     character.xp_clocks = clocks
     character.save(update_fields=["xp_clocks"])
+
 
 def _rollback_clock(character, clock_key: str, amount: int) -> None:
     """Deprecated alias — prefer ``_rollback_xp_destination``."""

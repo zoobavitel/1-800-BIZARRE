@@ -495,9 +495,7 @@ class NPC(models.Model):
         Heritage, on_delete=models.SET_NULL, null=True, blank=True
     )
     # GM "in play" picks for this NPC (no PC HP budget). related_name avoids clash with Character.
-    selected_benefits = models.ManyToManyField(
-        Benefit, blank=True, related_name="npcs"
-    )
+    selected_benefits = models.ManyToManyField(Benefit, blank=True, related_name="npcs")
     selected_detriments = models.ManyToManyField(
         Detriment, blank=True, related_name="npcs"
     )
@@ -648,7 +646,7 @@ class NPC(models.Model):
             "treats or stabilizes someone (downtime or in-play recover), for any "
             "valid patient (self, another NPC, or a campaign PC)."
         ),
-        )
+    )
 
     @property
     def vulnerability_clock_max(self):
@@ -1117,9 +1115,7 @@ class Character(models.Model):
 
         if not grades:
             raise ValidationError(
-                {
-                    "stand": "A level 1 character must have a Stand with stats defined."
-                }
+                {"stand": "A level 1 character must have a Stand with stats defined."}
             )
 
         for field, grade in grades.items():
@@ -1611,7 +1607,11 @@ class CampaignAuditLog(models.Model):
         Campaign, on_delete=models.CASCADE, related_name="audit_logs"
     )
     actor = models.ForeignKey(
-        User, on_delete=models.SET_NULL, null=True, blank=True, related_name="campaign_audit_actions"
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="campaign_audit_actions",
     )
     timestamp = models.DateTimeField(auto_now_add=True)
     action = models.CharField(max_length=32)

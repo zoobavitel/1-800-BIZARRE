@@ -6,6 +6,7 @@ party crew: create one if none exists, or auto-join the existing campaign
 crew. After attach the text is cleared and the player can edit the shared
 crew sheet via `CrewViewSet`.
 """
+
 from django.test import TestCase
 from django.contrib.auth.models import User
 from rest_framework.test import APIClient
@@ -47,9 +48,7 @@ class PersonalCrewNameAutoAttachTest(TestCase):
             {"personal_crew_name": "The Lampblacks"},
             format="json",
         )
-        self.assertEqual(
-            resp.status_code, status.HTTP_200_OK, msg=resp.content
-        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, msg=resp.content)
         self.char1.refresh_from_db()
         self.assertIsNotNone(self.char1.crew_id)
         self.assertEqual(self.char1.personal_crew_name, "")
@@ -70,9 +69,7 @@ class PersonalCrewNameAutoAttachTest(TestCase):
         self.char2.refresh_from_db()
         self.assertEqual(self.char2.crew_id, existing.id)
         self.assertEqual(self.char2.personal_crew_name, "")
-        self.assertEqual(
-            Crew.objects.filter(campaign=self.campaign).count(), 1
-        )
+        self.assertEqual(Crew.objects.filter(campaign=self.campaign).count(), 1)
 
     def test_joined_player_can_patch_shared_crew_sheet(self):
         client = self._auth(self.p1)
@@ -82,9 +79,7 @@ class PersonalCrewNameAutoAttachTest(TestCase):
             format="json",
         )
         crew = Crew.objects.get(campaign=self.campaign)
-        resp = client.patch(
-            f"/api/crews/{crew.id}/", {"rep": 5}, format="json"
-        )
+        resp = client.patch(f"/api/crews/{crew.id}/", {"rep": 5}, format="json")
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         crew.refresh_from_db()
         self.assertEqual(crew.rep, 5)

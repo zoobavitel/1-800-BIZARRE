@@ -228,9 +228,7 @@ def _snapshot(character):
         "standard_ability_ids": list(
             character.standard_abilities.values_list("id", flat=True)
         ),
-        "advancement_ability_grants": list(
-            character.advancement_ability_grants or []
-        ),
+        "advancement_ability_grants": list(character.advancement_ability_grants or []),
         "total_xp_spent": int(character.total_xp_spent or 0),
         "stand_coin_points_gained": int(character.stand_coin_points_gained or 0),
         "action_dice_gained": int(character.action_dice_gained or 0),
@@ -367,9 +365,7 @@ def _apply_b_to_a_reward(character, allocation_id, reward):
             )
         entries = reward.get("unique_abilities")
         if not isinstance(entries, list) or len(entries) != 2:
-            raise XPAllocationError(
-                "B→A reward requires exactly 2 unique abilities."
-            )
+            raise XPAllocationError("B→A reward requires exactly 2 unique abilities.")
         parsed = []
         for entry in entries:
             if not isinstance(entry, dict):
@@ -409,7 +405,9 @@ def _apply_b_to_a_reward(character, allocation_id, reward):
     elif branch == "two_standard":
         ids = reward.get("standard_ability_ids") or []
         if not isinstance(ids, list) or len(ids) != 2:
-            raise XPAllocationError("Two standard abilities are required for B→A reward.")
+            raise XPAllocationError(
+                "Two standard abilities are required for B→A reward."
+            )
         for raw_id in ids:
             try:
                 ability = Ability.objects.get(pk=int(raw_id))
@@ -467,9 +465,7 @@ def _mark_pending_redeemed(pending, allocation):
     pending.status = PendingAdvance.STATUS_REDEEMED_MANUAL
     pending.applied_at = timezone.now()
     pending.applied_allocation = allocation
-    pending.save(
-        update_fields=["status", "applied_at", "applied_allocation"]
-    )
+    pending.save(update_fields=["status", "applied_at", "applied_allocation"])
 
 
 def non_foundation_playbook_ability_count(hamon_abilities, spin_abilities):
@@ -616,9 +612,7 @@ def apply_level_up(
         if choice == "acquire_stand":
             raise XPAllocationError("Stand users already have a Stand.")
         if choice not in ("stat", "dots", "heritage"):
-            raise XPAllocationError(
-                "Stand playbook fills advance a Stand Coin stat."
-            )
+            raise XPAllocationError("Stand playbook fills advance a Stand Coin stat.")
     if choice == "playbook_ability" and primary_playbook not in ("HAMON", "SPIN"):
         raise XPAllocationError(
             "Playbook ability advances are for Hamon/Spin primary characters."
@@ -1093,9 +1087,7 @@ def undo_allocation(character, allocation, *, user=None):
 
         pending_id = meta.get("pending_id")
         if pending_id:
-            PendingAdvance.objects.filter(
-                pk=pending_id, character=character
-            ).update(
+            PendingAdvance.objects.filter(pk=pending_id, character=character).update(
                 status=PendingAdvance.STATUS_OPEN,
                 applied_at=None,
                 applied_allocation=None,
@@ -1127,9 +1119,7 @@ def redo_allocation(character, allocation, *, user=None):
         .first()
     )
     if not latest_undone or latest_undone.id != allocation.id:
-        raise XPAllocationError(
-            "Redo the most recently undone allocation first."
-        )
+        raise XPAllocationError("Redo the most recently undone allocation first.")
 
     after = allocation.payload_after or {}
     if not after:

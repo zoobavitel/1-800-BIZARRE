@@ -182,7 +182,9 @@ class SessionRollLoopIntegrationTests(TestCase):
             format="json",
         )
         self.assertEqual(
-            rolled.status_code, status.HTTP_200_OK, rolled.data,
+            rolled.status_code,
+            status.HTTP_200_OK,
+            rolled.data,
         )
         self.assertEqual(rolled.data.get("stress_spent"), 1)
         self.player.refresh_from_db()
@@ -262,8 +264,15 @@ class SessionRollLoopIntegrationTests(TestCase):
         )
         self.assertEqual(rolled.status_code, status.HTTP_200_OK, rolled.data)
         roll = Roll.objects.get(pk=rolled.data["roll_id"])
-        self.assertTrue(any((x.get("name") == "Quick Draw") for x in roll.modifier_sources))
-        self.assertTrue(any((x.get("name") == "Phantom Pain") for x in roll.stress_sources))
         self.assertTrue(
-            any((x.get("name") == "Push for effect") for x in roll.position_effect_sources)
+            any((x.get("name") == "Quick Draw") for x in roll.modifier_sources)
+        )
+        self.assertTrue(
+            any((x.get("name") == "Phantom Pain") for x in roll.stress_sources)
+        )
+        self.assertTrue(
+            any(
+                (x.get("name") == "Push for effect")
+                for x in roll.position_effect_sources
+            )
         )

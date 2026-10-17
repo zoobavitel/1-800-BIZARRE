@@ -7,13 +7,19 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('characters', '0012_add_roll_position_effect'),
+        ("characters", "0012_add_roll_position_effect"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='npc',
-            name='faction',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='npcs', to='characters.faction'),
+            model_name="npc",
+            name="faction",
+            field=models.ForeignKey(
+                blank=True,
+                null=True,
+                on_delete=django.db.models.deletion.SET_NULL,
+                related_name="npcs",
+                to="characters.faction",
+            ),
         ),
     ]

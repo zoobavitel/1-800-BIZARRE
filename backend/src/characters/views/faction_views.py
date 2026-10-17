@@ -16,14 +16,14 @@ class FactionViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        qs = Faction.objects.select_related('campaign')
+        qs = Faction.objects.select_related("campaign")
         if user.is_staff:
             base = qs
         else:
             base = qs.filter(
                 models.Q(campaign__gm=user) | models.Q(campaign__characters__user=user)
             ).distinct()
-        campaign_id = self.request.query_params.get('campaign')
+        campaign_id = self.request.query_params.get("campaign")
         if campaign_id:
             return base.filter(campaign_id=campaign_id)
         return base
@@ -40,11 +40,13 @@ class FactionViewSet(viewsets.ModelViewSet):
             )
 
     def create(self, request, *args, **kwargs):
-        campaign_id = request.data.get('campaign')
+        campaign_id = request.data.get("campaign")
         try:
             campaign = Campaign.objects.get(pk=campaign_id)
         except Campaign.DoesNotExist:
-            return Response({'error': 'Campaign not found.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "Campaign not found."}, status=status.HTTP_400_BAD_REQUEST
+            )
         self._assert_gm(request, campaign)
         return super().create(request, *args, **kwargs)
 

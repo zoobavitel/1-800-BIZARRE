@@ -27,11 +27,23 @@ class XpTriggerToggleTests(TestCase):
         self.heritage, _ = Heritage.objects.get_or_create(
             name="Human", defaults={"base_hp": 0, "description": "t"}
         )
-        dots = {k: 0 for k in (
-            "hunt", "study", "survey", "tinker",
-            "finesse", "prowl", "skirmish", "wreck",
-            "bizarre", "command", "consort", "sway",
-        )}
+        dots = {
+            k: 0
+            for k in (
+                "hunt",
+                "study",
+                "survey",
+                "tinker",
+                "finesse",
+                "prowl",
+                "skirmish",
+                "wreck",
+                "bizarre",
+                "command",
+                "consort",
+                "sway",
+            )
+        }
         self.character = Character.objects.create(
             user=self.player,
             campaign=self.campaign,
@@ -214,9 +226,7 @@ class XpTriggerToggleTests(TestCase):
         self.assertEqual(res.status_code, 204)
         self.character.refresh_from_db()
         self.assertEqual(self.character.unallocated_xp, 2)
-        self.assertFalse(
-            ExperienceTracker.objects.filter(pk=entry.id).exists()
-        )
+        self.assertFalse(ExperienceTracker.objects.filter(pk=entry.id).exists())
 
     def test_delete_endpoint_uses_entry_clock_key_for_attribute_track(self):
         """AUTO awards: GM (or scorecard) may delete; players cannot from sheet."""
@@ -272,6 +282,4 @@ class XpTriggerToggleTests(TestCase):
         self._auth(self.other)
         res = self.client.delete(f"/api/experience-tracker/{entry.id}/")
         self.assertIn(res.status_code, (403, 404))
-        self.assertTrue(
-            ExperienceTracker.objects.filter(pk=entry.id).exists()
-        )
+        self.assertTrue(ExperienceTracker.objects.filter(pk=entry.id).exists())

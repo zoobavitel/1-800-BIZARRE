@@ -9,7 +9,6 @@ revoke logic still recognises both prefixes for belt-and-suspenders.
 
 from django.db import migrations
 
-
 LEGACY_PREFIX = "Manual session XP toggle"
 NEW_PREFIX = "Session XP trigger"
 
@@ -20,9 +19,7 @@ def rename_descriptions_forward(apps, schema_editor):
         description__startswith=f"{LEGACY_PREFIX}:",
     )
     for row in qs.iterator():
-        row.description = (
-            f"{NEW_PREFIX}{row.description[len(LEGACY_PREFIX):]}"
-        )
+        row.description = f"{NEW_PREFIX}{row.description[len(LEGACY_PREFIX):]}"
         row.save(update_fields=["description"])
 
 
@@ -32,9 +29,7 @@ def rename_descriptions_backward(apps, schema_editor):
         description__startswith=f"{NEW_PREFIX}:",
     )
     for row in qs.iterator():
-        row.description = (
-            f"{LEGACY_PREFIX}{row.description[len(NEW_PREFIX):]}"
-        )
+        row.description = f"{LEGACY_PREFIX}{row.description[len(NEW_PREFIX):]}"
         row.save(update_fields=["description"])
 
 
