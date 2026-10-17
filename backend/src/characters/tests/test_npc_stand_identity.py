@@ -1,4 +1,5 @@
 """NPC Stand identity flavor field normalization."""
+
 from django.test import TestCase
 
 from characters.services.npc_stand_identity import (

@@ -5,7 +5,14 @@ from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from characters.models import Campaign, Character, Crew, CrewFactionRelationship, Faction, NPC
+from characters.models import (
+    Campaign,
+    Character,
+    Crew,
+    CrewFactionRelationship,
+    Faction,
+    NPC,
+)
 
 
 class StandingDisplayPayloadTests(TestCase):

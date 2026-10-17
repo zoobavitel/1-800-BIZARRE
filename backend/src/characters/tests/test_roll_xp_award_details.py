@@ -1,4 +1,5 @@
 """RollSerializer exposes all ExperienceTracker rows on a roll (xp_award_details)."""
+
 from django.contrib.auth.models import User
 from django.test import TestCase
 

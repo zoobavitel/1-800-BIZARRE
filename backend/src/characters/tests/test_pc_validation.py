@@ -3,32 +3,52 @@ from django.core.exceptions import ValidationError
 from django.contrib.auth.models import User
 from characters.models import Character, Heritage, Ability, Stand
 
+
 class CharacterValidationTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username='testuser', password='password')
-        self.heritage = Heritage.objects.create(name='Human', base_hp=0, description='A standard human heritage')
-        self.ability1 = Ability.objects.create(name='Ability 1', type='standard', description='Desc 1')
-        self.ability2 = Ability.objects.create(name='Ability 2', type='standard', description='Desc 2')
-        self.ability3 = Ability.objects.create(name='Ability 3', type='standard', description='Desc 3')
-        self.ability4 = Ability.objects.create(name='Ability 4', type='standard', description='Desc 4') # For testing too many abilities
+        self.user = User.objects.create_user(username="testuser", password="password")
+        self.heritage = Heritage.objects.create(
+            name="Human", base_hp=0, description="A standard human heritage"
+        )
+        self.ability1 = Ability.objects.create(
+            name="Ability 1", type="standard", description="Desc 1"
+        )
+        self.ability2 = Ability.objects.create(
+            name="Ability 2", type="standard", description="Desc 2"
+        )
+        self.ability3 = Ability.objects.create(
+            name="Ability 3", type="standard", description="Desc 3"
+        )
+        self.ability4 = Ability.objects.create(
+            name="Ability 4", type="standard", description="Desc 4"
+        )  # For testing too many abilities
 
     def _create_valid_level_1_character(self):
         character = Character(
             user=self.user,
-            true_name='Valid Character',
+            true_name="Valid Character",
             heritage=self.heritage,
-            playbook='STAND',
+            playbook="STAND",
             action_dots={
-                'hunt': 1, 'study': 1, 'survey': 1, 'tinker': 1, 
-                'finesse': 1, 'prowl': 1, 'skirmish': 1, 'wreck': 0, 
-                'bizarre': 0, 'command': 0, 'consort': 0, 'sway': 0,
+                "hunt": 1,
+                "study": 1,
+                "survey": 1,
+                "tinker": 1,
+                "finesse": 1,
+                "prowl": 1,
+                "skirmish": 1,
+                "wreck": 0,
+                "bizarre": 0,
+                "command": 0,
+                "consort": 0,
+                "sway": 0,
             },
             stress=9,
             coin_stats={},
             trauma=[],
             xp_clocks={},
-            custom_ability_type='single_with_3_uses',
-            custom_ability_description='Unique package with three uses.',
+            custom_ability_type="single_with_3_uses",
+            custom_ability_description="Unique package with three uses.",
         )
         character.save()
         character.standard_abilities.add(self.ability1, self.ability2)
@@ -36,12 +56,17 @@ class CharacterValidationTests(TestCase):
         # SRD: Distribute 6 points at creation. Grade points: A=4, B=3, C=2, D=1, F=0.
         stand = Stand(
             character=character,
-            name='Valid Stand',
-            type='FIGHTING',
-            form='Humanoid',
-            forms=['Humanoid'],
-            consciousness_level='C',
-            power='C', speed='D', range='D', durability='D', precision='D', development='F'
+            name="Valid Stand",
+            type="FIGHTING",
+            form="Humanoid",
+            forms=["Humanoid"],
+            consciousness_level="C",
+            power="C",
+            speed="D",
+            range="D",
+            durability="D",
+            precision="D",
+            development="F",
         )
         # C(2)+D(1)+D(1)+D(1)+D(1)+F(0) = 6 points. Durability D => stress 9.
         stand.save()
@@ -51,52 +76,65 @@ class CharacterValidationTests(TestCase):
         character = self._create_valid_level_1_character()
         # Test that the character was created successfully
         self.assertIsNotNone(character.id)
-        self.assertEqual(character.true_name, 'Valid Character')
+        self.assertEqual(character.true_name, "Valid Character")
         self.assertEqual(character.stress, 9)
         # Test that the stand was created correctly
         self.assertIsNotNone(character.stand)
-        self.assertEqual(character.stand.name, 'Valid Stand')
-        self.assertEqual(character.stand.durability, 'D')
+        self.assertEqual(character.stand.name, "Valid Stand")
+        self.assertEqual(character.stand.durability, "D")
 
     def test_invalid_action_dots_total(self):
         character = self._create_valid_level_1_character()
-        character.action_dots['hunt'] = 2 # Makes total 8
-        with self.assertRaisesMessage(ValidationError, 'A new character at level 1 must have exactly 7 action dots.'):
+        character.action_dots["hunt"] = 2  # Makes total 8
+        with self.assertRaisesMessage(
+            ValidationError,
+            "A new character at level 1 must have exactly 7 action dots.",
+        ):
             character.full_clean()
 
     def test_invalid_action_dots_max_per_skill(self):
         character = self._create_valid_level_1_character()
         # Keep total 7 so we hit the per-skill cap: hunt 3, study 0, survey 0, rest unchanged => 7 total
-        character.action_dots['hunt'] = 3  # Exceeds max 2
-        character.action_dots['study'] = 0
-        character.action_dots['survey'] = 0
-        with self.assertRaisesMessage(ValidationError, 'Action "hunt" cannot have more than 2 dots at level 1.'):
+        character.action_dots["hunt"] = 3  # Exceeds max 2
+        character.action_dots["study"] = 0
+        character.action_dots["survey"] = 0
+        with self.assertRaisesMessage(
+            ValidationError, 'Action "hunt" cannot have more than 2 dots at level 1.'
+        ):
             character.full_clean()
 
     def test_invalid_stand_coin_stats_total(self):
         character = self._create_valid_level_1_character()
-        character.stand.power = 'A'  # 4 points; with rest (D+D+C+D+F=4) total would be 8
-        character.stand.speed = 'A'
+        character.stand.power = (
+            "A"  # 4 points; with rest (D+D+C+D+F=4) total would be 8
+        )
+        character.stand.speed = "A"
         character.stand.save()
-        with self.assertRaisesMessage(ValidationError, 'Chargen Stand Coin grade-value sum must be between 1 and 6'):
+        with self.assertRaisesMessage(
+            ValidationError,
+            "Chargen Stand Coin grade-value sum must be between 1 and 6",
+        ):
             character.full_clean()
 
     def test_chargen_stand_coin_allows_unspent_below_six(self):
         character = self._create_valid_level_1_character()
-        character.stand.power = 'D'
-        character.stand.speed = 'D'
-        character.stand.range = 'D'
-        character.stand.durability = 'D'
-        character.stand.precision = 'D'
-        character.stand.development = 'F'
+        character.stand.power = "D"
+        character.stand.speed = "D"
+        character.stand.range = "D"
+        character.stand.durability = "D"
+        character.stand.precision = "D"
+        character.stand.development = "F"
         character.stand.save()
         character.full_clean()
 
     def test_invalid_stand_coin_stats_invalid_grade(self):
         character = self._create_valid_level_1_character()
-        character.stand.power = 'Z' # Invalid grade
+        character.stand.power = "Z"  # Invalid grade
         character.stand.save()
-        with self.assertRaisesMessage(ValidationError, 'Invalid grade "Z" for stat "power". Must be S, A, B, C, D, or F.'):
+        with self.assertRaisesMessage(
+            ValidationError,
+            'Invalid grade "Z" for stat "power". Must be S, A, B, C, D, or F.',
+        ):
             character.full_clean()
 
     def test_invalid_stress_value(self):
@@ -110,12 +148,12 @@ class CharacterValidationTests(TestCase):
 
         # F durability — 8-box track; 8 marked is legal, 9 is not.
         character_f_durability = self._create_valid_level_1_character()
-        character_f_durability.stand.power = 'A'
-        character_f_durability.stand.speed = 'C'
-        character_f_durability.stand.range = 'F'
-        character_f_durability.stand.durability = 'F'
-        character_f_durability.stand.precision = 'F'
-        character_f_durability.stand.development = 'F'
+        character_f_durability.stand.power = "A"
+        character_f_durability.stand.speed = "C"
+        character_f_durability.stand.range = "F"
+        character_f_durability.stand.durability = "F"
+        character_f_durability.stand.precision = "F"
+        character_f_durability.stand.development = "F"
         character_f_durability.stand.save()
         character_f_durability.stress = 8
         character_f_durability.full_clean()
@@ -172,49 +210,60 @@ class CharacterValidationTests(TestCase):
 
     def test_attribute_rating_calculation(self):
         character = self._create_valid_level_1_character()
-        
+
         # Insight: hunt:1, study:1, survey:1, tinker:1 (4 actions with dots)
         self.assertEqual(character.insight_attribute_rating, 4)
-        
+
         # Prowess: finesse:1, prowl:1, skirmish:1, wreck:0 (3 actions with dots)
         self.assertEqual(character.prowess_attribute_rating, 3)
-        
+
         # Resolve: attune:0, command:0, consort:0, sway:0 (0 actions with dots)
         self.assertEqual(character.resolve_attribute_rating, 0)
 
         # Modify action dots and re-test (SRD Resolve = bizarre, sway, command, consort)
-        character.action_dots['bizarre'] = 1
-        character.action_dots['command'] = 1
-        character.action_dots['skirmish'] = 0  # Remove a dot from prowess
-        
+        character.action_dots["bizarre"] = 1
+        character.action_dots["command"] = 1
+        character.action_dots["skirmish"] = 0  # Remove a dot from prowess
+
         # Insight should remain 4
         self.assertEqual(character.insight_attribute_rating, 4)
-        
+
         # Prowess should now be 2 (finesse:1, prowl:1, wreck:0)
         self.assertEqual(character.prowess_attribute_rating, 2)
-        
+
         # Resolve should now be 2 (bizarre:1, command:1)
         self.assertEqual(character.resolve_attribute_rating, 2)
 
     def test_valid_a_rank_abilities(self):
         # One A-rank => max 2 + 2 = 4 standards; unique package still required at L1.
-        user = User.objects.create_user(username='testuser_a_rank', password='password')
-        heritage = Heritage.objects.create(name='Human_a_rank', base_hp=0, description='A standard human heritage')
+        user = User.objects.create_user(username="testuser_a_rank", password="password")
+        heritage = Heritage.objects.create(
+            name="Human_a_rank", base_hp=0, description="A standard human heritage"
+        )
 
         character_a_rank = Character(
             user=user,
-            true_name='A-Rank Character',
+            true_name="A-Rank Character",
             heritage=heritage,
-            playbook='STAND',
+            playbook="STAND",
             action_dots={
-                'hunt': 1, 'study': 1, 'survey': 1, 'tinker': 1,
-                'finesse': 1, 'prowl': 1, 'skirmish': 1, 'wreck': 0,
-                'bizarre': 0, 'command': 0, 'consort': 0, 'sway': 0,
+                "hunt": 1,
+                "study": 1,
+                "survey": 1,
+                "tinker": 1,
+                "finesse": 1,
+                "prowl": 1,
+                "skirmish": 1,
+                "wreck": 0,
+                "bizarre": 0,
+                "command": 0,
+                "consort": 0,
+                "sway": 0,
             },
             stress=8,
             coin_stats={},
-            custom_ability_type='single_with_3_uses',
-            custom_ability_description='A-rank unique package.',
+            custom_ability_type="single_with_3_uses",
+            custom_ability_description="A-rank unique package.",
         )
         character_a_rank.save()
         character_a_rank.standard_abilities.add(
@@ -223,12 +272,17 @@ class CharacterValidationTests(TestCase):
 
         stand_a_rank = Stand(
             character=character_a_rank,
-            name='A-Rank Stand',
-            type='FIGHTING',
-            form='Humanoid',
-            forms=['Humanoid'],
-            consciousness_level='C',
-            power='A', speed='D', range='D', durability='F', precision='F', development='F'
+            name="A-Rank Stand",
+            type="FIGHTING",
+            form="Humanoid",
+            forms=["Humanoid"],
+            consciousness_level="C",
+            power="A",
+            speed="D",
+            range="D",
+            durability="F",
+            precision="F",
+            development="F",
         )
         stand_a_rank.save()
 
@@ -236,27 +290,29 @@ class CharacterValidationTests(TestCase):
             character_a_rank.full_clean()
             self.assertTrue(True)
         except ValidationError as e:
-            self.fail(f"Valid A-rank abilities test failed with ValidationError: {e.message_dict}")
+            self.fail(
+                f"Valid A-rank abilities test failed with ValidationError: {e.message_dict}"
+            )
 
     def test_invalid_a_rank_abilities_count(self):
         character = self._create_valid_level_1_character()
         # One A-rank: max standards = 4. Add 5th standard to exceed.
-        character.stand.power = 'A'
-        character.stand.speed = 'D'
-        character.stand.range = 'D'
-        character.stand.durability = 'F'
-        character.stand.precision = 'F'
-        character.stand.development = 'F'
+        character.stand.power = "A"
+        character.stand.speed = "D"
+        character.stand.range = "D"
+        character.stand.durability = "F"
+        character.stand.precision = "F"
+        character.stand.development = "F"
         character.stand.save()
         character.stress = 8
         character.standard_abilities.add(self.ability3, self.ability4)
         # ability1 + ability2 + ability3 + ability4 = 4 ok; need one more
         extra = Ability.objects.create(
-            name='Ability 5', type='standard', description='Desc 5'
+            name="Ability 5", type="standard", description="Desc 5"
         )
         character.standard_abilities.add(extra)
         with self.assertRaisesMessage(
-            ValidationError, 'Too many standard abilities for level 1'
+            ValidationError, "Too many standard abilities for level 1"
         ):
             character.full_clean()
 
@@ -267,38 +323,44 @@ class CharacterValidationTests(TestCase):
             character.full_clean()
             self.assertTrue(True)
         except ValidationError as e:
-            self.fail(f"No A-rank abilities test failed with ValidationError: {e.message_dict}")
+            self.fail(
+                f"No A-rank abilities test failed with ValidationError: {e.message_dict}"
+            )
 
     def test_s_rank_stand_stat_validation_denied_by_default(self):
         character = self._create_valid_level_1_character()
         # 6 points with S: S(5)+D(1)+F+F+F+F = 6. Minimum one D satisfies F-rank rule.
-        character.stand.power = 'S'
-        character.stand.speed = 'D'
-        character.stand.range = 'F'
-        character.stand.durability = 'F'
-        character.stand.precision = 'F'
-        character.stand.development = 'F'
+        character.stand.power = "S"
+        character.stand.speed = "D"
+        character.stand.range = "F"
+        character.stand.durability = "F"
+        character.stand.precision = "F"
+        character.stand.development = "F"
         character.stand.save()
         character.stress = 8
-        with self.assertRaisesMessage(ValidationError, 'Player characters cannot have S-rank'):
+        with self.assertRaisesMessage(
+            ValidationError, "Player characters cannot have S-rank"
+        ):
             character.full_clean()
 
     def test_s_rank_stand_stat_validation_allowed_by_gm(self):
         character = self._create_valid_level_1_character()
         character.gm_can_have_s_rank_stand_stats = True
         character.stress = 8
-        character.stand.power = 'S'
-        character.stand.speed = 'D'
-        character.stand.range = 'F'
-        character.stand.durability = 'F'
-        character.stand.precision = 'F'
-        character.stand.development = 'F'
+        character.stand.power = "S"
+        character.stand.speed = "D"
+        character.stand.range = "F"
+        character.stand.durability = "F"
+        character.stand.precision = "F"
+        character.stand.development = "F"
         character.stand.save()
         try:
             character.full_clean()
             self.assertTrue(True)
         except ValidationError as e:
-            self.fail(f"S-rank allowed by GM failed with ValidationError: {e.message_dict}")
+            self.fail(
+                f"S-rank allowed by GM failed with ValidationError: {e.message_dict}"
+            )
 
     def test_s_rank_stand_stat_validation_no_s_rank(self):
         character = self._create_valid_level_1_character()
@@ -307,6 +369,6 @@ class CharacterValidationTests(TestCase):
             character.full_clean()
             self.assertTrue(True)
         except ValidationError as e:
-            self.fail(f"No S-rank validation failed with ValidationError: {e.message_dict}")
-
-    
+            self.fail(
+                f"No S-rank validation failed with ValidationError: {e.message_dict}"
+            )

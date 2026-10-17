@@ -8,8 +8,16 @@ from datetime import timedelta
 from django.db import transaction
 from django.utils import timezone
 
-from ..history_context import bind_character_history_editor, suppress_character_history_logging
-from ..models import Character, CharacterHistory, CharacterXPAllocation, ExperienceTracker
+from ..history_context import (
+    bind_character_history_editor,
+    suppress_character_history_logging,
+)
+from ..models import (
+    Character,
+    CharacterHistory,
+    CharacterXPAllocation,
+    ExperienceTracker,
+)
 from .xp_allocation import STAND_STAT_FIELDS, redo_allocation, undo_allocation
 
 ALLOCATION_HISTORY_FIELDS = frozenset(
@@ -48,15 +56,13 @@ def _user_may_edit_character(user, character: Character) -> bool:
 
 def _user_is_gm_for_character(user, character: Character) -> bool:
     return bool(
-        user.is_staff
-        or (
-            character.campaign_id
-            and character.campaign.gm_id == user.id
-        )
+        user.is_staff or (character.campaign_id and character.campaign.gm_id == user.id)
     )
 
 
-def experience_tracker_undoable_from_sheet(entry: ExperienceTracker, user) -> tuple[bool, str | None]:
+def experience_tracker_undoable_from_sheet(
+    entry: ExperienceTracker, user
+) -> tuple[bool, str | None]:
     """Whether a player may delete this tracker row from the character sheet."""
     character = entry.character
     if not _user_may_edit_character(user, character):
@@ -113,7 +119,9 @@ def _find_linked_tracker_entry(
     )
 
 
-def can_undo_character_history(entry: CharacterHistory, user) -> tuple[bool, str | None]:
+def can_undo_character_history(
+    entry: CharacterHistory, user
+) -> tuple[bool, str | None]:
     if entry.reverted_at:
         return False, "Already undone."
     character = entry.character
@@ -216,9 +224,7 @@ def redo_character_history_entry(
         reverted_qs = reverted_qs.filter(editor_id=require_editor_id)
     latest_reverted = reverted_qs.order_by("-reverted_at", "-id").first()
     if not latest_reverted or latest_reverted.id != entry.id:
-        raise CharacterHistoryUndoError(
-            "Redo the most recently reverted change first."
-        )
+        raise CharacterHistoryUndoError("Redo the most recently reverted change first.")
 
     linked_alloc = _find_linked_undone_allocation(character, entry)
     editor_token = bind_character_history_editor(user)
@@ -378,13 +384,10 @@ def latest_sheet_undo_target(character: Character, user):
     """Newest undoable pure sheet-field CharacterHistory row, or None."""
     if not _user_may_edit_character(user, character):
         return None
-    qs = (
-        CharacterHistory.objects.filter(
-            character=character,
-            reverted_at__isnull=True,
-        )
-        .order_by("-timestamp", "-id")[:80]
-    )
+    qs = CharacterHistory.objects.filter(
+        character=character,
+        reverted_at__isnull=True,
+    ).order_by("-timestamp", "-id")[:80]
     for entry in qs:
         if not _is_pure_sheet_field_edit(entry):
             continue
@@ -513,9 +516,7 @@ def undo_gm_tracker_entry(tracker: ExperienceTracker, *, gm_user) -> None:
     character = tracker.character
     if tracker.awarded_by_id != gm_user.id or tracker.award_source != "GM":
         raise CharacterHistoryUndoError("Not a GM award you made.")
-    mirror = _find_mirror_history_for_tracker(
-        character, tracker, gm_id=gm_user.id
-    )
+    mirror = _find_mirror_history_for_tracker(character, tracker, gm_id=gm_user.id)
     amount = int(tracker.xp_gained or 0)
     clock_key = (tracker.clock_key or "").strip()
     desc = tracker.description or ""
@@ -585,7 +586,9 @@ def redo_gm_tracker_entry(tracker: ExperienceTracker, *, gm_user) -> None:
     if amount > 0 and clock_key:
         _grant_clock(locked_char, clock_key, amount)
     elif amount > 0 and "Session end (pool)" in desc:
-        locked_char.unallocated_xp = int(getattr(locked_char, "unallocated_xp", 0) or 0) + amount
+        locked_char.unallocated_xp = (
+            int(getattr(locked_char, "unallocated_xp", 0) or 0) + amount
+        )
         locked_char.save(update_fields=["unallocated_xp"])
 
     tracker.revoked_at = None

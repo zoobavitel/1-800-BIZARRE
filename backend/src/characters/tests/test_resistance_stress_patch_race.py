@@ -1,4 +1,5 @@
 """Resistance roll stress must survive concurrent sheet PATCH that omits stress."""
+
 from django.contrib.auth.models import User
 from django.test import TestCase
 from rest_framework import status

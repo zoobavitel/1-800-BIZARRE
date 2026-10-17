@@ -1,4 +1,5 @@
 """POST /characters/{id}/roll-action/ npc_heal_fortune (coin_boxes + session NPC healer)."""
+
 from django.test import TestCase
 from django.contrib.auth.models import User
 from rest_framework.test import APIClient

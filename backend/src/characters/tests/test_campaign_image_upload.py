@@ -1,4 +1,5 @@
 """Campaign.image multipart upload / clear / reject tests."""
+
 import tempfile
 
 from django.contrib.auth.models import User
@@ -30,9 +31,7 @@ class CampaignImageUploadTest(TestCase):
 
     def test_gm_multipart_patch_sets_image(self):
         self.client.force_authenticate(self.gm)
-        upload = SimpleUploadedFile(
-            "camp.png", _PNG_1X1, content_type="image/png"
-        )
+        upload = SimpleUploadedFile("camp.png", _PNG_1X1, content_type="image/png")
         r = self.client.patch(self.url, {"image": upload}, format="multipart")
         self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
         self.campaign.refresh_from_db()
@@ -41,9 +40,7 @@ class CampaignImageUploadTest(TestCase):
 
     def test_non_gm_multipart_patch_403(self):
         self.client.force_authenticate(self.player)
-        upload = SimpleUploadedFile(
-            "camp.png", _PNG_1X1, content_type="image/png"
-        )
+        upload = SimpleUploadedFile("camp.png", _PNG_1X1, content_type="image/png")
         r = self.client.patch(self.url, {"image": upload}, format="multipart")
         self.assertEqual(r.status_code, status.HTTP_403_FORBIDDEN)
         self.campaign.refresh_from_db()
@@ -114,25 +111,19 @@ class FactionImagePatchTest(TestCase):
         self.player = User.objects.create_user("fimg_pl", "fimg_pl@test.com", "pw")
         self.campaign = Campaign.objects.create(name="F Photo", gm=self.gm)
         self.campaign.players.add(self.player)
-        self.heritage = Heritage.objects.create(
-            name="Human", base_hp=0, description=""
-        )
+        self.heritage = Heritage.objects.create(name="Human", base_hp=0, description="")
         Character.objects.create(
             user=self.player,
             campaign=self.campaign,
             true_name="PC",
             heritage=self.heritage,
         )
-        self.faction = Faction.objects.create(
-            name="Canaries", campaign=self.campaign
-        )
+        self.faction = Faction.objects.create(name="Canaries", campaign=self.campaign)
         self.url = f"/api/factions/{self.faction.id}/"
 
     def test_gm_multipart_patch_sets_image(self):
         self.client.force_authenticate(self.gm)
-        upload = SimpleUploadedFile(
-            "fac.png", _PNG_1X1, content_type="image/png"
-        )
+        upload = SimpleUploadedFile("fac.png", _PNG_1X1, content_type="image/png")
         r = self.client.patch(
             self.url,
             {"name": "Canaries", "image": upload},
@@ -144,9 +135,7 @@ class FactionImagePatchTest(TestCase):
 
     def test_gm_patch_sets_image_url_and_clears_file(self):
         self.client.force_authenticate(self.gm)
-        upload = SimpleUploadedFile(
-            "fac.png", _PNG_1X1, content_type="image/png"
-        )
+        upload = SimpleUploadedFile("fac.png", _PNG_1X1, content_type="image/png")
         r = self.client.patch(
             self.url,
             {"name": "Canaries", "image": upload},
@@ -163,9 +152,7 @@ class FactionImagePatchTest(TestCase):
         )
         self.assertEqual(r2.status_code, status.HTTP_200_OK, r2.data)
         self.faction.refresh_from_db()
-        self.assertEqual(
-            self.faction.image_url, "https://example.com/faction.png"
-        )
+        self.assertEqual(self.faction.image_url, "https://example.com/faction.png")
         self.assertFalse(bool(self.faction.image))
 
     def test_rejects_http_image_url(self):
@@ -180,8 +167,6 @@ class FactionImagePatchTest(TestCase):
 
     def test_non_gm_patch_403(self):
         self.client.force_authenticate(self.player)
-        upload = SimpleUploadedFile(
-            "fac.png", _PNG_1X1, content_type="image/png"
-        )
+        upload = SimpleUploadedFile("fac.png", _PNG_1X1, content_type="image/png")
         r = self.client.patch(self.url, {"image": upload}, format="multipart")
         self.assertEqual(r.status_code, status.HTTP_403_FORBIDDEN)

@@ -6,28 +6,28 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('characters', '0013_add_npc_faction'),
+        ("characters", "0013_add_npc_faction"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='character',
-            name='harm_level1_slot2_used',
+            model_name="character",
+            name="harm_level1_slot2_used",
             field=models.BooleanField(default=False),
         ),
         migrations.AddField(
-            model_name='character',
-            name='harm_level1_slot2_name',
+            model_name="character",
+            name="harm_level1_slot2_name",
             field=models.CharField(blank=True, max_length=100, null=True),
         ),
         migrations.AddField(
-            model_name='character',
-            name='harm_level2_slot2_used',
+            model_name="character",
+            name="harm_level2_slot2_used",
             field=models.BooleanField(default=False),
         ),
         migrations.AddField(
-            model_name='character',
-            name='harm_level2_slot2_name',
+            model_name="character",
+            name="harm_level2_slot2_name",
             field=models.CharField(blank=True, max_length=100, null=True),
         ),
     ]

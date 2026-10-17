@@ -1,4 +1,5 @@
 """GM remove-player, withdraw-invitation, and GM unassign-character."""
+
 from django.contrib.auth.models import User
 from django.test import TestCase
 from rest_framework import status
@@ -15,9 +16,7 @@ class CampaignGmPlayerManagementTestCase(TestCase):
         self.other = User.objects.create_user("coth", "coth@test.com", "pw")
         self.campaign = Campaign.objects.create(name="C", gm=self.gm)
         self.campaign.players.add(self.player)
-        self.heritage = Heritage.objects.create(
-            name="Human", base_hp=0, description=""
-        )
+        self.heritage = Heritage.objects.create(name="Human", base_hp=0, description="")
         self.pc = Character.objects.create(
             user=self.player,
             campaign=self.campaign,

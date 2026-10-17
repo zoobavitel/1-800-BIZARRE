@@ -11,8 +11,10 @@ from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 
 from ..models import UserProfile
 from ..serializers import (
-    RegisterSerializer, UserProfileSerializer,
-    UserSerializer, ChangePasswordSerializer,
+    RegisterSerializer,
+    UserProfileSerializer,
+    UserSerializer,
+    ChangePasswordSerializer,
 )
 
 logger = logging.getLogger(__name__)
@@ -20,15 +22,15 @@ logger = logging.getLogger(__name__)
 
 def _signup_user_message(errors: dict) -> str:
     """Short user-facing summary for failed signup (field details remain in body)."""
-    u = errors.get('username')
+    u = errors.get("username")
     if isinstance(u, list) and u:
         text = str(u[0]).lower()
-        if 'taken' in text or 'already' in text:
+        if "taken" in text or "already" in text:
             return str(u[0])
-    p = errors.get('password')
+    p = errors.get("password")
     if isinstance(p, list) and p:
         return f"Password: {p[0]}"
-    return 'Could not create this account. Check username and password, then try again.'
+    return "Could not create this account. Check username and password, then try again."
 
 
 class RegisterView(APIView):
@@ -39,16 +41,19 @@ class RegisterView(APIView):
         if serializer.is_valid():
             user = serializer.save()
             token, created = Token.objects.get_or_create(user=user)
-            return Response({
-                'token': token.key,
-                'user': {
-                    'id': user.pk,
-                    'username': user.username,
-                    'email': getattr(user, 'email', '') or '',
+            return Response(
+                {
+                    "token": token.key,
+                    "user": {
+                        "id": user.pk,
+                        "username": user.username,
+                        "email": getattr(user, "email", "") or "",
+                    },
                 },
-            }, status=status.HTTP_201_CREATED)
+                status=status.HTTP_201_CREATED,
+            )
         body = dict(serializer.errors)
-        body['message'] = _signup_user_message(body)
+        body["message"] = _signup_user_message(body)
         return Response(body, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -56,39 +61,44 @@ class LoginView(ObtainAuthToken):
     def post(self, request, *args, **kwargs):
         serializer = self.serializer_class(
             data=request.data,
-            context={'request': request},
+            context={"request": request},
         )
         if serializer.is_valid():
-            user = serializer.validated_data['user']
+            user = serializer.validated_data["user"]
             token, created = Token.objects.get_or_create(user=user)
-            ip = request.META.get('REMOTE_ADDR', '?')
+            ip = request.META.get("REMOTE_ADDR", "?")
             logger.info("Login successful: user=%s ip=%s", user.username, ip)
-            return Response({
-                'token': token.key,
-                'user': {
-                    'id': user.pk,
-                    'username': user.username,
-                    'email': getattr(user, 'email', '') or '',
-                },
-            })
+            return Response(
+                {
+                    "token": token.key,
+                    "user": {
+                        "id": user.pk,
+                        "username": user.username,
+                        "email": getattr(user, "email", "") or "",
+                    },
+                }
+            )
         body = dict(serializer.errors)
-        body['message'] = (
-            'Invalid username or password. Check your credentials and try again.'
+        body["message"] = (
+            "Invalid username or password. Check your credentials and try again."
         )
         return Response(body, status=status.HTTP_400_BAD_REQUEST)
 
 
 class CurrentUserView(APIView):
     """Return the current authenticated user (for token validation and display)."""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         user = request.user
-        return Response({
-            'id': user.pk,
-            'username': user.username,
-            'email': getattr(user, 'email', '') or '',
-        })
+        return Response(
+            {
+                "id": user.pk,
+                "username": user.username,
+                "email": getattr(user, "email", "") or "",
+            }
+        )
 
 
 class UserProfileViewSet(viewsets.ModelViewSet):
@@ -104,7 +114,7 @@ class UserProfileViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
-    @action(detail=False, methods=['put'], url_path='update')
+    @action(detail=False, methods=["put"], url_path="update")
     def update_profile(self, request):
         """Update the current user's profile."""
         try:
@@ -116,20 +126,19 @@ class UserProfileViewSet(viewsets.ModelViewSet):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         except UserProfile.DoesNotExist:
             return Response(
-                {'error': 'Profile not found'}, 
-                status=status.HTTP_404_NOT_FOUND
+                {"error": "Profile not found"}, status=status.HTTP_404_NOT_FOUND
             )
 
-    @action(detail=False, methods=['post'], url_path='change-password')
+    @action(detail=False, methods=["post"], url_path="change-password")
     def change_password(self, request):
         """Change the current user's password."""
         serializer = ChangePasswordSerializer(
             data=request.data,
-            context={'user': request.user},
+            context={"user": request.user},
         )
         if serializer.is_valid():
             user = request.user
-            user.set_password(serializer.validated_data['new_password'])
+            user.set_password(serializer.validated_data["new_password"])
             user.save()
-            return Response({'message': 'Password updated successfully'})
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST) 
+            return Response({"message": "Password updated successfully"})
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

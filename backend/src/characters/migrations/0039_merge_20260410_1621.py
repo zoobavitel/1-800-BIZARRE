@@ -6,9 +6,8 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('characters', '0038_add_faction_shared_fields'),
-        ('characters', '0038_npc_heritage_and_user_types'),
+        ("characters", "0038_add_faction_shared_fields"),
+        ("characters", "0038_npc_heritage_and_user_types"),
     ]
 
-    operations = [
-    ]
+    operations = []

@@ -1,4 +1,5 @@
 """Portrait/avatar multipart upload, clear, and size/type validation."""
+
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
@@ -6,7 +7,6 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from characters.models import Campaign, Character, Heritage, UserProfile
-
 
 # Minimal valid 1x1 PNG
 _PNG_1X1 = (

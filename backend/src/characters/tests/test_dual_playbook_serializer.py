@@ -1,4 +1,5 @@
 """Serializer tests: secondary_playbook is legacy-only (Plan A)."""
+
 from django.contrib.auth.models import User
 from django.test import TestCase
 from rest_framework.test import APIRequestFactory

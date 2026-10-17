@@ -190,9 +190,7 @@ def _format_scalar_line(item: Any) -> str:
         if not line:
             # Fall back to readable key/value pairs instead of raw JSON dump
             parts = [
-                f"{k}: {v}"
-                for k, v in item.items()
-                if v not in (None, "", [], {})
+                f"{k}: {v}" for k, v in item.items() if v not in (None, "", [], {})
             ]
             line = "; ".join(parts)
         return line
@@ -315,7 +313,9 @@ def _stand_forms_label(character: Character) -> str:
 def build_pc_field_values(character: Character) -> dict[str, str]:
     """Return AcroForm field name -> value for a PC sheet export."""
     character = (
-        Character.objects.select_related("campaign", "crew", "heritage", "vice", "stand")
+        Character.objects.select_related(
+            "campaign", "crew", "heritage", "vice", "stand"
+        )
         .prefetch_related(
             "standard_abilities",
             "hamon_abilities__hamon_ability",
@@ -420,9 +420,7 @@ def build_pc_field_values(character: Character) -> dict[str, str]:
     sec = str(character.secondary_playbook or "").upper()
     show_spin = pb == "SPIN" or sec == "SPIN"
     show_hamon = pb == "HAMON" or sec == "HAMON"
-    values["pc_armor_spin"] = (
-        f"{spin_used}/{SPIN_HAMON_ARMOR_MAX}" if show_spin else ""
-    )
+    values["pc_armor_spin"] = f"{spin_used}/{SPIN_HAMON_ARMOR_MAX}" if show_spin else ""
     values["pc_armor_hamon"] = (
         f"{hamon_used}/{SPIN_HAMON_ARMOR_MAX}" if show_hamon else ""
     )

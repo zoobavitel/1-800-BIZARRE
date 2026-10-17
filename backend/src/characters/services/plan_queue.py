@@ -148,9 +148,7 @@ def _coin_next_grade(
     except XPAllocationError as exc:
         raise PlanQueueError(exc.message) from exc
     if new == "S" and not allow_s:
-        raise PlanQueueError(
-            "A is the player ceiling; S is GM-only."
-        )
+        raise PlanQueueError("A is the player ceiling; S is GM-only.")
     lands_on_a = old == "B" and new == "A"
     return old, new, lands_on_a
 
@@ -212,9 +210,7 @@ def normalize_plan_payload(character, *, kind: str, track: str, payload) -> dict
         }
         if a_grant is not None:
             out["a_grant"] = a_grant
-            out["a_grant_child_count"] = (
-                2 if a_grant["branch"] == "two_standard" else 3
-            )
+            out["a_grant_child_count"] = 2 if a_grant["branch"] == "two_standard" else 3
         return out
 
     if kind == AdvancementPlanItem.KIND_ABILITY:
@@ -284,7 +280,9 @@ def list_queued_plan_items(character):
 
 
 @transaction.atomic
-def create_plan_item(character, *, track: str, kind: str, payload=None) -> AdvancementPlanItem:
+def create_plan_item(
+    character, *, track: str, kind: str, payload=None
+) -> AdvancementPlanItem:
     kind = str(kind or "").strip().lower()
     track = _track_for_kind(kind, track)
     normalized = normalize_plan_payload(
@@ -404,7 +402,9 @@ def _attach_planned_ability(character, payload: dict) -> None:
     ability_id = int(payload.get("ability_id"))
     source = str(payload.get("ability_source") or "").strip().lower()
 
-    if source == "standard" or (not source and Ability.objects.filter(pk=ability_id).exists()):
+    if source == "standard" or (
+        not source and Ability.objects.filter(pk=ability_id).exists()
+    ):
         ability = Ability.objects.filter(pk=ability_id).first()
         if ability is None:
             raise PlanQueueError(f"Standard ability {ability_id} not found.")
@@ -558,7 +558,9 @@ def drain_and_walk_plan(character, track: str) -> dict:
                 allocation = _apply_one_plan_item(character, item)
                 _mark_plan_applied(item, allocation)
                 _clear_blocked(item)
-                applied.append({"plan_item_id": item.id, "allocation_id": allocation.id})
+                applied.append(
+                    {"plan_item_id": item.id, "allocation_id": allocation.id}
+                )
                 fired = item
                 break
             except (PlanQueueError, XPAllocationError) as exc:

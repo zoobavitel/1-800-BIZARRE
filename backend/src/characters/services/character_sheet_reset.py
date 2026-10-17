@@ -74,9 +74,7 @@ def _reset_stand(character):
         "armor": 0,
         "standard_ability": None,
     }
-    stand, created = Stand.objects.get_or_create(
-        character=character, defaults=defaults
-    )
+    stand, created = Stand.objects.get_or_create(character=character, defaults=defaults)
     if not created:
         for key, value in defaults.items():
             setattr(stand, key, value)

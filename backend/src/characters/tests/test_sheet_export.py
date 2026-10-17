@@ -46,7 +46,13 @@ class SheetExportServiceTests(TestCase):
             },
             stress=3,
             coin_boxes=[True, True, False, False],
-            xp_clocks={"insight": 2, "prowess": 1, "resolve": 0, "heritage": 0, "playbook": 0},
+            xp_clocks={
+                "insight": 2,
+                "prowess": 1,
+                "resolve": 0,
+                "heritage": 0,
+                "playbook": 0,
+            },
         )
 
     def test_templates_exist(self):
@@ -129,7 +135,9 @@ class SheetExportServiceTests(TestCase):
         self.assertIn("Hat", values["pc_inventory"])
         self.assertIn("lucky", values["pc_inventory"])
         self.assertNotIn("{", values["pc_inventory"])
-        self.assertEqual(values["pc_reputation"], "")  # Standing/faction on append pages
+        self.assertEqual(
+            values["pc_reputation"], ""
+        )  # Standing/faction on append pages
         self.assertIn("[Stand unique] Ora Rush", values["pc_abilities"])
         self.assertIn("[Standard] Guardian Angel", values["pc_abilities"])
         self.assertEqual(values["pc_armor_stand"], "0/5")  # Durability A → 5
@@ -141,7 +149,10 @@ class SheetExportServiceTests(TestCase):
         self.assertEqual(fields["pc_playbook"].get("/V"), "Stand")
         self.assertEqual(fields["pc_stand_forms"].get("/V"), "Phenomenon, Mist-form")
         # Append pages: faction reputation + standing section headers
-        text = "".join((page.extract_text() or "") for page in PdfReader(io.BytesIO(pdf_bytes)).pages)
+        text = "".join(
+            (page.extract_text() or "")
+            for page in PdfReader(io.BytesIO(pdf_bytes)).pages
+        )
         self.assertIn("NPC Standing", text)
         self.assertIn("Speedwagon Foundation", text)
         self.assertIn("Crew Sheet", text)
@@ -204,9 +215,7 @@ class SheetExportServiceTests(TestCase):
         self.character.campaign = campaign
         self.character.crew = crew
         self.character.npc_standing = {str(npc.id): 2}
-        self.character.save(
-            update_fields=["campaign", "crew", "npc_standing"]
-        )
+        self.character.save(update_fields=["campaign", "crew", "npc_standing"])
 
         pdf_bytes, _ = export_pc_pdf(self.character)
         text = "".join(

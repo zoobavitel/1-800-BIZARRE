@@ -80,9 +80,7 @@ class RebuiltState:
 def capture_chargen_baseline(character: Character) -> dict:
     """Build a chargen baseline snapshot from the live character."""
     grades = _get_stand_grades(character)
-    spin_ids = list(
-        character.spin_abilities.values_list("spin_ability_id", flat=True)
-    )
+    spin_ids = list(character.spin_abilities.values_list("spin_ability_id", flat=True))
     hamon_ids = list(
         character.hamon_abilities.values_list("hamon_ability_id", flat=True)
     )
@@ -159,7 +157,9 @@ def _bump_dot_state(state: RebuiltState, action_key: str, delta: int = 1) -> Non
     state.action_dots = dots
 
 
-def _apply_b_to_a_to_state(state: RebuiltState, allocation_id: int, reward: dict) -> list:
+def _apply_b_to_a_to_state(
+    state: RebuiltState, allocation_id: int, reward: dict
+) -> list:
     branch = str(reward.get("branch") or "").strip().lower()
     if branch == "custom2plus1standard":
         branch = "two_unique_plus_one_standard"
@@ -208,7 +208,9 @@ def _apply_b_to_a_to_state(state: RebuiltState, allocation_id: int, reward: dict
     return added
 
 
-def apply_allocation_effect(state: RebuiltState, allocation: CharacterXPAllocation) -> None:
+def apply_allocation_effect(
+    state: RebuiltState, allocation: CharacterXPAllocation
+) -> None:
     """Mutate in-memory state by replaying one active allocation."""
     meta = allocation.metadata or {}
     cost = int(allocation.xp_cost or 0)
@@ -290,9 +292,7 @@ def apply_allocation_effect(state: RebuiltState, allocation: CharacterXPAllocati
         pass
 
 
-def rebuild_from_allocations(
-    character: Character, *, allocations=None
-) -> RebuiltState:
+def rebuild_from_allocations(character: Character, *, allocations=None) -> RebuiltState:
     """Replay active allocations onto chargen_baseline. Does not save."""
     baseline = character.chargen_baseline
     if not isinstance(baseline, dict) or baseline.get("action_dots") is None:
@@ -339,12 +339,16 @@ def live_state_from_character(character: Character) -> dict:
 
 def _normalize_compare_state(d: dict) -> dict:
     return {
-        "action_dots": {k: int(v or 0) for k, v in (d.get("action_dots") or {}).items()},
+        "action_dots": {
+            k: int(v or 0) for k, v in (d.get("action_dots") or {}).items()
+        },
         "coin_stats": {
             f: str((d.get("coin_stats") or {}).get(f, "D")).upper()[:1]
             for f in STAND_STAT_FIELDS
         },
-        "standard_ability_ids": sorted(int(x) for x in (d.get("standard_ability_ids") or [])),
+        "standard_ability_ids": sorted(
+            int(x) for x in (d.get("standard_ability_ids") or [])
+        ),
         "spin_ability_ids": sorted(int(x) for x in (d.get("spin_ability_ids") or [])),
         "hamon_ability_ids": sorted(int(x) for x in (d.get("hamon_ability_ids") or [])),
         "bonus_hp_from_xp": int(d.get("bonus_hp_from_xp") or 0),
@@ -384,7 +388,9 @@ def validate_final_state(character: Character, state: RebuiltState) -> None:
     """Final-state validators for a respec draft."""
     # Stand floor: at least one grade ≥ D
     if any(state.coin_stats.get(f) for f in STAND_STAT_FIELDS):
-        if not any(_grade_index(state.coin_stats.get(f, "F")) >= 1 for f in STAND_STAT_FIELDS):
+        if not any(
+            _grade_index(state.coin_stats.get(f, "F")) >= 1 for f in STAND_STAT_FIELDS
+        ):
             raise RespecError("At least one Stand Coin stat must stay D or higher.")
 
     for action, dots in (state.action_dots or {}).items():
@@ -560,9 +566,11 @@ def _mint_respec_allocation(
                 )
             else:
                 meta["unique_abilities"] = reward.get("unique_abilities") or []
-                meta["added_standard_ability_ids"] = [
-                    int(reward["standard_ability_id"])
-                ] if reward.get("standard_ability_id") is not None else []
+                meta["added_standard_ability_ids"] = (
+                    [int(reward["standard_ability_id"])]
+                    if reward.get("standard_ability_id") is not None
+                    else []
+                )
         track = "playbook"
     elif atype == "MINOR_ADVANCE":
         action = _normalize_action(item.get("action"))
@@ -586,9 +594,7 @@ def _mint_respec_allocation(
         meta["choice"] = "playbook_ability"
         picked = item.get("picked") or {}
         if not picked.get("id") or not picked.get("kind"):
-            raise RespecError(
-                "Playbook ability advance requires picked {kind, id}."
-            )
+            raise RespecError("Playbook ability advance requires picked {kind, id}.")
         meta["picked"] = {
             "kind": str(picked["kind"]).lower(),
             "id": int(picked["id"]),
@@ -674,7 +680,9 @@ def commit_respec(
     for aid in dropped_ids:
         alloc = active.get(aid)
         if alloc is None:
-            raise RespecError(f"Allocation {aid} is not an active spend on this character.")
+            raise RespecError(
+                f"Allocation {aid} is not an active spend on this character."
+            )
         if (
             alloc.allocation_type == "LEVEL_UP_ACQUIRE_STAND"
             and not allow_acquire_stand_drop
@@ -781,11 +789,7 @@ def backfill_playbook_ability_picks(character: Character) -> int:
             undone_at__isnull=True,
         ).order_by("created_at", "id")
     )
-    unpicked = [
-        a
-        for a in open_slots
-        if not (a.metadata or {}).get("picked")
-    ]
+    unpicked = [a for a in open_slots if not (a.metadata or {}).get("picked")]
     if not unpicked:
         return 0
 
@@ -797,7 +801,9 @@ def backfill_playbook_ability_picks(character: Character) -> int:
         if getattr(sa, "spin_type", None) == "FOUNDATION":
             continue
         candidates.append(("spin", sa.id, sa.name))
-    for link in character.hamon_abilities.select_related("hamon_ability").order_by("id"):
+    for link in character.hamon_abilities.select_related("hamon_ability").order_by(
+        "id"
+    ):
         ha = link.hamon_ability
         if link.hamon_ability_id in base_hamon:
             continue

@@ -7,35 +7,86 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('characters', '0037_alter_character_stash_slots_help_text'),
+        ("characters", "0037_alter_character_stash_slots_help_text"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='npc',
-            name='playbook',
-            field=models.CharField(choices=[('STAND', 'Stand User'), ('HAMON', 'Hamon User'), ('SPIN', 'Spin User'), ('NON_BIZARRE', 'Non-Bizarre')], default='STAND', max_length=20),
+            model_name="npc",
+            name="playbook",
+            field=models.CharField(
+                choices=[
+                    ("STAND", "Stand User"),
+                    ("HAMON", "Hamon User"),
+                    ("SPIN", "Spin User"),
+                    ("NON_BIZARRE", "Non-Bizarre"),
+                ],
+                default="STAND",
+                max_length=20,
+            ),
         ),
         migrations.CreateModel(
-            name='NPCHamonAbility',
+            name="NPCHamonAbility",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('hamon_ability', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='characters.hamonability')),
-                ('npc', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='npc_hamon_abilities', to='characters.npc')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "hamon_ability",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to="characters.hamonability",
+                    ),
+                ),
+                (
+                    "npc",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="npc_hamon_abilities",
+                        to="characters.npc",
+                    ),
+                ),
             ],
             options={
-                'unique_together': {('npc', 'hamon_ability')},
+                "unique_together": {("npc", "hamon_ability")},
             },
         ),
         migrations.CreateModel(
-            name='NPCSpinAbility',
+            name="NPCSpinAbility",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('npc', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='npc_spin_abilities', to='characters.npc')),
-                ('spin_ability', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='characters.spinability')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "npc",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="npc_spin_abilities",
+                        to="characters.npc",
+                    ),
+                ),
+                (
+                    "spin_ability",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to="characters.spinability",
+                    ),
+                ),
             ],
             options={
-                'unique_together': {('npc', 'spin_ability')},
+                "unique_together": {("npc", "spin_ability")},
             },
         ),
     ]

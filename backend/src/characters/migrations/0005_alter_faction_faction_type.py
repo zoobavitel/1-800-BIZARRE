@@ -6,13 +6,17 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('characters', '0004_npc_harm_clock_max'),
+        ("characters", "0004_npc_harm_clock_max"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='faction',
-            name='faction_type',
-            field=models.CharField(blank=True, help_text="A user-defined type for the faction (e.g., 'Criminal Syndicate', 'Ancient Order', 'Merchant Guild').", max_length=100),
+            model_name="faction",
+            name="faction_type",
+            field=models.CharField(
+                blank=True,
+                help_text="A user-defined type for the faction (e.g., 'Criminal Syndicate', 'Ancient Order', 'Merchant Guild').",
+                max_length=100,
+            ),
         ),
     ]

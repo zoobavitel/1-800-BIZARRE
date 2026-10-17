@@ -13,7 +13,10 @@ from characters.models import (
     EquipmentItem,
     Session,
 )
-from characters.services.inventory import normalize_inventory_list, normalize_inventory_item
+from characters.services.inventory import (
+    normalize_inventory_list,
+    normalize_inventory_item,
+)
 from characters.services.loadout import (
     compute_load_used,
     load_cap_for_band,
@@ -169,9 +172,7 @@ class InventoryPatchApiTests(TestCase):
             scope="TEMPLATE",
         )
         self.client.force_authenticate(self.player)
-        res = self.client.get(
-            f"/api/equipment-items/?campaign={self.campaign.id}"
-        )
+        res = self.client.get(f"/api/equipment-items/?campaign={self.campaign.id}")
         self.assertEqual(res.status_code, 200)
         names = [r["name"] for r in res.json()]
         self.assertIn("Test Blade", names)
@@ -379,9 +380,7 @@ class EquipmentCatalogPermissionTests(TestCase):
             created_by=self.gm,
         )
         self.client.force_authenticate(self.gm)
-        res = self.client.post(
-            f"/api/equipment-items/{camp.id}/publish-to-site/"
-        )
+        res = self.client.post(f"/api/equipment-items/{camp.id}/publish-to-site/")
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.data["id"], site.id)
         self.assertEqual(

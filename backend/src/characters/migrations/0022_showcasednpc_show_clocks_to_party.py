@@ -6,13 +6,15 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('characters', '0021_session_npc_involvement'),
+        ("characters", "0021_session_npc_involvement"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='showcasednpc',
-            name='show_clocks_to_party',
-            field=models.BooleanField(default=False, help_text="When True, party can see this NPC's clocks"),
+            model_name="showcasednpc",
+            name="show_clocks_to_party",
+            field=models.BooleanField(
+                default=False, help_text="When True, party can see this NPC's clocks"
+            ),
         ),
     ]

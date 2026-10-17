@@ -56,6 +56,13 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Black format check
+        uses: psf/black@stable
+        with:
+          options: "--check --diff"
+          src: "./backend/src"
+          version: "~= 26.0"
+
       - name: Setup Python
         uses: actions/setup-python@v6
         with:

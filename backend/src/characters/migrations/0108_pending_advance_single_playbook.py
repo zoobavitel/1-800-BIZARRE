@@ -3,7 +3,6 @@
 from django.db import migrations, models
 import django.db.models.deletion
 
-
 SRD_BASE_HP = {
     "Human": 0,
     "Rock Human": 2,

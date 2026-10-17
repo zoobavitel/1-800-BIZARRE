@@ -58,11 +58,7 @@ class CrewXpTriggerPatchPermissionTests(_BaseCrewXp):
     def test_player_can_toggle_only_after_earning_session_xp(self):
         client = self._client(self.p1)
         url = f"/api/crews/{self.crew.id}/"
-        body = {
-            "session_xp_triggers": {
-                str(self.session.id): {"challenge": True}
-            }
-        }
+        body = {"session_xp_triggers": {str(self.session.id): {"challenge": True}}}
 
         # No XP yet → blocked
         resp = client.patch(url, body, format="json")
@@ -117,11 +113,7 @@ class CrewXpTriggerPatchPermissionTests(_BaseCrewXp):
         client = self._client(self.p1)
         resp = client.patch(
             f"/api/crews/{self.crew.id}/",
-            {
-                "session_xp_triggers": {
-                    str(old_session.id): {"goals": True}
-                }
-            },
+            {"session_xp_triggers": {str(old_session.id): {"goals": True}}},
             format="json",
         )
         self.assertEqual(resp.status_code, 400, resp.content)
@@ -182,11 +174,7 @@ class CrewXpTriggerPatchPermissionTests(_BaseCrewXp):
         client = self._client(self.p1)
         resp = client.patch(
             f"/api/crews/{self.crew.id}/",
-            {
-                "session_xp_triggers": {
-                    str(self.session.id): {"reputation": True}
-                }
-            },
+            {"session_xp_triggers": {str(self.session.id): {"reputation": True}}},
             format="json",
         )
         self.assertEqual(resp.status_code, 200, resp.content)
@@ -209,11 +197,7 @@ class CrewXpTriggerPatchPermissionTests(_BaseCrewXp):
         client = self._client(self.outsider)
         resp = client.patch(
             f"/api/crews/{self.crew.id}/",
-            {
-                "session_xp_triggers": {
-                    str(self.session.id): {"challenge": True}
-                }
-            },
+            {"session_xp_triggers": {str(self.session.id): {"challenge": True}}},
             format="json",
         )
         self.assertEqual(resp.status_code, 404, resp.content)
@@ -232,9 +216,7 @@ class CrewXpTriggerSettlementTests(_BaseCrewXp):
         out = credit_crew_xp_triggers_for_session(self.session, self.gm)
         self.crew.refresh_from_db()
         self.assertEqual(self.crew.xp, 2)
-        self.assertTrue(
-            self.crew.session_xp_triggers[str(self.session.id)]["credited"]
-        )
+        self.assertTrue(self.crew.session_xp_triggers[str(self.session.id)]["credited"])
         self.assertEqual(out["applied"][0]["xp_granted"], 2)
 
     def test_credit_is_idempotent(self):
@@ -264,9 +246,7 @@ class CrewXpTriggerSettlementTests(_BaseCrewXp):
         credit_crew_xp_triggers_for_session(self.session, self.gm)
         self.crew.refresh_from_db()
         self.assertEqual(self.crew.xp, 8)
-        self.assertTrue(
-            self.crew.session_xp_triggers[str(self.session.id)]["credited"]
-        )
+        self.assertTrue(self.crew.session_xp_triggers[str(self.session.id)]["credited"])
 
     def test_empty_row_still_marked_credited(self):
         self.crew.session_xp_triggers = {
@@ -280,9 +260,7 @@ class CrewXpTriggerSettlementTests(_BaseCrewXp):
         credit_crew_xp_triggers_for_session(self.session, self.gm)
         self.crew.refresh_from_db()
         self.assertEqual(self.crew.xp, 0)
-        self.assertTrue(
-            self.crew.session_xp_triggers[str(self.session.id)]["credited"]
-        )
+        self.assertTrue(self.crew.session_xp_triggers[str(self.session.id)]["credited"])
 
     def test_credit_adds_session_rep_contributions_to_crew_rep(self):
         sid = str(self.session.id)
@@ -323,6 +301,4 @@ class CrewXpTriggerSettlementTests(_BaseCrewXp):
         self.assertEqual(next_session.status, "ACTIVE")
         self.crew.refresh_from_db()
         self.assertEqual(self.crew.xp, 2)
-        self.assertTrue(
-            self.crew.session_xp_triggers[str(self.session.id)]["credited"]
-        )
+        self.assertTrue(self.crew.session_xp_triggers[str(self.session.id)]["credited"])

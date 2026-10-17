@@ -8,9 +8,7 @@ Heritage Train is intentional homebrew (SRD train list excludes Heritage).
 
 from __future__ import annotations
 
-TRAINABLE_TRACKS = frozenset(
-    {"insight", "prowess", "resolve", "playbook", "heritage"}
-)
+TRAINABLE_TRACKS = frozenset({"insight", "prowess", "resolve", "playbook", "heritage"})
 
 # Crew.upgrade_progress keys (frontend progressToUpgrades). BitD "personal"
 # is Playbook Training. ``training_heritage`` is house-rule (not SRD).

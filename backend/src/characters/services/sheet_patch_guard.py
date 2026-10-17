@@ -66,7 +66,9 @@ def _stand_grade_subset(stand_data: dict | None) -> dict | None:
     return grades or None
 
 
-def collect_rejected_sheet_patch_fields(character, raw_data: dict | None) -> dict[str, Any]:
+def collect_rejected_sheet_patch_fields(
+    character, raw_data: dict | None
+) -> dict[str, Any]:
     """Return ``{field: client_value}`` for authoritative keys present in ``raw_data``."""
     rejected: dict[str, Any] = {}
     if not isinstance(raw_data, dict):
@@ -107,9 +109,7 @@ def payload_without_stand_grades(stand_data, coin_stats):
     """Strip grade keys from nested stand / coin_stats dicts (identity fields kept)."""
     stand_out = None
     if isinstance(stand_data, dict):
-        stand_out = {
-            k: v for k, v in stand_data.items() if k not in STAND_GRADE_FIELDS
-        }
+        stand_out = {k: v for k, v in stand_data.items() if k not in STAND_GRADE_FIELDS}
     coin_out = None
     if isinstance(coin_stats, dict):
         grade_keys = set(STAND_GRADE_FIELDS) | {f.upper() for f in STAND_GRADE_FIELDS}

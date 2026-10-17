@@ -1,6 +1,7 @@
 from django.core.management.base import BaseCommand
 from characters.models import Character
 
+
 class Command(BaseCommand):
     help = "Lists all characters and their associated users."
 
@@ -12,4 +13,6 @@ class Command(BaseCommand):
                 user_info = char.user.username if char.user else "No user assigned"
                 self.stdout.write(f"- {char.true_name}: {user_info}")
         else:
-            self.stdout.write(self.style.WARNING("No characters found in the database."))
+            self.stdout.write(
+                self.style.WARNING("No characters found in the database.")
+            )

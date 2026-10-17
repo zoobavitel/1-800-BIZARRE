@@ -1,4 +1,5 @@
 """CharacterViewSet queryset: GM+player accounts see own PCs and campaign tables."""
+
 from django.test import TestCase
 from django.contrib.auth.models import User
 from django.db.models import Q
@@ -13,33 +14,39 @@ def _list_rows(response):
     data = response.data
     if isinstance(data, list):
         return data
-    if isinstance(data, dict) and 'results' in data:
-        return data['results']
-    raise AssertionError(f'Unexpected characters list response: {type(data)}')
+    if isinstance(data, dict) and "results" in data:
+        return data["results"]
+    raise AssertionError(f"Unexpected characters list response: {type(data)}")
 
 
 class CharacterViewSetQuerysetTests(TestCase):
     def setUp(self):
         self.client = APIClient()
-        self.gm_player = User.objects.create_user(username='gmp', password='testpass123')
-        self.other_gm = User.objects.create_user(username='ogm', password='testpass123')
-        self.c_as_gm = Campaign.objects.create(name='Campaign I GM', gm=self.gm_player)
-        self.c_as_player = Campaign.objects.create(name='Campaign I play in', gm=self.other_gm)
-        self.heritage = Heritage.objects.create(name='Human', base_hp=0, description='')
+        self.gm_player = User.objects.create_user(
+            username="gmp", password="testpass123"
+        )
+        self.other_gm = User.objects.create_user(username="ogm", password="testpass123")
+        self.c_as_gm = Campaign.objects.create(name="Campaign I GM", gm=self.gm_player)
+        self.c_as_player = Campaign.objects.create(
+            name="Campaign I play in", gm=self.other_gm
+        )
+        self.heritage = Heritage.objects.create(name="Human", base_hp=0, description="")
 
         # PC owned by gmp_player in someone else's campaign
         self.pc_elsewhere = Character.objects.create(
             user=self.gm_player,
             campaign=self.c_as_player,
-            true_name='My PC in another game',
+            true_name="My PC in another game",
             heritage=self.heritage,
         )
         # Another user's PC in a campaign this user GMs
-        self.player = User.objects.create_user(username='playeronly', password='testpass123')
+        self.player = User.objects.create_user(
+            username="playeronly", password="testpass123"
+        )
         self.pc_at_my_table = Character.objects.create(
             user=self.player,
             campaign=self.c_as_gm,
-            true_name='Player at my table',
+            true_name="Player at my table",
             heritage=self.heritage,
         )
 
@@ -48,25 +55,27 @@ class CharacterViewSetQuerysetTests(TestCase):
         self.assertEqual(
             Character.objects.filter(
                 Q(user=self.gm_player) | Q(campaign__gm=self.gm_player)
-            ).distinct().count(),
+            )
+            .distinct()
+            .count(),
             2,
         )
         self.client.force_authenticate(user=self.gm_player)
-        response = self.client.get('/api/characters/')
+        response = self.client.get("/api/characters/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         rows = _list_rows(response)
         self.assertEqual(len(rows), 2)
-        ids = {row['id'] for row in rows}
+        ids = {row["id"] for row in rows}
         self.assertIn(self.pc_elsewhere.id, ids)
         self.assertIn(self.pc_at_my_table.id, ids)
 
     def test_mine_param_returns_only_owned_characters(self):
         """?mine=true must never return characters owned by other users, even for GMs."""
         self.client.force_authenticate(user=self.gm_player)
-        response = self.client.get('/api/characters/?mine=true')
+        response = self.client.get("/api/characters/?mine=true")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         rows = _list_rows(response)
-        ids = {row['id'] for row in rows}
+        ids = {row["id"] for row in rows}
         # Only the GM's own character should appear, not the player's character.
         self.assertIn(self.pc_elsewhere.id, ids)
         self.assertNotIn(self.pc_at_my_table.id, ids)
@@ -74,23 +83,25 @@ class CharacterViewSetQuerysetTests(TestCase):
     def test_gm_updating_player_character_does_not_change_ownership(self):
         """A GM PATCH that attempts to set a new owner must leave ownership unchanged."""
         self.client.force_authenticate(user=self.gm_player)
-        url = f'/api/characters/{self.pc_at_my_table.id}/'
+        url = f"/api/characters/{self.pc_at_my_table.id}/"
         # Explicitly attempt to transfer ownership to the GM via the `user` field.
         payload = {
-            'true_name': 'Updated by GM',
-            'heritage': self.heritage.id,
-            'user': self.gm_player.id,
+            "true_name": "Updated by GM",
+            "heritage": self.heritage.id,
+            "user": self.gm_player.id,
         }
-        response = self.client.patch(url, payload, format='json')
+        response = self.client.patch(url, payload, format="json")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.pc_at_my_table.refresh_from_db()
         # Ownership must still belong to the original player, not the GM.
         self.assertEqual(self.pc_at_my_table.user_id, self.player.id)
         self.assertNotEqual(self.pc_at_my_table.user_id, self.gm_player.id)
         # The response payload must also reflect the original owner.
-        if 'user' in response.data:
-            self.assertEqual(response.data['user'], self.player.id)
-        elif 'user_id' in response.data:
-            self.assertEqual(response.data['user_id'], self.player.id)
+        if "user" in response.data:
+            self.assertEqual(response.data["user"], self.player.id)
+        elif "user_id" in response.data:
+            self.assertEqual(response.data["user_id"], self.player.id)
         else:
-            self.fail('Character detail response must include owner as "user" or "user_id".')
+            self.fail(
+                'Character detail response must include owner as "user" or "user_id".'
+            )

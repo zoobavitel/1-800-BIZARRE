@@ -3,10 +3,10 @@ Custom parsers for Django REST Framework.
 MultipartJsonParser parses JSON-encoded form fields (e.g. stand_coin_stats, abilities)
 so they are properly deserialized when sending multipart/form-data with file uploads.
 """
+
 import json
 from django.http import QueryDict
 from rest_framework import parsers
-
 
 # DRF many=True PrimaryKeyRelatedField keys on Character/NPC multipart saves.
 # These must use QueryDict.setlist so getlist returns flat pks.
@@ -59,9 +59,7 @@ class MultipartJsonParser(parsers.MultiPartParser):
                         data[key] = value
                         continue
                     if isinstance(parsed, list):
-                        data.setlist(
-                            key, ["" if x is None else str(x) for x in parsed]
-                        )
+                        data.setlist(key, ["" if x is None else str(x) for x in parsed])
                     else:
                         data[key] = value
                 else:

@@ -9,18 +9,27 @@ class Migration(migrations.Migration):
 
     dependencies = [
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
-        ('characters', '0016_add_userprofile_fields'),
+        ("characters", "0016_add_userprofile_fields"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='progressclock',
-            name='visible_to_party',
-            field=models.BooleanField(default=False, help_text='For player clocks: when True, other players in campaign can see it'),
+            model_name="progressclock",
+            name="visible_to_party",
+            field=models.BooleanField(
+                default=False,
+                help_text="For player clocks: when True, other players in campaign can see it",
+            ),
         ),
         migrations.AddField(
-            model_name='progressclock',
-            name='created_by',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='created_progress_clocks', to=settings.AUTH_USER_MODEL),
+            model_name="progressclock",
+            name="created_by",
+            field=models.ForeignKey(
+                blank=True,
+                null=True,
+                on_delete=django.db.models.deletion.SET_NULL,
+                related_name="created_progress_clocks",
+                to=settings.AUTH_USER_MODEL,
+            ),
         ),
     ]

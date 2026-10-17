@@ -1,4 +1,5 @@
 """cancel_pending_advance: forfeit open pending → (cap-1) unallocated + 1 track mark."""
+
 from django.contrib.auth.models import User
 from django.test import TestCase
 from rest_framework.test import APIClient
@@ -88,9 +89,7 @@ class CancelPendingAdvanceServiceTests(TestCase):
         result = cancel_pending_advance(self.character, "prowess", save=True)
         self.assertEqual(result["cancelled_pending_id"], oldest_id)
         self.assertEqual(result["open_pending_count"], 1)
-        self.assertFalse(
-            PendingAdvance.objects.filter(pk=oldest_id).exists()
-        )
+        self.assertFalse(PendingAdvance.objects.filter(pk=oldest_id).exists())
 
     def test_no_pending_raises(self):
         with self.assertRaises(AdvancementError) as ctx:
