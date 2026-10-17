@@ -12,19 +12,41 @@ Writes JSON consumed by perf harnesses (tokens never logged at INFO).
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
 from django.contrib.auth.models import User
+from django.core.files.base import ContentFile
 from django.core.management.base import BaseCommand, CommandError
+from django.db import connection
 from rest_framework.authtoken.models import Token
 
-from characters.models import Campaign, Character, Crew, Heritage, Session
+from characters.models import (
+    Campaign,
+    Character,
+    Crew,
+    Heritage,
+    Roll,
+    RollHistory,
+    Session,
+)
+
+# 1x1 PNG. Heavier than an empty sheet, small enough to keep the perf disk tiny.
+_PNG = bytes.fromhex(
+    "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4"
+    "890000000d4944415478da63fccfc0500f000485018084a98c210000000049454e44ae426082"
+)
+_STARTER_ABILITIES = [
+    {"name": "Perf Strike", "type": "standard", "description": "perf seed"},
+    {"name": "Perf Guard", "type": "standard", "description": "perf seed"},
+]
+# Live names from prod.env / settings_prod. Anything else sqlite, *_dev, or *_perf is allowed.
+_PROD_DB_NAMES = frozenset({"jojo_ttrpg", "bizarre_db"})
 
 TIERS = {
     "floor": {"tables": 1, "players": 5},
     "target": {"tables": 2, "players": 5},
     "stretch": {"tables": 3, "players": 6},
+    "ramp": {"tables": 8, "players": 5},
 }
 
 PERF_PASSWORD = "PerfLoadTest1!"
@@ -67,12 +89,7 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        settings_mod = os.environ.get("DJANGO_SETTINGS_MODULE", "")
-        if settings_mod.endswith("settings_prod"):
-            raise CommandError(
-                "Refusing to seed under settings_prod. "
-                "Use app.settings (sqlite) or a dedicated staging settings module."
-            )
+        self._refuse_prod_database()
         tier = options["tier"]
         spec = TIERS[tier]
         out = options["output"] or f"/tmp/bizarre-perf-seed-{tier}.json"
@@ -107,6 +124,23 @@ class Command(BaseCommand):
                 f"players_each={spec['players']} → {path}"
             )
         )
+
+    def _refuse_prod_database(self):
+        name = str(connection.settings_dict.get("NAME") or "")
+        engine = str(connection.settings_dict.get("ENGINE") or "")
+        base = Path(name).name
+        allowed = (
+            base == "jojo_ttrpg_perf"
+            or base.endswith("_perf")
+            or base.endswith("_dev")
+            or engine.endswith("sqlite3")
+        )
+        if base in _PROD_DB_NAMES or not allowed:
+            raise CommandError(
+                f"Refusing to seed database {name!r}. "
+                "Allowed: sqlite, a *_dev name, or jojo_ttrpg_perf. "
+                "Never seed jojo_ttrpg or bizarre_db."
+            )
 
     def _reset_perf_data(self):
         Campaign.objects.filter(name__startswith="Perf Table ").delete()
@@ -177,13 +211,26 @@ class Command(BaseCommand):
                     "heritage": heritage,
                     "action_dots": ACTION_DOTS,
                     "stress": 3,
+                    "playbook": "STAND",
+                    "stand_name": f"Perf Stand {p}",
+                    "stand_type": "Close-Range",
+                    "extra_custom_abilities": _STARTER_ABILITIES,
                 },
             )
-            if char.crew_id != crew.id or char.heritage_id != heritage.id:
-                char.crew = crew
-                char.heritage = heritage
-                char.action_dots = ACTION_DOTS
-                char.save()
+            char.crew = crew
+            char.heritage = heritage
+            char.action_dots = ACTION_DOTS
+            char.playbook = "STAND"
+            char.stand_name = char.stand_name or f"Perf Stand {p}"
+            char.stand_type = char.stand_type or "Close-Range"
+            if not char.extra_custom_abilities:
+                char.extra_custom_abilities = _STARTER_ABILITIES
+            char.save()
+            if not char.image:
+                char.image.save(
+                    f"perf-{char.id}.png", ContentFile(_PNG), save=True
+                )
+            self._seed_roll_history(char, session, campaign)
             session.characters_involved.add(char)
             player_rows.append(
                 {
@@ -200,3 +247,20 @@ class Command(BaseCommand):
             "gm": {"username": gm_name, "token": gm_token.key},
             "players": player_rows,
         }
+
+    def _seed_roll_history(self, char, session, campaign):
+        have = Roll.objects.filter(character=char, session=session).count()
+        for n in range(have, 8):
+            roll = Roll.objects.create(
+                character=char,
+                session=session,
+                roll_type="ACTION",
+                action_name="hunt",
+                position="risky",
+                effect="standard",
+                dice_pool=2,
+                results=[6, 4],
+                outcome="FULL_SUCCESS",
+                description=f"perf history {n}",
+            )
+            RollHistory.objects.get_or_create(campaign=campaign, roll=roll)

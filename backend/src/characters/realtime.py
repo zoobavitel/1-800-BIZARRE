@@ -26,7 +26,14 @@ _subscribers: DefaultDict[int, List[queue.Queue]] = defaultdict(list)
 _redis_client = None
 _redis_init_attempted = False
 _redis_required = False
-CHANNEL_PREFIX = "bizarre:campaign:"
+
+
+def channel_name(campaign_id: int) -> str:
+    """Redis pub/sub name. Read at use time so publish and subscribe share one setting."""
+    from django.conf import settings
+
+    prefix = getattr(settings, "REALTIME_CHANNEL_PREFIX", "bizarre:campaign:")
+    return f"{prefix}{campaign_id}"
 
 _listener_threads: Dict[int, threading.Thread] = {}
 _listener_queues: DefaultDict[int, List[queue.Queue]] = defaultdict(list)
@@ -34,6 +41,23 @@ _listener_stop: Dict[int, threading.Event] = {}
 
 
 def _redis_url() -> Optional[str]:
+    """Redis URL for pub/sub. Not the Celery broker.
+
+    gunicorn sets BIZARRE_ENV_FILE, not REDIS_URL. settings_prod loads
+    REALTIME_REDIS_URL from that file and defaults it to the broker URL.
+    Reading only os.environ left both workers on in-process queues, so a
+    roll on worker A never reached SSE on worker B.
+    """
+    explicit = os.environ.get("REALTIME_REDIS_URL")
+    if explicit:
+        return explicit
+    module = os.environ.get("DJANGO_SETTINGS_MODULE", "")
+    if module.endswith(("settings_prod", "settings_agent")):
+        from django.conf import settings
+
+        configured = getattr(settings, "REALTIME_REDIS_URL", None)
+        if configured:
+            return configured
     return (
         os.environ.get("REDIS_URL")
         or os.environ.get("CHANNEL_REDIS_URL")
@@ -148,7 +172,7 @@ def _ensure_redis_listener(campaign_id: int, q: queue.Queue) -> None:
 
         def _run() -> None:
             backoff = 1.0
-            channel = f"{CHANNEL_PREFIX}{campaign_id}"
+            channel = channel_name(campaign_id)
             while not stop_event.is_set():
                 with _lock:
                     if not _listener_queues.get(campaign_id):
@@ -275,7 +299,7 @@ def broadcast_campaign_update(campaign_id: int, reason: str = "") -> None:
     }
     client = get_redis_client()
     if client is not None:
-        channel = f"{CHANNEL_PREFIX}{campaign_id}"
+        channel = channel_name(campaign_id)
         client.publish(channel, json.dumps(payload))
         return
     with _lock:

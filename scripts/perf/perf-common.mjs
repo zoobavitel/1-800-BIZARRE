@@ -9,6 +9,9 @@ const FORBIDDEN_HOST_SNIPPETS = [
   "roger-premunicipal-branden.ngrok-free.dev",
 ];
 
+/** Live Funnel. Direct runs use 127.0.0.1:8001. Public probe uses port 8443 only. */
+const LIVE_FUNNEL_HOST = "bizarre-api.tailb65341.ts.net";
+
 /** Extra deny list via PERF_FORBIDDEN_HOSTS=host1,host2 */
 function envForbidden() {
   const raw = process.env.PERF_FORBIDDEN_HOSTS || "";
@@ -32,23 +35,32 @@ export function assertSafePerfTarget(url) {
       );
     }
   }
+  let parsed;
+  try {
+    parsed = new URL(lower.startsWith("http") ? lower : `http://${lower}`);
+  } catch {
+    throw new Error(`Invalid PERF target URL: ${url}`);
+  }
+  if (parsed.hostname === LIVE_FUNNEL_HOST) {
+    if (process.env.PERF_ALLOW_REMOTE !== "1" || parsed.port !== "8443") {
+      throw new Error(
+        `Refusing live Funnel ${url}. Direct run: http://127.0.0.1:8001. ` +
+          `Funnel run: https://${LIVE_FUNNEL_HOST}:8443 with PERF_ALLOW_REMOTE=1.`,
+      );
+    }
+    return;
+  }
   if (process.env.PERF_ALLOW_REMOTE !== "1") {
-    try {
-      const u = new URL(lower.startsWith("http") ? lower : `http://${lower}`);
-      const host = u.hostname;
-      const local =
-        host === "127.0.0.1" ||
-        host === "localhost" ||
-        host === "::1" ||
-        host.endsWith(".local");
-      if (!local) {
-        throw new Error(
-          `Refusing non-local PERF target (${url}). Set PERF_ALLOW_REMOTE=1 for staging only.`,
-        );
-      }
-    } catch (e) {
-      if (e.message.startsWith("Refusing")) throw e;
-      throw new Error(`Invalid PERF target URL: ${url}`);
+    const host = parsed.hostname;
+    const local =
+      host === "127.0.0.1" ||
+      host === "localhost" ||
+      host === "::1" ||
+      host.endsWith(".local");
+    if (!local) {
+      throw new Error(
+        `Refusing non-local PERF target (${url}). Set PERF_ALLOW_REMOTE=1 for staging only.`,
+      );
     }
   }
 }
@@ -56,6 +68,19 @@ export function assertSafePerfTarget(url) {
 export function apiRoot(base) {
   const b = (base || "http://127.0.0.1:8000").replace(/\/$/, "");
   return b.endsWith("/api") ? b : `${b}/api`;
+}
+
+export function summarize(samples, durationMs) {
+  const sorted = [...samples].sort((a, b) => a - b);
+  const seconds = Math.max(durationMs / 1000, 0.001);
+  return {
+    n: sorted.length,
+    p50: percentile(sorted, 50),
+    p95: percentile(sorted, 95),
+    p99: percentile(sorted, 99),
+    max: sorted.length ? sorted[sorted.length - 1] : 0,
+    rps: sorted.length / seconds,
+  };
 }
 
 export function percentile(sortedAsc, p) {
