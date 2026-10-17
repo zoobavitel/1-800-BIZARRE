@@ -37,7 +37,6 @@ const apiRequest = async (endpoint, options = {}) => {
     headers: {
       "Content-Type": "application/json",
       ...(token && { Authorization: `Token ${token}` }),
-      ...(fullUrl.includes("ngrok") && { "ngrok-skip-browser-warning": "1" }),
       ...options.headers,
     },
     ...options,
@@ -74,7 +73,6 @@ const apiRequestMultipart = async (endpoint, formData, method = "PUT") => {
   const fullUrl = `${base}${path}`;
   const headers = {
     ...(token && { Authorization: `Token ${token}` }),
-    ...(fullUrl.includes("ngrok") && { "ngrok-skip-browser-warning": "1" }),
   };
   try {
     const response = await fetch(fullUrl, {

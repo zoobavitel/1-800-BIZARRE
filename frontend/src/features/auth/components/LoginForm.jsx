@@ -30,12 +30,14 @@ const LoginForm = ({ onSwitchToSignup }) => {
     typeof window !== "undefined" &&
     !["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
 
+  const needsServerUrl = !getApiBaseUrl();
+
   useEffect(() => {
     injectStyles();
     const stored = getStoredApiBaseUrl();
     setServerUrl(stored);
-    if (isRemoteSite) setShowServerUrl(true);
-  }, [isRemoteSite]);
+    if (!getApiBaseUrl()) setShowServerUrl(true);
+  }, []);
 
   const { login, error, clearError } = useAuth();
 
@@ -53,7 +55,7 @@ const LoginForm = ({ onSwitchToSignup }) => {
     setApiBaseUrl(serverUrl.trim() || null);
     if (!getApiBaseUrl()) {
       setUrlError(
-        "Set the game server URL below when running on a remote host. Locally use http://127.0.0.1:8000/api unless your host shared a tunnel URL.",
+        "Set the game server URL below. Locally, leave it blank to use http://127.0.0.1:8000/api.",
       );
       setShowServerUrl(true);
       return;
@@ -119,7 +121,7 @@ const LoginForm = ({ onSwitchToSignup }) => {
           style={{ display: "flex", flexDirection: "column", gap: 20 }}
         >
           {/* Live-site warning */}
-          {isRemoteSite && !serverUrl && (
+          {needsServerUrl && (
             <div
               style={{
                 padding: "10px 14px",
@@ -131,14 +133,8 @@ const LoginForm = ({ onSwitchToSignup }) => {
                 lineHeight: 1.6,
               }}
             >
-              Using the live site — set the Game server URL below (your host's
-              backend, e.g.{" "}
-              <code style={{ color: "#fde68a" }}>
-                https://xxx.ngrok-free.app/api
-              </code>
-              ). Host runs{" "}
-              <code style={{ color: "#fde68a" }}>ngrok http 8000</code> and
-              shares that URL.
+              Set the Game server URL below. This build has no baked-in API
+              host.
             </div>
           )}
 
@@ -156,14 +152,6 @@ const LoginForm = ({ onSwitchToSignup }) => {
               }}
             >
               {error}
-              {error.includes("Could not reach game server") && isRemoteSite && (
-                <p style={{ marginTop: 6, marginBottom: 0, fontSize: 12 }}>
-                  Enter the host's URL above: <strong>https://</strong>
-                  their-ngrok-url
-                  <strong>/api</strong> (host runs <code>ngrok http 8000</code>
-                  ).
-                </p>
-              )}
             </div>
           )}
 
@@ -199,7 +187,7 @@ const LoginForm = ({ onSwitchToSignup }) => {
               >
                 ▶
               </span>
-              Game server {isRemoteSite ? "(required here)" : "(optional)"}
+              Game server {needsServerUrl ? "(required here)" : "(optional)"}
             </button>
 
             {showServerUrl && (
@@ -208,7 +196,7 @@ const LoginForm = ({ onSwitchToSignup }) => {
                   type="url"
                   value={serverUrl}
                   onChange={handleServerUrlChange}
-                  placeholder="https://xxx.ngrok-free.app/api"
+                  placeholder="https://host/api"
                 />
                 {urlError && (
                   <p
@@ -232,9 +220,11 @@ const LoginForm = ({ onSwitchToSignup }) => {
                     lineHeight: 1.5,
                   }}
                 >
-                  {isRemoteSite
-                    ? "Paste the URL your host sends (must include /api). This site has no baked-in API host."
-                    : "Leave blank to use http://127.0.0.1:8000/api (local dev). When playing remotely, use the host’s tunnel URL."}
+                  {needsServerUrl
+                    ? "Set the game server URL. It must end with /api."
+                    : isRemoteSite
+                      ? "Leave blank to use the built-in game server."
+                      : "Leave blank to use http://127.0.0.1:8000/api (local dev)."}
                 </p>
               </div>
             )}

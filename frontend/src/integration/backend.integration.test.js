@@ -6,8 +6,6 @@
  *
  * - CI (with backend): integration-test job sets RUN_BACKEND_INTEGRATION=1 (see .github/workflows/ci.yml).
  * - Local: RUN_BACKEND_INTEGRATION=1 npm test -- --testPathPattern=integration --watchAll=false
- * - Local with ngrok:
- *     RUN_BACKEND_INTEGRATION=1 INTEGRATION_API_URL=https://xxxx.ngrok-free.app npm test -- --testPathPattern=integration --watchAll=false
  */
 
 const http = require("http");
@@ -23,13 +21,9 @@ const runIntegration =
 function getJson(urlString) {
   const u = new URL(urlString);
   const lib = u.protocol === "https:" ? https : http;
-  const headers = {};
-  if (u.hostname.includes("ngrok")) {
-    headers["ngrok-skip-browser-warning"] = "1";
-  }
   return new Promise((resolve, reject) => {
     lib
-      .get(urlString, { headers }, (res) => {
+      .get(urlString, (res) => {
         let raw = "";
         res.on("data", (chunk) => {
           raw += chunk;
