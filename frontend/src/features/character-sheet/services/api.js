@@ -242,6 +242,33 @@ async function downloadBinaryExport(endpoint, filename) {
   URL.revokeObjectURL(objectUrl);
 }
 
+const GET_RETRY_DELAY_MS = 300;
+
+/**
+ * fetch(), retried once for a GET/HEAD that died before any HTTP response.
+ * Firefox surfaces a connection the Funnel proxy reset as a TypeError
+ * ("NetworkError when attempting to fetch resource"). HTTP error statuses,
+ * aborts, and writes are never retried.
+ */
+export async function fetchWithGetRetry(
+  url,
+  config = {},
+  { delayMs = GET_RETRY_DELAY_MS } = {},
+) {
+  const method = String(config.method || "GET").toUpperCase();
+  const retryable = method === "GET" || method === "HEAD";
+  try {
+    return await fetch(url, config);
+  } catch (error) {
+    if (!retryable || error?.name !== "TypeError" || config.signal?.aborted) {
+      throw error;
+    }
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+    if (config.signal?.aborted) throw error;
+    return fetch(url, config);
+  }
+}
+
 // Helper function for API requests
 const apiRequest = async (endpoint, options = {}) => {
   const token = localStorage.getItem("authToken");
@@ -261,7 +288,7 @@ const apiRequest = async (endpoint, options = {}) => {
   };
 
   try {
-    const response = await fetch(url, config);
+    const response = await fetchWithGetRetry(url, config);
     const { parsed, invalidJson, textPreview } =
       await readFetchResponseBody(response);
 
