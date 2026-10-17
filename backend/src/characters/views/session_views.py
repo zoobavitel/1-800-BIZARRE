@@ -8,7 +8,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.decorators import action
 
-from ..models import Session, SessionEvent, Roll, Character
+from ..models import ExperienceTracker, Session, SessionEvent, Roll, Character
 from ..serializers import SessionSerializer, SessionEventSerializer, SessionRecordsSerializer
 
 logger = logging.getLogger(__name__)
@@ -52,9 +52,21 @@ class SessionViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         # Filter sessions based on user permissions
         user = self.request.user
-        rolls_qs = Roll.objects.select_related("rolled_by", "character").order_by(
-            "-timestamp"
+        rolls_qs = (
+            Roll.objects.select_related("rolled_by", "character", "session__campaign")
+            .prefetch_related(
+                Prefetch(
+                    "xp_entries",
+                    queryset=ExperienceTracker.objects.select_related(
+                        "character"
+                    ).order_by("pk"),
+                )
+            )
+            .order_by("-timestamp")
         )
+        xp_qs = ExperienceTracker.objects.select_related(
+            "character__campaign", "session", "awarded_by"
+        ).order_by("pk")
         base = Session.objects.all() if user.is_staff else Session.objects.filter(
             models.Q(campaign__gm=user)
             | models.Q(campaign__characters__user=user)
@@ -73,7 +85,8 @@ class SessionViewSet(viewsets.ModelViewSet):
 
         # Newest first — matches CampaignSerializer.get_sessions and UI featured row.
         return base.order_by("-session_date", "-id").prefetch_related(
-            Prefetch("rolls", queryset=rolls_qs)
+            Prefetch("rolls", queryset=rolls_qs),
+            Prefetch("xp_entries", queryset=xp_qs),
         )
 
     def perform_create(self, serializer):

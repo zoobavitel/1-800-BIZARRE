@@ -23,9 +23,13 @@ ExecStart=/opt/bizarre-prod/.venv/bin/gunicorn app.wsgi:application \
   --workers 2 \
   --threads 32 \
   --timeout 120 \
+  --keep-alive 120 \
   --graceful-timeout 60 \
   --max-requests 5000 \
   --max-requests-jitter 500
+# keep-alive > tailscaled's idle timeout (Go default 90s). With gunicorn's 2s
+# default, tailscaled reused sockets gunicorn had already closed, and Firefox
+# saw NS_ERROR_NET_RESET / "CORS request did not succeed" on parallel loads.
 # graceful-timeout > SSE_STREAM_MAX_SECONDS so recycles drain instead of SIGKILL.
 # TimeoutStopSec > graceful-timeout so systemd does not shoot the master mid-drain.
 TimeoutStopSec=90
