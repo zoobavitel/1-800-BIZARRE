@@ -14,7 +14,6 @@ Shell + Python + Node helper scripts for the 1-800-BIZARRE monorepo: setup, loca
 | [`deploy-prod.sh`](deploy-prod.sh) | Full production deploy sequence: backup → migrate → collectstatic → tests → gunicorn restart. Requires env secrets. |
 | [`production-deployment-checklist.sh`](production-deployment-checklist.sh) | Prints a release checklist; no side effects. |
 | [`manual-release-signoff.sh`](manual-release-signoff.sh) | Walks an operator through manual release sign-off (called by `npm run test:manual` / `npm run test:acceptance`). |
-| [`daily_critical_bug_review.py`](daily_critical_bug_review.py) | Cron-style daily review of recent commits / changes; consumed by [`.github/workflows/daily-critical-bug-review.yml`](../.github/workflows/daily-critical-bug-review.yml). |
 | [`perf/api-latency-check.mjs`](perf/api-latency-check.mjs) | Root `GET /` latency smoke. Part of `npm run test:performance:budget`. |
 | [`perf/hot-path-latency-check.mjs`](perf/hot-path-latency-check.mjs) | Authenticated roll-action + session GET p95 budgets. Needs `PERF_SEED_JSON`. |
 | [`perf/sse-concurrency-check.mjs`](perf/sse-concurrency-check.mjs) | Hold ≥5 SSE streams; gauge open count + median lifetime; roll under load. |
