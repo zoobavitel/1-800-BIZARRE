@@ -65,7 +65,11 @@ export function derivePartyFacingSessionNpc(npc) {
   }
 
   let abilities = [];
-  if (npc.show_all_abilities_to_players) {
+  const campaignAbilities =
+    !npc.players_see || npc.players_see.abilities !== false;
+  if (!campaignAbilities) {
+    abilities = [];
+  } else if (npc.show_all_abilities_to_players) {
     abilities = [...(npc.abilities || [])];
   } else {
     const allowed = new Set(
@@ -87,8 +91,10 @@ export function derivePartyFacingSessionNpc(npc) {
     ? Number(npc.vulnerability_clock_current) || 0
     : 0;
 
+  const standIdentityHidden = npc.players_see?.stand_identity === false;
   const display = {
     ...npc,
+    stand_name: standIdentityHidden ? "" : npc.stand_name,
     stand_coin_stats,
     abilities,
     vulnerability_clock_max,

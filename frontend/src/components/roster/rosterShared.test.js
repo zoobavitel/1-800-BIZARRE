@@ -58,6 +58,31 @@ describe("filterFactionRosterForPlayerView", () => {
     expect(factionGroups[0].npcs).toEqual([]);
     expect(unaffiliated.map((n) => n.id)).toEqual([1]);
   });
+
+  test("promotes an NPC whose own faction membership is hidden", () => {
+    const detached = {
+      id: 8,
+      name: "Mole",
+      visible_to_players: true,
+      players_see: { faction_membership: false },
+    };
+    const { factionGroups, unaffiliated } = filterFactionRosterForPlayerView(
+      [
+        {
+          faction: {
+            id: 10,
+            name: "Shown",
+            visible_to_players: true,
+            players_see_npcs: true,
+          },
+          npcs: [seen, detached],
+        },
+      ],
+      [],
+    );
+    expect(factionGroups[0].npcs.map((n) => n.id)).toEqual([1]);
+    expect(unaffiliated.map((n) => n.id)).toEqual([8]);
+  });
 });
 
 describe("filterSessionFactionPairsForPlayer", () => {

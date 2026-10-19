@@ -356,6 +356,10 @@ const CampaignFactionEditor = ({
             ["players_see_reputation", "Reputation"],
             ["players_see_notes", "Notes"],
             ["players_see_npcs", "NPCs"],
+            ["players_see_identity", "Identity"],
+            ["players_see_inventory", "Inventory"],
+            ["players_see_contacts", "Contacts"],
+            ["players_see_faction_status", "Faction rep"],
           ].map(([key, label]) => (
             <label
               key={key}
