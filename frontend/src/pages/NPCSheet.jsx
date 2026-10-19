@@ -38,6 +38,10 @@ import {
   syncReverseFactionStatuses,
 } from "../utils/factionStatus";
 import "./NPCSheet.css";
+import {
+  normalizeNpcPlayersSee,
+  npcSectionVisible,
+} from "../utils/npcSectionVisibility";
 
 const STAND_FORM_PRESETS = ["Humanoid", "Non-Humanoid", "Phenomenon"];
 const STAND_CONSCIOUSNESS_GRADES = ["A", "B", "C", "D", "E", "F"];
@@ -1216,7 +1220,18 @@ const NPCSheet = ({
   const [playersSeeInventory, setPlayersSeeInventory] = useState(
     () => npc?.players_see_inventory !== false,
   );
+  const [playersSee, setPlayersSee] = useState(() =>
+    normalizeNpcPlayersSee(npc?.players_see),
+  );
   const [visibilityEditMode, setVisibilityEditMode] = useState(false);
+  const togglePlayersSee = (key) =>
+    setPlayersSee((prev) => ({
+      ...prev,
+      [key]: !npcSectionVisible(prev, key),
+    }));
+  const showNpcSection = (key) => isGM || npcSectionVisible(playersSee, key);
+  const showFactionSection = (flag) =>
+    isGM || (factionVisibleToPlayers && flag !== false);
   const [showFactionItemPicker, setShowFactionItemPicker] = useState(false);
 
   useEffect(() => {
@@ -1277,8 +1292,9 @@ const NPCSheet = ({
     );
     setNpcVisibleToPlayers(npc?.visible_to_players !== false);
     setPlayersSeeInventory(npc?.players_see_inventory !== false);
+    setPlayersSee(normalizeNpcPlayersSee(npc?.players_see));
     setVisibilityEditMode(false);
-  }, [npc?.id, npc?.visible_to_players, npc?.players_see_inventory]);
+  }, [npc?.id, npc?.visible_to_players, npc?.players_see_inventory, npc?.players_see]);
 
   const setHealingSectionExpandedPersist = useCallback(
     (updater) => {
@@ -1653,6 +1669,12 @@ const NPCSheet = ({
     useState(true);
   const [factionPlayersSeeNotes, setFactionPlayersSeeNotes] = useState(true);
   const [factionPlayersSeeNpcs, setFactionPlayersSeeNpcs] = useState(true);
+  const [factionPlayersSeeIdentity, setFactionPlayersSeeIdentity] = useState(true);
+  const [factionPlayersSeeInventory, setFactionPlayersSeeInventory] =
+    useState(true);
+  const [factionPlayersSeeContacts, setFactionPlayersSeeContacts] = useState(true);
+  const [factionPlayersSeeFactionStatus, setFactionPlayersSeeFactionStatus] =
+    useState(true);
   /** Last persisted/loaded faction_status — used to reverse-sync only changed keys. */
   const prevFactionStatusRef = useRef(null);
 
@@ -1703,6 +1725,10 @@ const NPCSheet = ({
         setFactionPlayersSeeReputation(f.players_see_reputation !== false);
         setFactionPlayersSeeNotes(f.players_see_notes !== false);
         setFactionPlayersSeeNpcs(f.players_see_npcs !== false);
+        setFactionPlayersSeeIdentity(f.players_see_identity !== false);
+        setFactionPlayersSeeInventory(f.players_see_inventory !== false);
+        setFactionPlayersSeeContacts(f.players_see_contacts !== false);
+        setFactionPlayersSeeFactionStatus(f.players_see_faction_status !== false);
       })
       .catch(() => {})
       .finally(() => {
@@ -1773,6 +1799,10 @@ const NPCSheet = ({
           players_see_reputation: factionPlayersSeeReputation,
           players_see_notes: factionPlayersSeeNotes,
           players_see_npcs: factionPlayersSeeNpcs,
+          players_see_identity: factionPlayersSeeIdentity,
+          players_see_inventory: factionPlayersSeeInventory,
+          players_see_contacts: factionPlayersSeeContacts,
+          players_see_faction_status: factionPlayersSeeFactionStatus,
         });
         setLocalExtraFactions((prev) => {
           const id = Number(faction);
@@ -1840,6 +1870,10 @@ const NPCSheet = ({
     factionPlayersSeeReputation,
     factionPlayersSeeNotes,
     factionPlayersSeeNpcs,
+    factionPlayersSeeIdentity,
+    factionPlayersSeeInventory,
+    factionPlayersSeeContacts,
+    factionPlayersSeeFactionStatus,
   ]);
 
   // Reset faction-mounted flag when faction changes so first load doesn't trigger a spurious save
@@ -2608,6 +2642,7 @@ const NPCSheet = ({
       stand_consciousness: normalizeStandConsciousnessLocal(standConsciousness),
       visible_to_players: !!npcVisibleToPlayers,
       players_see_inventory: !!playersSeeInventory,
+      players_see: playersSee,
       ...(imageFile ? { imageFile } : {}),
       ...(!imageFile && imageUrl ? { image: null } : {}),
     }),
@@ -2635,6 +2670,7 @@ const NPCSheet = ({
       crew,
       npcVisibleToPlayers,
       playersSeeInventory,
+      playersSee,
       imageUrl,
       imageFile,
       contacts,
@@ -3409,15 +3445,15 @@ const NPCSheet = ({
             <div className="npc-sheet-g2" style={S.g2}>
               {/* ════ LEFT — Identity + Clocks + Inventory + Healing + Notes ════ */}
               <div>
-              <VisEditSection
-                active={visibilityEditMode && isGM}
-                visible={!!npcVisibleToPlayers}
-                label="NPC"
-                onToggle={() => setNpcVisibleToPlayers((v) => !v)}
-                style={{ ...S.card, borderColor: "#4c1d95" }}
-              >
+              <div style={{ ...S.card, borderColor: "#4c1d95" }}>
               <div style={{ display: "flex", gap: "16px", alignItems: "flex-start", flexWrap: "wrap" }}>
                 {/* Left: portrait + level */}
+                <VisEditSection
+                  active={visibilityEditMode && isGM}
+                  visible={!!npcVisibleToPlayers}
+                  label="NPC"
+                  onToggle={() => setNpcVisibleToPlayers((v) => !v)}
+                >
                 <div
                   style={{
                     display: "flex",
@@ -3556,8 +3592,15 @@ const NPCSheet = ({
                     </div>
                   </div>
                 </div>
+                </VisEditSection>
                 {/* Right: stacked identity fields */}
                 <div style={{ flex: "1 1 220px", minWidth: 0, display: "flex", flexDirection: "column", gap: "8px" }}>
+                  <VisEditSection
+                    active={visibilityEditMode && isGM}
+                    visible={!!npcVisibleToPlayers}
+                    label="NPC"
+                    onToggle={() => setNpcVisibleToPlayers((v) => !v)}
+                  >
                   <div>
                     <span style={S.lbl}>NPC Name / User Name</span>
                     <input
@@ -3567,7 +3610,14 @@ const NPCSheet = ({
                       placeholder="e.g. Yoshikage Kira"
                     />
                   </div>
-                  {playbook === "STAND" && (
+                  </VisEditSection>
+                  {playbook === "STAND" && showNpcSection("stand_identity") && (
+                    <VisEditSection
+                      active={visibilityEditMode && isGM}
+                      visible={npcSectionVisible(playersSee, "stand_identity")}
+                      label="Stand identity"
+                      onToggle={() => togglePlayersSee("stand_identity")}
+                    >
                     <div>
                       <span style={S.lbl}>Stand Name</span>
                       <input
@@ -3577,6 +3627,7 @@ const NPCSheet = ({
                         placeholder="e.g. 「Killer Queen」"
                       />
                     </div>
+                    </VisEditSection>
                   )}
                   <div>
                     <span style={S.lbl}>Role / Type</span>
@@ -3606,6 +3657,13 @@ const NPCSheet = ({
                       ))}
                     </select>
                   </div>
+                  {showNpcSection("faction_membership") ? (
+                  <VisEditSection
+                    active={visibilityEditMode && isGM}
+                    visible={npcSectionVisible(playersSee, "faction_membership")}
+                    label="Faction membership"
+                    onToggle={() => togglePlayersSee("faction_membership")}
+                  >
                   <div>
                     <span style={S.lbl}>Faction</span>
                     <select
@@ -3695,6 +3753,8 @@ const NPCSheet = ({
                       </div>
                     )}
                   </div>
+                  </VisEditSection>
+                  ) : null}
                   {campaignId != null && campaignId !== "" ? (
                     <div>
                       <span style={S.lbl}>Player Crew</span>
@@ -3716,6 +3776,13 @@ const NPCSheet = ({
                       </select>
                     </div>
                   ) : null}
+                  {showNpcSection("heritage") ? (
+                  <VisEditSection
+                    active={visibilityEditMode && isGM}
+                    visible={npcSectionVisible(playersSee, "heritage")}
+                    label="Heritage"
+                    onToggle={() => togglePlayersSee("heritage")}
+                  >
                   <div>
                     <span style={S.lbl}>Heritage</span>
                     <select
@@ -3737,6 +3804,8 @@ const NPCSheet = ({
                       ))}
                     </select>
                   </div>
+                  </VisEditSection>
+                  ) : null}
                   {isGM ? (
                     <div style={{ marginTop: "8px" }}>
                       <label
@@ -3839,7 +3908,7 @@ const NPCSheet = ({
                   ) : null}
                 </div>
               </div>
-              </VisEditSection>
+              </div>
 
                 {/* Conflict Clocks — PCs roll to fill these */}
                 <VisEditSection
@@ -5413,7 +5482,14 @@ const NPCSheet = ({
                 </div>
 
                 {/* GM Notes */}
-                <div style={S.card}>
+                {showNpcSection("notes") ? (
+                <VisEditSection
+                  active={visibilityEditMode && isGM}
+                  visible={npcSectionVisible(playersSee, "notes")}
+                  label="GM notes"
+                  onToggle={() => togglePlayersSee("notes")}
+                  style={S.card}
+                >
                   <span style={S.lbl}>GM Notes</span>
                   <textarea
                     value={notes}
@@ -5433,7 +5509,8 @@ const NPCSheet = ({
                       outline: "none",
                     }}
                   />
-                </div>
+                </VisEditSection>
+                ) : null}
               </div>
 
               {/* ════ RIGHT — PLAYBOOK (single card like PC) ════ */}
@@ -5450,7 +5527,14 @@ const NPCSheet = ({
                     }}
                   >
                     <span style={{ ...S.lbl, margin: 0 }}>PLAYBOOK</span>
-                    <div style={{ flex: "1 1 160px", minWidth: 0, maxWidth: 220 }}>
+                    {showNpcSection("playbook") ? (
+                    <VisEditSection
+                      active={visibilityEditMode && isGM}
+                      visible={npcSectionVisible(playersSee, "playbook")}
+                      label="Playbook"
+                      onToggle={() => togglePlayersSee("playbook")}
+                      style={{ flex: "1 1 160px", minWidth: 0, maxWidth: 220 }}
+                    >
                       <span style={S.lbl}>NPC Type</span>
                       <select
                         style={{ ...S.sel, width: "100%" }}
@@ -5462,10 +5546,14 @@ const NPCSheet = ({
                         <option value="SPIN">Spin User</option>
                         <option value="NON_BIZARRE">Non-Bizarre</option>
                       </select>
-                    </div>
+                    </VisEditSection>
+                    ) : null}
                   </div>
 
-                {playbook === "STAND" && (
+                {playbook === "STAND" &&
+                  (showNpcSection("stand_identity") ||
+                    showNpcSection("forms") ||
+                    showNpcSection("consciousness")) && (
                   <div
                     style={{
                       marginTop: 14,
@@ -5485,6 +5573,13 @@ const NPCSheet = ({
                       Flavor for NPCs — optional type / form / consciousness for
                       GM notes (not advancement).
                     </div>
+                    {showNpcSection("stand_identity") ? (
+                    <VisEditSection
+                      active={visibilityEditMode && isGM}
+                      visible={npcSectionVisible(playersSee, "stand_identity")}
+                      label="Stand identity"
+                      onToggle={() => togglePlayersSee("stand_identity")}
+                    >
                     <div
                       style={{
                         fontSize: "10px",
@@ -5555,6 +5650,15 @@ const NPCSheet = ({
                         }}
                       />
                     </label>
+                    </VisEditSection>
+                    ) : null}
+                    {showNpcSection("forms") ? (
+                    <VisEditSection
+                      active={visibilityEditMode && isGM}
+                      visible={npcSectionVisible(playersSee, "forms")}
+                      label="Forms"
+                      onToggle={() => togglePlayersSee("forms")}
+                    >
                     <div
                       style={{
                         fontSize: "10px",
@@ -5687,6 +5791,15 @@ const NPCSheet = ({
                           ))}
                       </div>
                     )}
+                    </VisEditSection>
+                    ) : null}
+                    {showNpcSection("consciousness") ? (
+                    <VisEditSection
+                      active={visibilityEditMode && isGM}
+                      visible={npcSectionVisible(playersSee, "consciousness")}
+                      label="Consciousness"
+                      onToggle={() => togglePlayersSee("consciousness")}
+                    >
                     <label
                       style={{
                         display: "block",
@@ -5716,11 +5829,18 @@ const NPCSheet = ({
                         ))}
                       </select>
                     </label>
+                    </VisEditSection>
+                    ) : null}
                   </div>
                 )}
 
                 {/* Heritage (inside unified PLAYBOOK card) */}
-                <div
+                {showNpcSection("heritage") ? (
+                <VisEditSection
+                  active={visibilityEditMode && isGM}
+                  visible={npcSectionVisible(playersSee, "heritage")}
+                  label="Heritage"
+                  onToggle={() => togglePlayersSee("heritage")}
                   style={{
                     marginTop: 14,
                     paddingTop: 14,
@@ -5975,7 +6095,8 @@ const NPCSheet = ({
                       )}
                     </div>
                   ) : null}
-                </div>
+                </VisEditSection>
+                ) : null}
 
                 {/* Stand Coin — inside PLAYBOOK card */}
                 {playbook === "STAND" && (
@@ -6204,23 +6325,12 @@ const NPCSheet = ({
                 )}
 
                 {/* Abilities — Stand-playbook NPCs only */}
-                {playbook === "STAND" && (
+                {playbook === "STAND" && showNpcSection("abilities") && (
                 <VisEditSection
-                  active={
-                    visibilityEditMode &&
-                    isGM &&
-                    !!sessionInvolvementForNpc
-                  }
-                  visible={
-                    !!sessionInvolvementForNpc?.show_all_abilities_to_players
-                  }
+                  active={visibilityEditMode && isGM}
+                  visible={npcSectionVisible(playersSee, "abilities")}
                   label="Abilities"
-                  onToggle={() =>
-                    patchThisNpcInvolvementField(
-                      "show_all_abilities_to_players",
-                      !sessionInvolvementForNpc?.show_all_abilities_to_players,
-                    )
-                  }
+                  onToggle={() => togglePlayersSee("abilities")}
                   style={{
                     marginTop: 14,
                     paddingTop: 14,
@@ -6239,14 +6349,19 @@ const NPCSheet = ({
                 )}
 
                 {/* Playbook Abilities — Hamon / Spin / Non-Bizarre */}
-                {playbook !== "STAND" && (
-                  <div
-                    style={{
-                      marginTop: 14,
-                      paddingTop: 14,
-                      borderTop: "1px solid #2d1f52",
-                    }}
-                  >
+                {playbook !== "STAND" && showNpcSection("abilities") && (
+                <VisEditSection
+                  active={visibilityEditMode && isGM}
+                  visible={npcSectionVisible(playersSee, "abilities")}
+                  label="Abilities"
+                  onToggle={() => togglePlayersSee("abilities")}
+                  style={{
+                    marginTop: 14,
+                    paddingTop: 14,
+                    borderTop: "1px solid #2d1f52",
+                  }}
+                >
+                  <div>
                     {playbook === "NON_BIZARRE" ? (
                       <>
                         <span style={S.lbl}>Non-Bizarre NPC</span>
@@ -6546,11 +6661,19 @@ const NPCSheet = ({
                       </>
                     )}
                   </div>
+                </VisEditSection>
                 )}
                 </div>
 
                 {/* PC Standing — own card under PLAYBOOK / Stand Abilities */}
-                <div style={S.card}>
+                {showNpcSection("pc_standing") ? (
+                <VisEditSection
+                  active={visibilityEditMode && isGM}
+                  visible={npcSectionVisible(playersSee, "pc_standing")}
+                  label="PC standing"
+                  onToggle={() => togglePlayersSee("pc_standing")}
+                  style={S.card}
+                >
                   <span style={S.lbl}>PC STANDING</span>
                   <div
                     style={{
@@ -6717,7 +6840,8 @@ const NPCSheet = ({
                       standing.
                     </div>
                   )}
-                </div>
+                </VisEditSection>
+                ) : null}
               </div>
             </div>
           </>
@@ -6975,6 +7099,30 @@ const NPCSheet = ({
                             factionPlayersSeeNpcs,
                             setFactionPlayersSeeNpcs,
                           ],
+                          [
+                            "identity",
+                            "Identity",
+                            factionPlayersSeeIdentity,
+                            setFactionPlayersSeeIdentity,
+                          ],
+                          [
+                            "inventory",
+                            "Inventory",
+                            factionPlayersSeeInventory,
+                            setFactionPlayersSeeInventory,
+                          ],
+                          [
+                            "contacts",
+                            "Contacts",
+                            factionPlayersSeeContacts,
+                            setFactionPlayersSeeContacts,
+                          ],
+                          [
+                            "faction_status",
+                            "Faction rep",
+                            factionPlayersSeeFactionStatus,
+                            setFactionPlayersSeeFactionStatus,
+                          ],
                         ].map(([key, label, checked, setter]) => (
                           <label
                             key={key}
@@ -7053,6 +7201,13 @@ const NPCSheet = ({
                   )}
                 </div>
                 <div className="npc-sheet-crew-faction-grid">
+                  {showFactionSection(factionPlayersSeeIdentity) ? (
+                  <VisEditSection
+                    active={visibilityEditMode && isGM}
+                    visible={factionPlayersSeeIdentity}
+                    label="Faction identity"
+                    onToggle={() => setFactionPlayersSeeIdentity((v) => !v)}
+                  >
                   <div>
                     <span style={S.lbl}>Faction Name</span>
                     <input
@@ -7063,6 +7218,15 @@ const NPCSheet = ({
                       disabled={!isGM}
                     />
                   </div>
+                  </VisEditSection>
+                  ) : null}
+                  {showFactionSection(factionPlayersSeeIdentity) ? (
+                  <VisEditSection
+                    active={visibilityEditMode && isGM}
+                    visible={factionPlayersSeeIdentity}
+                    label="Faction identity"
+                    onToggle={() => setFactionPlayersSeeIdentity((v) => !v)}
+                  >
                   <div>
                     <span style={S.lbl}>Faction Type</span>
                     <input
@@ -7073,6 +7237,15 @@ const NPCSheet = ({
                       disabled={!isGM}
                     />
                   </div>
+                  </VisEditSection>
+                  ) : null}
+                  {showFactionSection(factionPlayersSeeTier) ? (
+                  <VisEditSection
+                    active={visibilityEditMode && isGM}
+                    visible={factionPlayersSeeTier}
+                    label="Tier"
+                    onToggle={() => setFactionPlayersSeeTier((v) => !v)}
+                  >
                   <div>
                     <span style={S.lbl}>Level</span>
                     <input
@@ -7084,6 +7257,15 @@ const NPCSheet = ({
                       disabled={!isGM}
                     />
                   </div>
+                  </VisEditSection>
+                  ) : null}
+                  {showFactionSection(factionPlayersSeeHold) ? (
+                  <VisEditSection
+                    active={visibilityEditMode && isGM}
+                    visible={factionPlayersSeeHold}
+                    label="Hold"
+                    onToggle={() => setFactionPlayersSeeHold((v) => !v)}
+                  >
                   <div>
                     <span style={S.lbl}>Hold</span>
                     <select
@@ -7094,8 +7276,17 @@ const NPCSheet = ({
                     >
                       <option value="weak">Weak</option>
                       <option value="strong">Strong</option>
-                    </select>
+                      </select>
                   </div>
+                  </VisEditSection>
+                  ) : null}
+                  {showFactionSection(factionPlayersSeeReputation) ? (
+                  <VisEditSection
+                    active={visibilityEditMode && isGM}
+                    visible={factionPlayersSeeReputation}
+                    label="Reputation"
+                    onToggle={() => setFactionPlayersSeeReputation((v) => !v)}
+                  >
                   <div>
                     <span style={S.lbl}>Reputation</span>
                     <input
@@ -7106,6 +7297,8 @@ const NPCSheet = ({
                       disabled={!isGM}
                     />
                   </div>
+                  </VisEditSection>
+                  ) : null}
                 </div>
               </div>
             )}
@@ -7129,7 +7322,24 @@ const NPCSheet = ({
 
             <div className="npc-sheet-g2" style={S.g2}>
               {/* Contacts */}
-              <div style={S.card}>
+              {(faction
+                ? showFactionSection(factionPlayersSeeContacts)
+                : showNpcSection("contacts")) ? (
+              <VisEditSection
+                active={visibilityEditMode && isGM}
+                visible={
+                  faction
+                    ? factionPlayersSeeContacts
+                    : npcSectionVisible(playersSee, "contacts")
+                }
+                label="Contacts"
+                onToggle={() =>
+                  faction
+                    ? setFactionPlayersSeeContacts((v) => !v)
+                    : togglePlayersSee("contacts")
+                }
+                style={S.card}
+              >
                 <span style={S.lbl}>CONTACTS / ASSOCIATES</span>
                 <div
                   style={{
@@ -7543,11 +7753,21 @@ const NPCSheet = ({
                     ) : null}
                   </div>
                 </div>
-              </div>
+              </VisEditSection>
+              ) : null}
 
               {/* Faction Status */}
               <div>
-              <div style={S.card}>
+              {(faction
+                ? showFactionSection(factionPlayersSeeFactionStatus)
+                : true) ? (
+              <VisEditSection
+                active={visibilityEditMode && isGM && !!faction}
+                visible={faction ? factionPlayersSeeFactionStatus : true}
+                label="Faction reputation"
+                onToggle={() => setFactionPlayersSeeFactionStatus((v) => !v)}
+                style={S.card}
+              >
                 <span style={S.lbl}>Faction reputation</span>
                 <div
                   style={{
@@ -7727,12 +7947,20 @@ const NPCSheet = ({
                   −3 War · −2 Hostile · −1 Interfering · 0 Neutral · +1 Helpful
                   · +2 Friendly · +3 Allied
                 </div>
-              </div>
+              </VisEditSection>
+              ) : null}
 
-              {campaignId != null &&
+              {showNpcSection("crew_standing") &&
+              campaignId != null &&
               campaignId !== "" &&
               campaignCrews.length > 0 ? (
-                <div style={S.card}>
+                <VisEditSection
+                  active={visibilityEditMode && isGM}
+                  visible={npcSectionVisible(playersSee, "crew_standing")}
+                  label="Player crew standing"
+                  onToggle={() => togglePlayersSee("crew_standing")}
+                  style={S.card}
+                >
                   <span style={S.lbl}>Player Crew Standing</span>
                   <div
                     style={{
@@ -7871,7 +8099,10 @@ const NPCSheet = ({
                             +
                           </button>
                           </div>
-                          {facRep != null ? (
+                          {facRep != null &&
+                          (isGM ||
+                            (factionVisibleToPlayers &&
+                              factionPlayersSeeReputation)) ? (
                             <div
                               style={{
                                 fontSize: "10px",
@@ -7908,13 +8139,30 @@ const NPCSheet = ({
                     −3 War · −2 Hostile · −1 Interfering · 0 Neutral · +1
                     Helpful · +2 Friendly · +3 Allied
                   </div>
-                </div>
+                </VisEditSection>
               ) : null}
               </div>
             </div>
 
             {/* Inventory — NPC.inventory when no faction; Faction.inventory when faction selected */}
-            <div style={S.card}>
+            {(faction
+              ? showFactionSection(factionPlayersSeeInventory)
+              : isGM || playersSeeInventory !== false) ? (
+            <VisEditSection
+              active={visibilityEditMode && isGM}
+              visible={
+                faction
+                  ? factionPlayersSeeInventory
+                  : !!playersSeeInventory
+              }
+              label="Inventory"
+              onToggle={() =>
+                faction
+                  ? setFactionPlayersSeeInventory((v) => !v)
+                  : setPlayersSeeInventory((v) => !v)
+              }
+              style={S.card}
+            >
               <span style={S.lbl}>INVENTORY</span>
               {!faction ? (
                 <div style={{ minWidth: 0 }}>
@@ -7954,10 +8202,28 @@ const NPCSheet = ({
                   />
                 </div>
               )}
-            </div>
+            </VisEditSection>
+            ) : null}
 
             {/* Crew Notes */}
-            <div style={S.card}>
+            {(faction
+              ? showFactionSection(factionPlayersSeeNotes)
+              : showNpcSection("notes")) ? (
+            <VisEditSection
+              active={visibilityEditMode && isGM}
+              visible={
+                faction
+                  ? factionPlayersSeeNotes
+                  : npcSectionVisible(playersSee, "notes")
+              }
+              label={faction ? "Faction notes" : "GM notes"}
+              onToggle={() =>
+                faction
+                  ? setFactionPlayersSeeNotes((v) => !v)
+                  : togglePlayersSee("notes")
+              }
+              style={S.card}
+            >
               <span style={S.lbl}>Faction Notes</span>
               {faction ? (
                 <div
@@ -7991,7 +8257,8 @@ const NPCSheet = ({
                   outline: "none",
                 }}
               />
-            </div>
+            </VisEditSection>
+            ) : null}
           </div>
         )}
       </div>

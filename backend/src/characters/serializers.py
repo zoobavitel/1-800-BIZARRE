@@ -59,6 +59,12 @@ from .services.faction_status_visibility import (
     normalize_faction_status_visibility,
     redact_faction_status_for_player,
 )
+from .services.npc_section_visibility import (
+    normalize_npc_players_see,
+    npc_section_visible,
+    redact_npc_player_payload,
+    redact_npc_summary_for_player,
+)
 from .services.npc_stand_identity import (
     normalize_stand_consciousness,
     normalize_stand_forms,
@@ -550,6 +556,7 @@ class CrewSerializer(serializers.ModelSerializer):
             see_rep = bool(getattr(fac, "players_see_reputation", True))
             see_notes = bool(getattr(fac, "players_see_notes", True))
             see_npcs = bool(getattr(fac, "players_see_npcs", True))
+            see_identity = bool(getattr(fac, "players_see_identity", True))
             faction_image = ""
             if getattr(fac, "image", None):
                 try:
@@ -559,7 +566,7 @@ class CrewSerializer(serializers.ModelSerializer):
             row = {
                 "id": rel.id,
                 "faction_id": fac.id,
-                "faction_name": fac.name,
+                "faction_name": fac.name if show_all or see_identity else "",
                 "faction_image": faction_image,
                 "faction_image_url": getattr(fac, "image_url", "") or "",
                 "reputation_value": rel.reputation_value,
@@ -570,6 +577,12 @@ class CrewSerializer(serializers.ModelSerializer):
                 "players_see_reputation": see_rep,
                 "players_see_notes": see_notes,
                 "players_see_npcs": see_npcs,
+                "players_see_identity": see_identity,
+                "players_see_inventory": bool(getattr(fac, "players_see_inventory", True)),
+                "players_see_contacts": bool(getattr(fac, "players_see_contacts", True)),
+                "players_see_faction_status": bool(
+                    getattr(fac, "players_see_faction_status", True)
+                ),
             }
             if show_all:
                 row["faction_level"] = fac.level
@@ -1871,8 +1884,41 @@ class CharacterSerializer(serializers.ModelSerializer):
         model = Character
         fields = "__all__"
 
+    def _redact_npc_standing_for_player(self, instance, data):
+        request = self.context.get("request")
+        user = getattr(request, "user", None) if request else None
+        if user and getattr(user, "is_staff", False):
+            return
+        campaign = getattr(instance, "campaign", None)
+        if user and campaign is not None and campaign.gm_id == getattr(user, "id", None):
+            return
+        standing = data.get("npc_standing")
+        if not isinstance(standing, dict) or not standing:
+            return
+        ids = []
+        for key in standing:
+            text = str(key)
+            if text.isdigit():
+                ids.append(int(text))
+        if not ids:
+            return
+        hidden = set()
+        for npc_id, see, visible in NPC.objects.filter(id__in=ids).values_list(
+            "id", "players_see", "visible_to_players"
+        ):
+            if not visible or not npc_section_visible(see, "pc_standing"):
+                hidden.add(npc_id)
+        if not hidden:
+            return
+        data["npc_standing"] = {
+            key: value
+            for key, value in standing.items()
+            if not (str(key).isdigit() and int(str(key)) in hidden)
+        }
+
     def to_representation(self, instance):
         data = super().to_representation(instance)
+        self._redact_npc_standing_for_player(instance, data)
         rejected = getattr(self, "_rejected_sheet_fields", None)
         if rejected:
             data["rejected_fields"] = rejected
@@ -2834,9 +2880,26 @@ class NPCSummarySerializer(serializers.ModelSerializer):
             "image",
             "image_url",
             "visible_to_players",
+            "players_see",
             "crew_standing",
             "pc_standing",
         ]
+
+    def _summary_viewer_is_gm(self, instance):
+        request = self.context.get("request")
+        user = getattr(request, "user", None) if request else None
+        if not user or not getattr(user, "is_authenticated", False):
+            return False
+        if getattr(user, "is_staff", False):
+            return True
+        campaign = getattr(instance, "campaign", None)
+        return bool(campaign and campaign.gm_id == user.id)
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if self._summary_viewer_is_gm(instance):
+            return data
+        return redact_npc_summary_for_player(data, instance)
 
 class CrewCampaignSerializer(serializers.ModelSerializer):
     """Lightweight Crew serializer used inside CampaignSerializer."""
@@ -2976,6 +3039,9 @@ class FactionSerializer(serializers.ModelSerializer):
         if self._viewer_is_gm_or_staff(instance):
             return data
         show = bool(getattr(instance, "visible_to_players", False))
+        if not show or not getattr(instance, "players_see_identity", True):
+            data["name"] = ""
+            data["faction_type"] = ""
         if not show or not getattr(instance, "players_see_tier", True):
             data["level"] = None
         if not show or not getattr(instance, "players_see_hold", True):
@@ -2985,6 +3051,10 @@ class FactionSerializer(serializers.ModelSerializer):
         if not show or not getattr(instance, "players_see_notes", True):
             data["notes"] = ""
             data["crew_notes"] = ""
+        if not show or not getattr(instance, "players_see_inventory", True):
+            data["inventory"] = []
+        if not show or not getattr(instance, "players_see_contacts", True):
+            data["contacts"] = []
         if not show or not getattr(instance, "players_see_npcs", True):
             data["npcs"] = []
         else:
@@ -2992,12 +3062,17 @@ class FactionSerializer(serializers.ModelSerializer):
             data["npcs"] = [
                 n
                 for n in npcs
-                if isinstance(n, dict) and n.get("visible_to_players", True) is not False
+                if isinstance(n, dict)
+                and n.get("visible_to_players", True) is not False
+                and (
+                    not isinstance(n.get("players_see"), dict)
+                    or n["players_see"].get("faction_membership", True) is not False
+                )
             ]
         vis = normalize_faction_status_visibility(
             getattr(instance, "faction_status_visibility", None) or {}
         )
-        if not show:
+        if not show or not getattr(instance, "players_see_faction_status", True):
             data["faction_status"] = {}
             data["faction_status_visibility"] = {}
         else:
@@ -3032,6 +3107,10 @@ class FactionSerializer(serializers.ModelSerializer):
             "players_see_reputation",
             "players_see_notes",
             "players_see_npcs",
+            "players_see_identity",
+            "players_see_inventory",
+            "players_see_contacts",
+            "players_see_faction_status",
             "image",
             "image_url",
             "npcs",
@@ -3390,6 +3469,7 @@ class CampaignSerializer(serializers.ModelSerializer):
                 "stand_name": npc.stand_name or "",
                 "stand_coin_stats": npc.stand_coin_stats or {},
                 "abilities": npc.abilities or [],
+                "players_see": getattr(npc, "players_see", None) or {},
                 "vulnerability_clock_current": npc.vulnerability_clock_current,
                 "vulnerability_clock_max": npc.vulnerability_clock_max,
                 "conflict_clocks": npc.conflict_clocks or [],
@@ -3449,7 +3529,12 @@ class CampaignSerializer(serializers.ModelSerializer):
             else:
                 stand_stats = npc.stand_coin_stats or {}
         abilities = []
-        if inv.show_all_abilities_to_players:
+        campaign_abilities = npc_section_visible(
+            getattr(npc, "players_see", None), "abilities"
+        )
+        if not campaign_abilities:
+            abilities = []
+        elif inv.show_all_abilities_to_players:
             abilities = npc.abilities or []
         elif inv.revealed_ability_names:
             allowed = {str(name).strip().lower() for name in inv.revealed_ability_names}
@@ -3470,7 +3555,12 @@ class CampaignSerializer(serializers.ModelSerializer):
         return {
             "id": npc.id,
             "name": npc.name,
-            "stand_name": npc.stand_name or "",
+            "stand_name": (
+                (npc.stand_name or "")
+                if npc_section_visible(getattr(npc, "players_see", None), "stand_identity")
+                else ""
+            ),
+            "players_see": getattr(npc, "players_see", None) or {},
             "stand_coin_stats": stand_stats,
             "abilities": abilities,
             "vulnerability_clock_current": (
@@ -3828,6 +3918,7 @@ class NPCSerializer(serializers.ModelSerializer):
             "image_url",
             "visible_to_players",
             "players_see_inventory",
+            "players_see",
             "stand_description",
             "stand_appearance",
             "stand_manifestation",
@@ -3871,7 +3962,10 @@ class NPCSerializer(serializers.ModelSerializer):
             data["inventory"] = []
             data["items"] = []
             data["inventory_notes"] = ""
-        return data
+        return redact_npc_player_payload(data, instance)
+
+    def validate_players_see(self, value):
+        return normalize_npc_players_see(value)
 
     def create(self, validated_data):
         hamon_ids = validated_data.pop("hamon_ability_ids", [])

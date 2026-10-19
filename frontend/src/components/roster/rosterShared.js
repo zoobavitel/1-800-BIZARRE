@@ -1,3 +1,5 @@
+import { npcFactionMembershipVisible } from "../../utils/npcSectionVisibility";
+
 /** Shared expand panel chrome for roster PC/NPC/faction floats. */
 export const rosterExpandPanelChrome = {
   marginTop: 8,
@@ -47,10 +49,10 @@ function dedupeNpcsById(list) {
 /**
  * Filter faction/NPC roster groups for non-GM players.
  * - Faction shown when visible_to_players !== false
- * - NPCs nest under faction when players_see_npcs !== false and See on
- * - See-on NPCs from hidden factions (or players_see_npcs=false) promote to unaffiliated
+ * - NPCs nest under faction when players_see_npcs !== false, See on, and membership on
+ * - See-on NPCs from hidden factions (or players_see_npcs=false, or membership off) promote to unaffiliated
  * - True orphans with See on appear in unaffiliated
- * - Strip tier/hold/rep/notes fields players_see_* hides
+ * - Strip faction fields players_see_* hides
  */
 export function filterFactionRosterForPlayerView(factionGroups, unaffiliated) {
   const groups = Array.isArray(factionGroups) ? factionGroups : [];
@@ -81,9 +83,18 @@ export function filterFactionRosterForPlayerView(factionGroups, unaffiliated) {
       continue;
     }
 
+    const nested = [];
+    for (const n of npcs) {
+      if (!npcPlayerVisible(n)) continue;
+      if (!npcFactionMembershipVisible(n)) {
+        promoted.push(n);
+        continue;
+      }
+      nested.push(n);
+    }
     filteredGroups.push({
       faction: sanitizeFactionFieldsForPlayer(faction),
-      npcs: npcs.filter(npcPlayerVisible),
+      npcs: nested,
     });
   }
 
@@ -113,6 +124,19 @@ export function sanitizeFactionFieldsForPlayer(faction) {
   if (f.players_see_notes === false) {
     f.notes = "";
     f.crew_notes = "";
+  }
+  if (f.players_see_identity === false) {
+    f.name = "";
+    f.faction_type = "";
+  }
+  if (f.players_see_inventory === false) {
+    f.inventory = [];
+  }
+  if (f.players_see_contacts === false) {
+    f.contacts = [];
+  }
+  if (f.players_see_faction_status === false) {
+    f.faction_status = {};
   }
   return f;
 }
@@ -163,7 +187,16 @@ export function filterSessionFactionPairsForPlayer(
       filtered.push([fid, []]);
       continue;
     }
-    filtered.push([fid, list.filter(npcPlayerVisible)]);
+    const nested = [];
+    for (const n of list) {
+      if (!npcPlayerVisible(n)) continue;
+      if (!npcFactionMembershipVisible(n)) {
+        promoted.push(n);
+        continue;
+      }
+      nested.push(n);
+    }
+    filtered.push([fid, nested]);
   }
   const orphans = (Array.isArray(ungrouped) ? ungrouped : []).filter(
     npcPlayerVisible,

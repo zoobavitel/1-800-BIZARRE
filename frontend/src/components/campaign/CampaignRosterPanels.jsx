@@ -217,6 +217,10 @@ export default function CampaignRosterPanels({
         players_see_reputation: true,
         players_see_notes: true,
         players_see_npcs: true,
+        players_see_identity: true,
+        players_see_inventory: true,
+        players_see_contacts: true,
+        players_see_faction_status: true,
         campaign: campaign.id,
       });
       setQuickFactionName("");
