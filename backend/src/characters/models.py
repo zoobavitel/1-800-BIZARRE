@@ -128,6 +128,26 @@ class Faction(models.Model):
         default=True,
         help_text="When true (and visible_to_players), players may see NPCs in this faction.",
     )
+    players_see_identity = models.BooleanField(
+        default=True,
+        help_text="When true (and visible_to_players), players may see faction name and type.",
+    )
+    players_see_inventory = models.BooleanField(
+        default=True,
+        help_text="When true (and visible_to_players), players may see shared faction inventory.",
+    )
+    players_see_contacts = models.BooleanField(
+        default=True,
+        help_text="When true (and visible_to_players), players may see faction contacts.",
+    )
+    players_see_faction_status = models.BooleanField(
+        default=True,
+        help_text=(
+            "When true (and visible_to_players), players may see this faction's "
+            "standing toward other factions. Per-edge faction_status_visibility "
+            "still applies."
+        ),
+    )
 
     # Shared faction data — all NPCs in this faction share these fields
     inventory = models.JSONField(
@@ -540,6 +560,16 @@ class NPC(models.Model):
         help_text=(
             "When True (and the NPC is visible_to_players), players may "
             "see this NPC's inventory on the sheet."
+        ),
+    )
+    players_see = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=(
+            "Section key → bool for campaign player visibility "
+            "(playbook, abilities, pc_standing, faction_membership, notes, "
+            "stand_identity, heritage, forms, consciousness, contacts, "
+            "crew_standing). Missing key means visible."
         ),
     )
 
