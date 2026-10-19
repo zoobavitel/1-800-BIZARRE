@@ -48,6 +48,10 @@ const HomeFactionInlineEditor = ({
     players_see_reputation: faction.players_see_reputation !== false,
     players_see_notes: faction.players_see_notes !== false,
     players_see_npcs: faction.players_see_npcs !== false,
+    players_see_identity: faction.players_see_identity !== false,
+    players_see_inventory: faction.players_see_inventory !== false,
+    players_see_contacts: faction.players_see_contacts !== false,
+    players_see_faction_status: faction.players_see_faction_status !== false,
     notes: faction.notes || "",
   });
   const [imageFile, setImageFile] = useState(null);
@@ -181,6 +185,10 @@ const HomeFactionInlineEditor = ({
         players_see_reputation: form.players_see_reputation !== false,
         players_see_notes: form.players_see_notes !== false,
         players_see_npcs: form.players_see_npcs !== false,
+        players_see_identity: form.players_see_identity !== false,
+        players_see_inventory: form.players_see_inventory !== false,
+        players_see_contacts: form.players_see_contacts !== false,
+        players_see_faction_status: form.players_see_faction_status !== false,
         notes: form.notes || "",
       };
       if (imageFile) {
@@ -471,6 +479,10 @@ const HomeFactionInlineEditor = ({
             ["players_see_reputation", "Reputation"],
             ["players_see_notes", "Notes"],
             ["players_see_npcs", "NPCs"],
+            ["players_see_identity", "Identity"],
+            ["players_see_inventory", "Inventory"],
+            ["players_see_contacts", "Contacts"],
+            ["players_see_faction_status", "Faction rep"],
           ].map(([key, label]) => (
             <label key={key} className="f-edit-field f-edit-field-checkbox">
               <input

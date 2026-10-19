@@ -68,4 +68,29 @@ describe("derivePartyFacingSessionNpc", () => {
     expect(display.vulnerability_clock_max).toBe(8);
     expect(display.vulnerability_clock_current).toBe(3);
   });
+
+  test("campaign abilities flag hides abilities even when the session shows them", () => {
+    const npc = {
+      id: 4,
+      name: "Boss",
+      stand_name: "Star",
+      stand_coin_stats: {},
+      abilities: [{ name: "Secret" }],
+      vulnerability_clock_current: 0,
+      vulnerability_clock_max: 0,
+      conflict_clocks: [],
+      alt_clocks: [],
+      progress_clocks: [],
+      show_clocks_to_players: false,
+      show_vulnerability_clock_to_players: false,
+      show_stand_coin_to_players: false,
+      show_all_abilities_to_players: true,
+      revealed_ability_names: [],
+      players_see: { abilities: false, stand_identity: false },
+    };
+    const { display, showCard } = derivePartyFacingSessionNpc(npc);
+    expect(display.abilities).toEqual([]);
+    expect(display.stand_name).toBe("");
+    expect(showCard).toBe(false);
+  });
 });

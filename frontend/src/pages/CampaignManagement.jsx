@@ -1213,6 +1213,10 @@ function CampaignDetail({
       players_see_reputation: true,
       players_see_notes: true,
       players_see_npcs: true,
+      players_see_identity: true,
+      players_see_inventory: true,
+      players_see_contacts: true,
+      players_see_faction_status: true,
       image: null,
       imageFile: null,
     });
@@ -1252,6 +1256,10 @@ function CampaignDetail({
       players_see_reputation: f.players_see_reputation !== false,
       players_see_notes: f.players_see_notes !== false,
       players_see_npcs: f.players_see_npcs !== false,
+      players_see_identity: f.players_see_identity !== false,
+      players_see_inventory: f.players_see_inventory !== false,
+      players_see_contacts: f.players_see_contacts !== false,
+      players_see_faction_status: f.players_see_faction_status !== false,
       image: f.image || null,
       imageFile: null,
       npcs: f.npcs || [],
@@ -1441,6 +1449,10 @@ function CampaignDetail({
       players_see_reputation: f.players_see_reputation !== false,
       players_see_notes: f.players_see_notes !== false,
       players_see_npcs: f.players_see_npcs !== false,
+      players_see_identity: f.players_see_identity !== false,
+      players_see_inventory: f.players_see_inventory !== false,
+      players_see_contacts: f.players_see_contacts !== false,
+      players_see_faction_status: f.players_see_faction_status !== false,
       campaign: campaign.id,
     };
     if (f.imageFile) {
