@@ -136,10 +136,22 @@ class CharacterViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         if self.request.query_params.get("mine") == "true":
-            return Character.objects.select_related("crew", "campaign").filter(
+            qs = Character.objects.select_related("crew", "campaign").filter(
                 user=user
             )
-        return _character_queryset_for_user(user).select_related("crew", "campaign")
+        else:
+            qs = _character_queryset_for_user(user).select_related(
+                "crew", "campaign"
+            )
+        # ?campaign=<id>: one campaign's PCs only (GM session panel). Narrows the
+        # permission queryset above, so it never widens what a user can see.
+        campaign_id = self.request.query_params.get("campaign")
+        if campaign_id is not None and self.action == "list":
+            try:
+                qs = qs.filter(campaign_id=int(campaign_id))
+            except (TypeError, ValueError):
+                return qs.none()
+        return qs
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)

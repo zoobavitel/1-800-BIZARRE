@@ -475,8 +475,33 @@ export default function CharacterPage({
   const charTabsRef = useRef(charTabs);
   const charTabUnsavedMetaRef = useRef(charTabUnsavedMeta);
   const sheetSseUnsubRef = useRef(null);
-  /** Bumps when remote sync completes so CharacterSheet refetches session rolls. */
-  const [sheetPollTick, setSheetPollTick] = useState(0);
+  /**
+   * Scoped sync counters for the open sheet. Each bumps only when its data may
+   * have changed, so one roll does not refetch every panel on every sheet:
+   * full (campaign-wide / catch-up), character (open PC refetched),
+   * ownRolls (open PC's rolls or XP tracker), groupActions, rolls (session list).
+   */
+  const [sheetSync, setSheetSync] = useState({
+    full: 0,
+    character: 0,
+    ownRolls: 0,
+    groupActions: 0,
+    rolls: 0,
+  });
+  const bumpSheetSync = useCallback((keys) => {
+    if (!keys.length) return;
+    setSheetSync((prev) => {
+      const next = { ...prev };
+      for (const k of keys) next[k] += 1;
+      return next;
+    });
+  }, []);
+  const sheetPollTick =
+    sheetSync.full +
+    sheetSync.character +
+    sheetSync.ownRolls +
+    sheetSync.groupActions +
+    sheetSync.rolls;
   const [sheetRealtimeReason, setSheetRealtimeReason] = useState("");
   const SHEET_ABORT_SSE_REASONS = useMemo(
     () =>
@@ -568,8 +593,10 @@ export default function CharacterPage({
    * Refresh campaigns list and merge full character detail into every open tab (GM edits, session P/E, etc.).
    * Always GET /characters/:id/ per open PC so stats stay aligned with the server.
    */
-  const syncOpenSheetsFromServer = useCallback(async (onlyCharacterIds = null) => {
+  const syncOpenSheetsFromServer = useCallback(async (onlyCharacterIds = null, extraSyncKeys = []) => {
     // onlyCharacterIds: refetch just these open sheets and skip the list GETs.
+    // extraSyncKeys: more sheetSync counters to bump with the same render, so an
+    // effect listening to two counters does not fetch twice.
     const only = onlyCharacterIds ? new Set(onlyCharacterIds) : null;
     let byId = new Map();
     if (!only) {
@@ -625,13 +652,18 @@ export default function CharacterPage({
           }),
         );
         setCharTabs(next);
-        setSheetPollTick((x) => x + 1);
+        bumpSheetSync([only ? "character" : "full", ...extraSyncKeys]);
       })();
       return prev;
     });
-  }, []);
+  }, [bumpSheetSync]);
 
-  const refreshCampaigns = syncOpenSheetsFromServer;
+  // Full sync, no arguments. Callers pass event or row objects (e.g.
+  // onFactionChange(created)), which must not reach onlyCharacterIds.
+  const refreshCampaigns = useCallback(
+    () => syncOpenSheetsFromServer(),
+    [syncOpenSheetsFromServer],
+  );
 
   // While the document is hidden, skip network sync; on focus, pull full sheet + campaign state.
   useEffect(() => {
@@ -1555,10 +1587,16 @@ export default function CharacterPage({
         if (plan.full) {
           await syncOpenSheetsFromServer();
         } else {
+          const extra = [];
+          if (plan.ownRolls) extra.push("ownRolls");
+          if (plan.groupActions) extra.push("groupActions");
+          if (plan.rolls) extra.push("rolls");
           if (plan.characterIds.length) {
-            await syncOpenSheetsFromServer(plan.characterIds);
+            // One bump for the character refetch and the scoped counters.
+            await syncOpenSheetsFromServer(plan.characterIds, extra);
+          } else {
+            bumpSheetSync(extra);
           }
-          if (plan.rolls) setSheetPollTick((x) => x + 1);
         }
       } finally {
         inFlight = false;
@@ -1591,6 +1629,7 @@ export default function CharacterPage({
     mode,
     campaignIdForRealtime,
     syncOpenSheetsFromServer,
+    bumpSheetSync,
     SHEET_ABORT_SSE_REASONS,
   ]);
 
@@ -2324,6 +2363,7 @@ export default function CharacterPage({
             onCampaignRefresh={refreshCampaigns}
             onCharacterReloaded={handleCharacterReloaded}
             sessionDataPollTick={sheetPollTick}
+            sheetSync={sheetSync}
             sheetRealtimeReason={sheetRealtimeReason}
             onSheetRealtimeReasonHandled={() => setSheetRealtimeReason("")}
             onDraftMetaChange={(meta) => {
