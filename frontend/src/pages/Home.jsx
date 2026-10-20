@@ -11,7 +11,6 @@ import {
   campaignAPI,
   factionAPI,
   npcAPI,
-  siteStatsAPI,
   transformBackendToFrontend,
 } from "../features/character-sheet";
 import { getUserAvatarSrc } from "../utils/homeAvatar";
@@ -21,10 +20,7 @@ import {
   flattenPatchNotesPreview,
   sortPatchNotesEntries,
 } from "../utils/patchNotesPreview";
-import {
-  buildSessionScatterPoints,
-  buildBarChartRows,
-} from "../utils/homeChartData";
+import { buildSessionScatterPoints } from "../utils/homeChartData";
 import {
   visibleCampaignsForHome,
   visibleCharactersForHome,
@@ -38,7 +34,6 @@ import {
   homeCardGridColumnCount,
 } from "../utils/homeCardGrid";
 import HomeSessionScatterChart from "../components/home/HomeSessionScatterChart";
-import HomeStatsBarChart from "../components/home/HomeStatsBarChart";
 import HomeStandCoin from "../components/home/HomeStandCoin";
 import HomeFactionInlineEditor from "../components/home/HomeFactionInlineEditor";
 import HomeCampaignCard from "../components/home/HomeCampaignCard";
@@ -114,8 +109,6 @@ const HomePage = ({
   const [invitationError, setInvitationError] = useState(null);
   const [npcs, setNpcs] = useState([]);
   const [npcsLoading, setNpcsLoading] = useState(true);
-  const [siteStats, setSiteStats] = useState(null);
-  const [siteStatsLoading, setSiteStatsLoading] = useState(true);
   const [openHeroPill, setOpenHeroPill] = useState(null);
   const [expandedFactionId, setExpandedFactionId] = useState(null);
   const [showAllCharacters, setShowAllCharacters] = useState(false);
@@ -170,30 +163,6 @@ const HomePage = ({
 
   useEffect(() => {
     if (!user) {
-      setSiteStats(null);
-      setSiteStatsLoading(false);
-      return undefined;
-    }
-    let cancelled = false;
-    setSiteStatsLoading(true);
-    siteStatsAPI
-      .getSiteStats()
-      .then((data) => {
-        if (!cancelled && data && typeof data === "object") setSiteStats(data);
-      })
-      .catch(() => {
-        if (!cancelled) setSiteStats(null);
-      })
-      .finally(() => {
-        if (!cancelled) setSiteStatsLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [user]);
-
-  useEffect(() => {
-    if (!user) {
       setCampaigns([]);
       setCampaignsLoading(false);
       setInvitations([]);
@@ -230,17 +199,6 @@ const HomePage = ({
     [],
   );
 
-  const liveStats = useMemo(
-    () => ({
-      activeCampaigns: siteStats?.active_campaigns ?? 0,
-      sessionCount: siteStats?.session_count ?? 0,
-      crewCount: siteStats?.crew_count ?? 0,
-      pcCount: siteStats?.pc_count ?? 0,
-      npcCount: siteStats?.npc_count ?? 0,
-    }),
-    [siteStats],
-  );
-
   const sessionScatter = useMemo(
     () => buildSessionScatterPoints(campaigns),
     [campaigns],
@@ -268,20 +226,6 @@ const HomePage = ({
       }),
     [npcs, campaigns, showAllNpcs, cardPreviewLimit],
   );
-  const barChartRows = useMemo(() => buildBarChartRows(liveStats), [liveStats]);
-  const barChartLoading = siteStatsLoading;
-
-  const playbookLine = useMemo(() => {
-    const pc = siteStats?.playbook_counts;
-    if (!pc) return "—";
-    return `Stand ${pc.STAND ?? 0} · Hamon ${pc.HAMON ?? 0} · Spin ${pc.SPIN ?? 0}`;
-  }, [siteStats]);
-
-  const topHeritagesLine = useMemo(() => {
-    const list = siteStats?.top_heritages;
-    if (!Array.isArray(list) || list.length === 0) return "—";
-    return list.map((h) => `${h.name} (${h.count})`).join(", ");
-  }, [siteStats]);
 
   const gmFactionGroups = useMemo(
     () => buildGmFactionGroupsForHome(campaigns, user?.id),
@@ -1094,51 +1038,10 @@ const HomePage = ({
       <section className="home-stats-section">
         <div className="home-stats-inner">
           <div className="hero-art fade-up d3">
-            <div className="hero-art-ghost">VOL.1</div>
-            <div className="hero-stats">
-              <div className="hero-stats-title">Live Stats</div>
-              <div className="hero-stat-row">
-                <span className="hero-stat-label">
-                  <span className="hero-stat-dot hero-stat-dot-green" />
-                  Campaigns
-                </span>
-                <span className="hero-stat-value">
-                  {liveStats.activeCampaigns} active
-                </span>
-              </div>
-              <div className="hero-stat-row">
-                <span className="hero-stat-label">
-                  <span className="hero-stat-dot hero-stat-dot-orange" />
-                  PCs / NPCs
-                </span>
-                <span className="hero-stat-value">
-                  {liveStats.pcCount} / {liveStats.npcCount}
-                </span>
-              </div>
-              <div className="hero-stat-row hero-stat-row-tall">
-                <span className="hero-stat-label">Stand / Hamon / Spin</span>
-                <span className="hero-stat-value hero-stat-value-compact">
-                  {playbookLine}
-                </span>
-              </div>
-              <div className="hero-stat-row hero-stat-row-tall">
-                <span className="hero-stat-label">Top heritages</span>
-                <span className="hero-stat-value hero-stat-value-compact">
-                  {topHeritagesLine}
-                </span>
-              </div>
-            </div>
             <HomeSessionScatterChart
               data={sessionScatter}
               loading={campaignsLoading}
             />
-            <HomeStatsBarChart data={barChartRows} loading={barChartLoading} />
-            <div className="hero-art-label">
-              <div className="hero-art-label-title">STAND USERS</div>
-              <div className="hero-art-label-sub">
-                A Bizarre Adventure TTRPG
-              </div>
-            </div>
           </div>
         </div>
       </section>
