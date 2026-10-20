@@ -152,6 +152,9 @@ CORS_ALLOW_HEADERS = list(default_headers) + [
 SSE_STREAM_MAX_SECONDS = float(os.environ.get("SSE_STREAM_MAX_SECONDS", "45"))
 SSE_HEARTBEAT_SECONDS = float(os.environ.get("SSE_HEARTBEAT_SECONDS", "15"))
 SSE_CLIENT_RETRY_MS = int(os.environ.get("SSE_CLIENT_RETRY_MS", "2000"))
+# Live SSE streams one user may hold per campaign; older ones end (frees threads).
+SSE_MAX_STREAMS_PER_USER = int(os.environ.get("SSE_MAX_STREAMS_PER_USER", "4"))
+SSE_SLOT_CHECK_SECONDS = float(os.environ.get("SSE_SLOT_CHECK_SECONDS", "5"))
 # Live default. Perf sets perf:bizarre:campaign: so pub/sub cannot hit real campaigns.
 REALTIME_CHANNEL_PREFIX = os.environ.get(
     "REALTIME_CHANNEL_PREFIX", "bizarre:campaign:"
