@@ -12,7 +12,18 @@ from .deps import ensure_pdf_dependencies
 
 logger = logging.getLogger(__name__)
 
-PORTRAIT_RECT = (0.45 * 72, 620, 90, 110)  # x, y, w, h in points (approx top-left)
+# Portrait sits in a right-hand rail beside the Identity block (x, y, w, h in points).
+# Form fields always draw on top of page content, so the box must not overlap
+# any page-1 field. Identity fields end at x=482pt (PC) / 428pt (NPC); this box
+# spans x=495-580pt. Top aligns with the "Identity" heading.
+_PAGE_W, _PAGE_H, _MARGIN = 612, 792, 0.45 * 72
+_PORTRAIT_W, _PORTRAIT_H = 85, 110
+PORTRAIT_RECT = (
+    _PAGE_W - _MARGIN - _PORTRAIT_W,
+    _PAGE_H - _MARGIN - 22 + 9 - _PORTRAIT_H,
+    _PORTRAIT_W,
+    _PORTRAIT_H,
+)
 
 
 def sanitize_filename(name: str, fallback: str = "character") -> str:
@@ -61,7 +72,7 @@ def _overlay_portrait(pdf_bytes: bytes, portrait_bytes: bytes) -> bytes:
             width=w,
             height=h,
             preserveAspectRatio=True,
-            anchor="sw",
+            anchor="ne",
         )
     except Exception:
         logger.exception("Portrait overlay failed; returning PDF without image")
