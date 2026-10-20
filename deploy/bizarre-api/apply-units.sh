@@ -35,6 +35,43 @@ install_unit() {
   fi
 }
 
+pool_unit_changed=0
+
+# After install-ha.sh, bizarre-lb owns :8000 and gunicorn@N serves on 800N.
+# The legacy gunicorn.service is disabled then and must stay stopped.
+if systemctl is-active --quiet bizarre-lb; then
+  if ! cmp -s "$SRC/gunicorn@.service" "$DEST/gunicorn@.service"; then
+    install -m 644 -o root -g root "$SRC/gunicorn@.service" "$DEST/gunicorn@.service"
+    echo "Installed gunicorn@.service"
+    reloaded_daemon=1
+    pool_unit_changed=1
+  fi
+  install_unit celery-worker.service
+  if [ "$reloaded_daemon" = 1 ]; then
+    systemctl daemon-reload
+  fi
+
+  # One instance at a time. Caddy retries on the others while one cycles.
+  for i in 1 2 3 4; do
+    systemctl is-active --quiet "gunicorn@$i" || continue
+    if [ "$pool_unit_changed" = 1 ]; then
+      echo "gunicorn@$i: unit changed, restart."
+      systemctl restart "gunicorn@$i"
+    else
+      echo "gunicorn@$i: graceful reload."
+      systemctl reload "gunicorn@$i"
+    fi
+    if ! "$PROD_ROOT/.venv/bin/python" "$SRC/ha_scale_run.py" wait "$((8000 + i))"; then
+      echo "gunicorn@$i did not pass health. Stopping the rollout." >&2
+      systemctl status "gunicorn@$i" --no-pager -l | tail -n 30 >&2 || true
+      exit 1
+    fi
+  done
+  systemctl restart celery-worker || true
+  echo "Pool updated."
+  exit 0
+fi
+
 install_unit gunicorn.service
 install_unit celery-worker.service
 if [ "$reloaded_daemon" = 1 ]; then

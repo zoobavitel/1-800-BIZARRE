@@ -7,6 +7,7 @@ from rest_framework_nested import routers as nested_routers
 from django.conf import settings
 from django.conf.urls.static import static
 from django.views.static import serve
+from app.health import health
 from characters.views_sse import campaign_events_stream
 from characters.views import (
     UserProfileViewSet, HeritageViewSet, ViceViewSet, AbilityViewSet,
@@ -66,6 +67,7 @@ router.register(r'crew-upgrades', CrewUpgradeViewSet)
 
 urlpatterns = [
     path('', home),
+    path('api/health/', health, name='health'),
     path(
         'api/campaigns/<int:campaign_id>/events/',
         campaign_events_stream,
