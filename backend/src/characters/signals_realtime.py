@@ -30,12 +30,16 @@ from .models import (
 from .realtime import broadcast_campaign_update
 
 
-def _broadcast_after_commit(campaign_id, reason: str) -> None:
+def _broadcast_after_commit(
+    campaign_id, reason: str, character_id=None, session_id=None
+) -> None:
     if not campaign_id:
         return
 
     def _send():
-        broadcast_campaign_update(campaign_id, reason)
+        broadcast_campaign_update(
+            campaign_id, reason, character_id=character_id, session_id=session_id
+        )
 
     transaction.on_commit(_send)
 
@@ -88,7 +92,9 @@ def _campaign_id_for_xp(instance):
 @receiver(post_save, sender=Session)
 def _session_saved_broadcast(sender, instance, **kwargs):
     if instance.campaign_id:
-        _broadcast_after_commit(instance.campaign_id, "session")
+        _broadcast_after_commit(
+            instance.campaign_id, "session", session_id=instance.id
+        )
 
 
 @receiver(post_save, sender=Campaign)
@@ -99,21 +105,28 @@ def _campaign_saved_broadcast(sender, instance, **kwargs):
 @receiver(post_save, sender=Character)
 def _character_saved_broadcast(sender, instance, **kwargs):
     if instance.campaign_id:
-        _broadcast_after_commit(instance.campaign_id, "character")
+        _broadcast_after_commit(
+            instance.campaign_id, "character", character_id=instance.id
+        )
 
 
 @receiver(post_save, sender=Roll)
 def _roll_saved_broadcast(sender, instance, **kwargs):
     cid = _campaign_id_for_session(instance.session_id)
     if cid:
-        _broadcast_after_commit(cid, "roll")
+        _broadcast_after_commit(
+            cid,
+            "roll",
+            character_id=instance.character_id,
+            session_id=instance.session_id,
+        )
 
 
 @receiver(post_save, sender=GroupAction)
 def _group_action_saved_broadcast(sender, instance, **kwargs):
     cid = _campaign_id_for_session(instance.session_id)
     if cid:
-        _broadcast_after_commit(cid, "group_action")
+        _broadcast_after_commit(cid, "group_action", session_id=instance.session_id)
 
 
 @receiver(post_save, sender=ProgressClock)
@@ -121,7 +134,9 @@ def _group_action_saved_broadcast(sender, instance, **kwargs):
 def _progress_clock_changed_broadcast(sender, instance, **kwargs):
     cid = _campaign_id_for_clock(instance)
     if cid:
-        _broadcast_after_commit(cid, "progress_clock")
+        _broadcast_after_commit(
+            cid, "progress_clock", character_id=instance.character_id
+        )
 
 
 @receiver(post_save, sender=ExperienceTracker)
@@ -134,7 +149,9 @@ def _experience_tracker_changed_broadcast(sender, instance, **kwargs):
     """
     cid = _campaign_id_for_xp(instance)
     if cid:
-        _broadcast_after_commit(cid, "experience_tracker")
+        _broadcast_after_commit(
+            cid, "experience_tracker", character_id=instance.character_id
+        )
 
 
 @receiver(post_save, sender=PendingAdvance)
@@ -142,7 +159,9 @@ def _experience_tracker_changed_broadcast(sender, instance, **kwargs):
 def _pending_advance_changed_broadcast(sender, instance, **kwargs):
     cid = _campaign_id_for_xp(instance)
     if cid:
-        _broadcast_after_commit(cid, "pending_advance")
+        _broadcast_after_commit(
+            cid, "pending_advance", character_id=instance.character_id
+        )
 
 
 @receiver(post_save, sender=AdvancementPlanItem)
@@ -150,7 +169,9 @@ def _pending_advance_changed_broadcast(sender, instance, **kwargs):
 def _advancement_plan_item_changed_broadcast(sender, instance, **kwargs):
     cid = _campaign_id_for_xp(instance)
     if cid:
-        _broadcast_after_commit(cid, "advancement_plan")
+        _broadcast_after_commit(
+            cid, "advancement_plan", character_id=instance.character_id
+        )
 
 
 @receiver(post_save, sender=Crew)
