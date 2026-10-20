@@ -20020,18 +20020,8 @@ const CharacterSheetWrapper = ({
                                         return next;
                                       });
                                     }
-                                    setDiceResult((prev) =>
-                                      prev
-                                        ? {
-                                            ...prev,
-                                            resistanceApplied: true,
-                                            resistanceHarmReductionCount:
-                                              (Number(
-                                                prev.resistanceHarmReductionCount,
-                                              ) || 0) + 1,
-                                          }
-                                        : prev,
-                                    );
+                                    setResistanceHarmTarget("");
+                                    setDiceResult(null);
                                   }}
                                   style={{
                                     ...S.btn,
@@ -20133,20 +20123,8 @@ const CharacterSheetWrapper = ({
                                         applyStressCost(cost);
                                       }
                                     }
-                                    setDiceResult((prev) =>
-                                      prev
-                                        ? {
-                                            ...prev,
-                                            resistanceApplied: true,
-                                            mitigationAbility:
-                                              resistanceMitigationChoice || "",
-                                            resistanceHarmReductionCount:
-                                              (Number(
-                                                prev.resistanceHarmReductionCount,
-                                              ) || 0) + 1,
-                                          }
-                                        : prev,
-                                    );
+                                    setResistanceHarmTarget("");
+                                    setDiceResult(null);
                                   }}
                                   style={{
                                     ...S.btn,
