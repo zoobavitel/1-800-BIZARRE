@@ -18,7 +18,8 @@ import { nextReconnectDelay } from "./campaignEventsReconnect.mjs";
 
 /**
  * @param {number} campaignId
- * @param {{ onUpdate?: (reason?: string) => void }} handlers
+ * @param {{ onUpdate?: (reason?: string, event?: object) => void }} handlers
+ *   `event` is the raw message; it may carry `character_id` / `session_id`.
  * @returns {(() => void) & { getLastEventAt?: () => number }}
  */
 export function subscribeCampaignEvents(campaignId, { onUpdate } = {}) {
@@ -93,6 +94,7 @@ export function subscribeCampaignEvents(campaignId, { onUpdate } = {}) {
     next.onmessage = (e) => {
       try {
         const data = JSON.parse(e.data);
+        const prevEventAt = lastEventAt;
         if (
           data &&
           (data.type === "campaign_update" ||
@@ -103,13 +105,19 @@ export function subscribeCampaignEvents(campaignId, { onUpdate } = {}) {
         }
         if (data && data.type === "connected") {
           // Catch events lost in the reconnect gap (poll is skipped while SSE looks healthy).
-          if (sawConnected) {
-            onUpdate?.("update");
+          // A routine rollover (server closes every ~45s, we reopen in ~3s) leaves
+          // a short gap. Refetching on each one made every client pull all sheets
+          // every 45s, so only refetch when the gap was long enough to miss a lot.
+          if (
+            sawConnected &&
+            Date.now() - prevEventAt > RECONNECT_REFETCH_GAP_MS
+          ) {
+            onUpdate?.("update", { reason: "update" });
           }
           sawConnected = true;
         }
         if (data && data.type === "campaign_update") {
-          onUpdate?.(data.reason || "update");
+          onUpdate?.(data.reason || "update", data);
         }
         // Opening frame is not proof the stream lived. Reset only after a heartbeat.
         if (data && data.type === "heartbeat") {
@@ -148,6 +156,9 @@ export function subscribeCampaignEvents(campaignId, { onUpdate } = {}) {
   unsubscribe.getLastEventAt = () => lastEventAt;
   return unsubscribe;
 }
+
+/** Reconnect gaps longer than this (ms) trigger a catch-up refetch. Heartbeat is ~15s. */
+const RECONNECT_REFETCH_GAP_MS = 20000;
 
 /** Skip interval poll when SSE delivered traffic within this window (ms). */
 export const SSE_HEALTH_SKIP_POLL_MS = 35000;
