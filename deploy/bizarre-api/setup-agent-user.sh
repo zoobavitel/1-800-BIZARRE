@@ -86,8 +86,8 @@ SUDOERS="/etc/sudoers.d/90-bizarre-agent"
 cat >"$SUDOERS" <<EOF
 # Managed by setup-agent-user.sh — agent triage only
 Defaults:${AGENT_USER} !authenticate
-${AGENT_USER} ALL=(root) NOPASSWD: /usr/bin/systemctl status gunicorn, /usr/bin/systemctl status gunicorn *, /usr/bin/systemctl status celery-worker, /usr/bin/systemctl status celery-worker *, /usr/bin/systemctl status caddy, /usr/bin/systemctl status caddy *, /usr/bin/systemctl status bizarre-*, /usr/bin/systemctl status bizarre-* *
-${AGENT_USER} ALL=(root) NOPASSWD: /usr/bin/journalctl -u gunicorn, /usr/bin/journalctl -u gunicorn *, /usr/bin/journalctl -u celery-worker, /usr/bin/journalctl -u celery-worker *, /usr/bin/journalctl -u caddy, /usr/bin/journalctl -u caddy *, /usr/bin/journalctl -u bizarre-*, /usr/bin/journalctl -u bizarre-* *
+${AGENT_USER} ALL=(root) NOPASSWD: /usr/bin/systemctl status gunicorn, /usr/bin/systemctl status gunicorn *, /usr/bin/systemctl status gunicorn@*, /usr/bin/systemctl status gunicorn@* *, /usr/bin/systemctl status celery-worker, /usr/bin/systemctl status celery-worker *, /usr/bin/systemctl status caddy, /usr/bin/systemctl status caddy *, /usr/bin/systemctl status bizarre-*, /usr/bin/systemctl status bizarre-* *
+${AGENT_USER} ALL=(root) NOPASSWD: /usr/bin/journalctl -u gunicorn, /usr/bin/journalctl -u gunicorn *, /usr/bin/journalctl -u gunicorn@*, /usr/bin/journalctl -u gunicorn@* *, /usr/bin/journalctl -u celery-worker, /usr/bin/journalctl -u celery-worker *, /usr/bin/journalctl -u caddy, /usr/bin/journalctl -u caddy *, /usr/bin/journalctl -u bizarre-*, /usr/bin/journalctl -u bizarre-* *
 EOF
 chmod 440 "$SUDOERS"
 visudo -cf "$SUDOERS"

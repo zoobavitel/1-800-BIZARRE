@@ -1,0 +1,35 @@
+[Unit]
+Description=gunicorn instance %i for 1-800-BIZARRE (Django)
+After=network.target postgresql.service redis-server.service
+# One master per instance. The pool floor is 1 and 2, so one master can die
+# and bizarre-lb keeps sending players to the other. Instances 3 and 4 are
+# started by bizarre-scale only while the running ones stay busy.
+
+[Service]
+User=root
+Group=root
+LimitNOFILE=65536
+WorkingDirectory=/opt/bizarre-prod/backend/src
+Environment="PATH=/opt/bizarre-prod/.venv/bin"
+Environment="DJANGO_SETTINGS_MODULE=app.settings_prod"
+# Single prod secrets path — Django/decouple reads the file (no EnvironmentFile).
+Environment="BIZARRE_ENV_FILE=/etc/bizarre/prod.env"
+Environment="BIZARRE_INSTANCE=%i"
+# Prod tree is /opt/bizarre-prod. Do not point this at /opt/bizarre.
+# Port is 800%i (8001–8004). bizarre-lb owns 127.0.0.1:8000.
+# 1 worker so this master is one failure domain. 32 threads, so the two floor
+# instances keep the old single master's 2x32 thread budget. SSE streams each
+# hold a thread.
+ExecStart=/opt/bizarre-prod/.venv/bin/gunicorn app.wsgi:application --bind 127.0.0.1:800%i --worker-class gthread --workers 1 --threads 32 --timeout 120 --keep-alive 120 --graceful-timeout 60 --max-requests 5000 --max-requests-jitter 500
+# keep-alive > tailscaled's idle timeout (Go default 90s).
+# graceful-timeout > SSE_STREAM_MAX_SECONDS so scale-in drains instead of SIGKILL.
+# TimeoutStopSec > graceful-timeout so systemd does not shoot the master mid-drain.
+TimeoutStopSec=90
+KillMode=mixed
+# HUP: new workers start on new code, old ones finish their requests.
+ExecReload=/bin/kill -s HUP $MAINPID
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

@@ -10,6 +10,7 @@ import random
 import time
 
 from django.conf import settings
+from django.db import connection
 from django.http import HttpResponse, StreamingHttpResponse
 from rest_framework.authtoken.models import Token
 
@@ -43,6 +44,11 @@ def campaign_events_stream(request, campaign_id):
         return HttpResponse(status=403)
 
     q = subscribe_campaign(int(campaign_id))
+    # The stream below never queries the DB. Without this, Django keeps the
+    # connection until the stream ends (up to ~55s), and every open tab holds
+    # one Postgres connection. Skipped inside a transaction (tests).
+    if not connection.in_atomic_block:
+        connection.close()
 
     def event_stream():
         retry_ms = int(getattr(settings, "SSE_CLIENT_RETRY_MS", 2000))
