@@ -5999,10 +5999,10 @@ const CharacterSheetWrapper = ({
     readCharSheetBool(characterId, "crew-group", false),
   );
   const [crewAssistExpanded, setCrewAssistExpanded] = useState(() =>
-    readCharSheetBool(characterId, "crew-assist", true),
+    readCharSheetBool(characterId, "crew-assist", false),
   );
   const [crewHealExpanded, setCrewHealExpanded] = useState(() =>
-    readCharSheetBool(characterId, "crew-heal", true),
+    readCharSheetBool(characterId, "crew-heal", false),
   );
   const [assistTargetId, setAssistTargetId] = useState("");
   const [assistGrantBusy, setAssistGrantBusy] = useState(false);
@@ -6027,8 +6027,8 @@ const CharacterSheetWrapper = ({
       setNotesInventoryExpanded({ notes: true, inventory: true });
       setShowHistoryPanel(false);
       setCrewGroupExpanded(false);
-      setCrewAssistExpanded(true);
-      setCrewHealExpanded(true);
+      setCrewAssistExpanded(false);
+      setCrewHealExpanded(false);
       setCrewHistoryOpen(false);
     };
     if (characterId == null || characterId === "") {
@@ -6055,9 +6055,9 @@ const CharacterSheetWrapper = ({
       readCharSheetBool(characterId, "crew-group", false),
     );
     setCrewAssistExpanded(
-      readCharSheetBool(characterId, "crew-assist", true),
+      readCharSheetBool(characterId, "crew-assist", false),
     );
-    setCrewHealExpanded(readCharSheetBool(characterId, "crew-heal", true));
+    setCrewHealExpanded(readCharSheetBool(characterId, "crew-heal", false));
     setCrewHistoryOpen(
       readCharSheetBool(characterId, "crew-history", false),
     );
