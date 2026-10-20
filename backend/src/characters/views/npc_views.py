@@ -146,7 +146,7 @@ class NPCViewSet(viewsets.ModelViewSet):
             )
         npc = self.get_object()
         try:
-            pdf_bytes, filename = export_npc_pdf(npc)
+            pdf_bytes, filename = export_npc_pdf(npc, viewer=request.user)
         except ImportError as exc:
             return Response(
                 {"error": str(exc)},

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import io
-from characters.models import Character, Crew, NPC
+from characters.models import Character, Crew, Faction, NPC
 
 
 def _wrap_canvas():
@@ -34,7 +34,7 @@ def _draw_wrapped(c, text: str, x: float, y: float, max_width: float, leading: f
     return y - leading
 
 
-def _standing_lines(character: Character) -> list[str]:
+def _standing_lines(character: Character, player_view: bool = False) -> list[str]:
     standing = character.npc_standing if isinstance(character.npc_standing, dict) else {}
     if not standing:
         return ["No NPC standing recorded."]
@@ -49,7 +49,9 @@ def _standing_lines(character: Character) -> list[str]:
     if npc_ids and character.campaign_id:
         for npc in NPC.objects.filter(
             campaign_id=character.campaign_id, id__in=npc_ids
-        ).only("id", "name"):
+        ).only("id", "name", "visible_to_players"):
+            if player_view and not npc.visible_to_players:
+                continue
             names[npc.id] = (npc.name or f"NPC {npc.id}").strip()
 
     rows = []
@@ -57,6 +59,9 @@ def _standing_lines(character: Character) -> list[str]:
         try:
             nid = int(key)
         except (TypeError, ValueError):
+            continue
+        if player_view and nid not in names:
+            # Hidden from players, or not an NPC in this campaign.
             continue
         try:
             val = int(raw)
@@ -70,8 +75,31 @@ def _standing_lines(character: Character) -> list[str]:
     return [r[1] for r in rows] or ["No NPC standing recorded."]
 
 
-def _faction_rep_lines(character: Character) -> list[str]:
+def _player_faction_label(fac, rep_text: str) -> str | None:
+    """How a player sees one faction row; None when the faction is hidden."""
+    if not fac.visible_to_players:
+        return None
+    name = fac.name if fac.players_see_identity else "Unknown faction"
+    rep = rep_text if fac.players_see_reputation else "hidden"
+    return f"{name}: {rep}"
+
+
+def _faction_rep_lines(character: Character, player_view: bool = False) -> list[str]:
+    factions_by_name = {}
+    if player_view and character.campaign_id:
+        for fac in Faction.objects.filter(campaign_id=character.campaign_id):
+            factions_by_name[(fac.name or "").strip().lower()] = fac
     lines = []
+
+    def add(name: str, sign: str) -> None:
+        fac = factions_by_name.get(name.lower()) if player_view else None
+        if fac is None:
+            lines.append(f"{name}: {sign}")
+            return
+        label = _player_faction_label(fac, sign)
+        if label:
+            lines.append(label)
+
     for src in (character.faction_reputation, character.reputation_status):
         if isinstance(src, list):
             for item in src:
@@ -85,7 +113,7 @@ def _faction_rep_lines(character: Character) -> list[str]:
                 except (TypeError, ValueError):
                     rep = 0
                 sign = f"+{rep}" if rep > 0 else str(rep)
-                lines.append(f"{name}: {sign}")
+                add(name, sign)
         elif isinstance(src, dict):
             for name, rep in src.items():
                 n = str(name).strip()
@@ -96,7 +124,7 @@ def _faction_rep_lines(character: Character) -> list[str]:
                 except (TypeError, ValueError):
                     v = 0
                 sign = f"+{v}" if v > 0 else str(v)
-                lines.append(f"{n}: {sign}")
+                add(n, sign)
     # de-dupe preserve order
     seen = set()
     out = []
@@ -108,7 +136,7 @@ def _faction_rep_lines(character: Character) -> list[str]:
     return out
 
 
-def _crew_faction_lines(crew: Crew) -> list[str]:
+def _crew_faction_lines(crew: Crew, player_view: bool = False) -> list[str]:
     rels = list(
         crew.faction_relationships.select_related("faction").order_by("faction__name")
     )
@@ -119,8 +147,13 @@ def _crew_faction_lines(crew: Crew) -> list[str]:
         name = (rel.faction.name if rel.faction_id else "Faction").strip()
         val = int(rel.reputation_value or 0)
         sign = f"+{val}" if val > 0 else str(val)
+        if player_view and rel.faction_id:
+            label = _player_faction_label(rel.faction, sign)
+            if label:
+                out.append(label)
+            continue
         out.append(f"{name}: {sign}")
-    return out
+    return out or ["No crew–faction reputation recorded."]
 
 
 def _crew_ability_lines(crew: Crew) -> list[str]:
@@ -146,8 +179,11 @@ def _crew_upgrade_lines(crew: Crew) -> list[str]:
     return lines or ["No upgrades or claims recorded."]
 
 
-def build_standing_crew_pdf_bytes(character: Character) -> bytes:
-    """Return PDF bytes with Standing + Crew pages (no AcroForm)."""
+def build_standing_crew_pdf_bytes(character: Character, player_view: bool = False) -> bytes:
+    """Return PDF bytes with Standing + Crew pages (no AcroForm).
+
+    player_view drops NPCs and factions the GM has hidden from players.
+    """
     ensure = __import__(
         "characters.services.sheet_export.deps", fromlist=["ensure_pdf_dependencies"]
     ).ensure_pdf_dependencies
@@ -167,7 +203,7 @@ def build_standing_crew_pdf_bytes(character: Character) -> bytes:
     c.drawString(MARGIN, y, "NPC Standing")
     y -= 14
     c.setFont("Helvetica", 9)
-    for line in _standing_lines(character):
+    for line in _standing_lines(character, player_view):
         if y < MARGIN + 40:
             c.showPage()
             y = PAGE_H - MARGIN
@@ -183,7 +219,7 @@ def build_standing_crew_pdf_bytes(character: Character) -> bytes:
     c.drawString(MARGIN, y, "Faction Reputation (character)")
     y -= 14
     c.setFont("Helvetica", 9)
-    fac_lines = _faction_rep_lines(character)
+    fac_lines = _faction_rep_lines(character, player_view)
     if not fac_lines:
         fac_lines = ["No character faction reputation recorded."]
     for line in fac_lines:
@@ -286,7 +322,7 @@ def build_standing_crew_pdf_bytes(character: Character) -> bytes:
     y -= 6
 
     section("Faction Reputation (crew)")
-    for line in _crew_faction_lines(crew):
+    for line in _crew_faction_lines(crew, player_view):
         if y < MARGIN + 40:
             c.showPage()
             y = PAGE_H - MARGIN
