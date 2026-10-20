@@ -357,3 +357,95 @@ class SheetExportAPITests(TestCase):
         pdf_bytes, filename = export_npc_pdf(self.npc)
         self.assertTrue(pdf_bytes.startswith(b"%PDF"))
         self.assertIn("Dio-Brando", filename)
+
+
+class SheetExportHiddenFactionTests(TestCase):
+    """Players must not see hidden NPCs or factions in their PDF export."""
+
+    def setUp(self):
+        from characters.models import CrewFactionRelationship, Faction
+
+        self.client = APIClient()
+        heritage = Heritage.objects.create(name="Human", base_hp=0, description="")
+        self.player = User.objects.create_user(username="pl", password="testpass123")
+        self.gm = User.objects.create_user(username="gm2", password="testpass123")
+        self.campaign = Campaign.objects.create(name="Hidden Camp", gm=self.gm)
+        self.campaign.players.add(self.player)
+        self.crew = Crew.objects.create(name="Bucciarati Gang", campaign=self.campaign)
+        self.shown = Faction.objects.create(
+            name="Shown Family", campaign=self.campaign, visible_to_players=True
+        )
+        self.hidden = Faction.objects.create(
+            name="Secret Boss Faction", campaign=self.campaign, visible_to_players=False
+        )
+        self.masked = Faction.objects.create(
+            name="Masked Name Faction",
+            campaign=self.campaign,
+            visible_to_players=True,
+            players_see_identity=False,
+        )
+        for fac in (self.shown, self.hidden, self.masked):
+            CrewFactionRelationship.objects.create(
+                crew=self.crew, faction=fac, reputation_value=1
+            )
+        self.hidden_npc = NPC.objects.create(
+            creator=self.gm,
+            campaign=self.campaign,
+            name="Hidden Diavolo",
+            visible_to_players=False,
+        )
+        self.shown_npc = NPC.objects.create(
+            creator=self.gm,
+            campaign=self.campaign,
+            name="Visible Giorno",
+            faction=self.hidden,
+        )
+        self.character = Character.objects.create(
+            user=self.player,
+            campaign=self.campaign,
+            crew=self.crew,
+            true_name="Narancia",
+            heritage=heritage,
+            npc_standing={str(self.hidden_npc.id): -2, str(self.shown_npc.id): 1},
+            faction_reputation=[{"name": "Secret Boss Faction", "rep": -1}],
+        )
+
+    def _pdf_text(self, user, url):
+        self.client.force_authenticate(user=user)
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        reader = PdfReader(io.BytesIO(response.content))
+        text = "".join((p.extract_text() or "") for p in reader.pages)
+        return text, reader
+
+    def test_player_pc_export_omits_hidden(self):
+        text, _ = self._pdf_text(
+            self.player, f"/api/characters/{self.character.id}/export-pdf/"
+        )
+        self.assertNotIn("Secret Boss Faction", text)
+        self.assertNotIn("Hidden Diavolo", text)
+        self.assertNotIn("Masked Name Faction", text)
+        self.assertIn("Unknown faction", text)
+        self.assertIn("Shown Family", text)
+        self.assertIn("Visible Giorno", text)
+
+    def test_gm_pc_export_is_also_player_view(self):
+        text, _ = self._pdf_text(
+            self.gm, f"/api/characters/{self.character.id}/export-pdf/"
+        )
+        self.assertNotIn("Secret Boss Faction", text)
+        self.assertNotIn("Hidden Diavolo", text)
+        self.assertNotIn("Masked Name Faction", text)
+        self.assertIn("Shown Family", text)
+
+    def test_player_cannot_export_npc(self):
+        self.client.force_authenticate(user=self.player)
+        response = self.client.get(f"/api/npcs/{self.shown_npc.id}/export-pdf/")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_gm_npc_export_shows_faction(self):
+        _, reader = self._pdf_text(
+            self.gm, f"/api/npcs/{self.shown_npc.id}/export-pdf/"
+        )
+        fields = reader.get_fields() or {}
+        self.assertEqual(fields["npc_faction"].get("/V"), "Secret Boss Faction")

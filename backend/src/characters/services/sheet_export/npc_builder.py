@@ -99,7 +99,7 @@ def _clock_rows(npc: NPC) -> list[dict[str, Any]]:
 
 
 def build_npc_field_values(npc: NPC) -> dict[str, str]:
-    """Return AcroForm field name -> value for an NPC sheet export."""
+    """Return AcroForm field name -> value for an NPC sheet export (GM-only)."""
     npc = (
         NPC.objects.select_related("campaign", "faction", "heritage")
         .prefetch_related(
@@ -168,3 +168,4 @@ def build_npc_field_values(npc: NPC) -> dict[str, str]:
     values["npc_faction_status"] = _format_mapping(npc.faction_status)
 
     return values
+
