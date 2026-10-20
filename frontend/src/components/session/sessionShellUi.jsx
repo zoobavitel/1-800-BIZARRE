@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import HomeCardThumb from "../home/HomeCardThumb";
 import { resolveMediaUrl } from "../../features/character-sheet/services/api";
 import { getCharacterPortraitSrc } from "../../utils/homeAvatar";
@@ -247,13 +247,83 @@ export function AddNpcStripTile({
   );
 }
 
+const HELP_TIP_MARGIN = 8;
+const HELP_TIP_MAX_WIDTH = 340;
+
 /**
- * Compact `?` help control (sheet XP card pattern): toggles a right-aligned
- * popover; click outside / Escape closes. One instance owns its own open state.
+ * Keep a right-aligned help popover inside the viewport.
+ * `left` is offset from the anchor's left edge (absolute positioning).
+ */
+export function clampHelpPopoverBox(
+  anchor,
+  viewport,
+  panelHeight,
+  { margin = HELP_TIP_MARGIN, maxWidth = HELP_TIP_MAX_WIDTH } = {},
+) {
+  const width = Math.max(120, Math.min(maxWidth, viewport.width - margin * 2));
+  let viewLeft = anchor.right - width;
+  if (viewLeft < margin) viewLeft = margin;
+  if (viewLeft + width > viewport.width - margin) {
+    viewLeft = Math.max(margin, viewport.width - margin - width);
+  }
+  const spaceBelow = viewport.height - margin - (anchor.bottom + 6);
+  const spaceAbove = anchor.top - margin - 6;
+  const flipUp =
+    spaceBelow < Math.min(panelHeight || 80, 160) && spaceAbove > spaceBelow;
+  const room = Math.max(0, flipUp ? spaceAbove : spaceBelow);
+  const maxHeight = Math.max(80, Math.min(420, viewport.height * 0.7, room || 80));
+  return {
+    left: viewLeft - anchor.left,
+    width,
+    flipUp,
+    maxHeight,
+  };
+}
+
+/**
+ * Compact `?` help control (sheet XP card pattern): toggles a popover that
+ * stays inside the viewport; click outside / Escape closes.
+ * One instance owns its own open state.
  */
 export function SessionHelpTip({ label, panelId, children }) {
   const [open, setOpen] = useState(false);
+  const [box, setBox] = useState(null);
   const rootRef = useRef(null);
+  const panelRef = useRef(null);
+
+  const reposition = useCallback(() => {
+    const anchorEl = rootRef.current;
+    const panel = panelRef.current;
+    if (!anchorEl || !panel) return;
+    const next = clampHelpPopoverBox(
+      anchorEl.getBoundingClientRect(),
+      {
+        width: document.documentElement.clientWidth,
+        height: window.innerHeight,
+      },
+      panel.scrollHeight,
+    );
+    setBox((prev) => {
+      if (
+        prev &&
+        prev.left === next.left &&
+        prev.width === next.width &&
+        prev.flipUp === next.flipUp &&
+        prev.maxHeight === next.maxHeight
+      ) {
+        return prev;
+      }
+      return next;
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setBox(null);
+      return;
+    }
+    reposition();
+  }, [open, children, reposition]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -263,13 +333,18 @@ export function SessionHelpTip({ label, panelId, children }) {
     const handleKey = (e) => {
       if (e.key === "Escape") setOpen(false);
     };
+    const handleMove = () => reposition();
     document.addEventListener("mousedown", handlePointer);
     document.addEventListener("keydown", handleKey);
+    window.addEventListener("resize", handleMove);
+    window.addEventListener("scroll", handleMove, true);
     return () => {
       document.removeEventListener("mousedown", handlePointer);
       document.removeEventListener("keydown", handleKey);
+      window.removeEventListener("resize", handleMove);
+      window.removeEventListener("scroll", handleMove, true);
     };
-  }, [open]);
+  }, [open, reposition]);
 
   const resolvedPanelId =
     panelId || `session-help-${String(label || "tip").replace(/\s+/g, "-").toLowerCase()}`;
@@ -301,16 +376,19 @@ export function SessionHelpTip({ label, panelId, children }) {
       </button>
       {open ? (
         <div
+          ref={panelRef}
           id={resolvedPanelId}
           role="region"
           aria-label={label || "Help"}
           style={{
             position: "absolute",
-            top: "calc(100% + 6px)",
-            right: 0,
+            top: box?.flipUp ? "auto" : "calc(100% + 6px)",
+            bottom: box?.flipUp ? "calc(100% + 6px)" : "auto",
+            left: box ? box.left : 0,
+            boxSizing: "border-box",
             zIndex: 20,
-            width: "min(340px, calc(100vw - 48px))",
-            maxHeight: "min(420px, 70vh)",
+            width: box ? box.width : `min(${HELP_TIP_MAX_WIDTH}px, calc(100vw - ${HELP_TIP_MARGIN * 2}px))`,
+            maxHeight: box ? box.maxHeight : "min(420px, 70vh)",
             overflowY: "auto",
             padding: "10px 12px",
             background: "#0d1117",
