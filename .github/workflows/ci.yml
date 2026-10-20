@@ -18,6 +18,10 @@ on:
           - none
           - deploy
         default: none
+      allow_during_session:
+        description: "Deploy even during the Monday 8-10:30pm ET game session."
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -336,6 +340,18 @@ jobs:
       github.event.inputs.lxc_action == 'deploy' &&
       github.ref == 'refs/heads/master'
     steps:
+      # A deploy that must restart gunicorn drops every open request. Keep
+      # those out of the weekly game session unless explicitly allowed.
+      - name: Block deploys during game session
+        if: github.event.inputs.allow_during_session != 'true'
+        run: |
+          dow="$(TZ=America/New_York date +%u)"
+          hm="$(TZ=America/New_York date +%H%M)"
+          if [ "$dow" = 1 ] && [ "$hm" -ge 1945 ] && [ "$hm" -lt 2230 ]; then
+            echo "::error::Game session (Mon 7:45-10:30pm ET). Re-run with allow_during_session to override."
+            exit 1
+          fi
+
       # OAuth client: https://tailscale.com/s/oauth-clients — scope "Devices" write (auth keys),
       # tag must match `tags` below (e.g. tag:ci) and your tailnet tagOwners ACL.
       - name: Connect runner to Tailscale
@@ -408,5 +424,12 @@ jobs:
             export BIZARRE_ENV_FILE=/etc/bizarre/prod.env
             python manage.py migrate --noinput
             python manage.py collectstatic --noinput
-            sudo systemctl restart gunicorn
-            sudo systemctl restart celery-worker || true
+            # Graceful: reload gunicorn (no dropped requests) and install unit
+            # files from this tree. One-time root setup: setup-deploy-sudo.sh.
+            if sudo -n -l /usr/local/sbin/bizarre-apply-units >/dev/null 2>&1; then
+              sudo -n /usr/local/sbin/bizarre-apply-units
+            else
+              echo "::warning::bizarre-apply-units not installed; falling back to restart (brief outage). Run deploy/bizarre-api/setup-deploy-sudo.sh as root once."
+              sudo systemctl restart gunicorn
+              sudo systemctl restart celery-worker || true
+            fi
