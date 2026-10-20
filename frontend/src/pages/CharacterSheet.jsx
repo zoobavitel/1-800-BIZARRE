@@ -154,6 +154,10 @@ import {
   historyManualResistanceActionName,
 } from "../features/character-sheet/utils/historyManualResistance";
 import {
+  historyRollHeadline,
+  historyRollPositionEffectModifiers,
+} from "../features/character-sheet/utils/historyRollHeadline";
+import {
   tierDieFromActionPool,
   outcomeFromActionRoll,
   outcomeFromFortuneDiceResults,
@@ -1219,6 +1223,17 @@ const CharacterSheetWrapper = ({
     const row = m[String(characterId)] ?? m[characterId];
     return row && typeof row === "object" ? row : null;
   }, [charCampaign?.active_session_detail, characterId]);
+
+  const sessionStartingPositionEffect = useMemo(
+    () =>
+      defaultPositionEffectFromSessionDetail(
+        characterId,
+        charCampaign?.active_session_detail,
+      ),
+    [characterId, charCampaign?.active_session_detail],
+  );
+  const sessionStartingPosition = sessionStartingPositionEffect.position;
+  const sessionStartingEffect = sessionStartingPositionEffect.effect;
 
   const sessionLoadoutEntry = useMemo(() => {
     const asd = charCampaign?.active_session_detail;
@@ -5840,6 +5855,29 @@ const CharacterSheetWrapper = ({
 
   // Roll modal for campaign/session context (position, effect, push)
   const [rollPending, setRollPending] = useState(null);
+  /** Starting position and effect for this roll. Seeded from the session; clicks change them before +effect abilities. */
+  const [rollStartingPosition, setRollStartingPosition] = useState("risky");
+  const [rollStartingEffect, setRollStartingEffect] = useState("standard");
+  const rollPositionTouchedRef = useRef(false);
+  const rollEffectTouchedRef = useRef(false);
+  const rollPendingOpenRef = useRef(false);
+  useEffect(() => {
+    const isOpen = !!rollPending;
+    const justOpened = isOpen && !rollPendingOpenRef.current;
+    rollPendingOpenRef.current = isOpen;
+    if (!isOpen) {
+      rollPositionTouchedRef.current = false;
+      rollEffectTouchedRef.current = false;
+      return;
+    }
+    if (justOpened || !rollPositionTouchedRef.current) {
+      setRollStartingPosition(sessionStartingPosition);
+    }
+    if (justOpened || !rollEffectTouchedRef.current) {
+      setRollStartingEffect(sessionStartingEffect);
+    }
+  }, [rollPending, sessionStartingPosition, sessionStartingEffect]);
+
   /** Scroll Action ratings dice-preview into view when opened from deeper sections (e.g. CREW ACTIONS heal teammate). */
   const actionRollDicePoolPreviewElRef = useRef(null);
   const lastScrolledRollPendingKeyRef = useRef("");
@@ -5961,10 +5999,10 @@ const CharacterSheetWrapper = ({
     readCharSheetBool(characterId, "crew-group", false),
   );
   const [crewAssistExpanded, setCrewAssistExpanded] = useState(() =>
-    readCharSheetBool(characterId, "crew-assist", true),
+    readCharSheetBool(characterId, "crew-assist", false),
   );
   const [crewHealExpanded, setCrewHealExpanded] = useState(() =>
-    readCharSheetBool(characterId, "crew-heal", true),
+    readCharSheetBool(characterId, "crew-heal", false),
   );
   const [assistTargetId, setAssistTargetId] = useState("");
   const [assistGrantBusy, setAssistGrantBusy] = useState(false);
@@ -5989,8 +6027,8 @@ const CharacterSheetWrapper = ({
       setNotesInventoryExpanded({ notes: true, inventory: true });
       setShowHistoryPanel(false);
       setCrewGroupExpanded(false);
-      setCrewAssistExpanded(true);
-      setCrewHealExpanded(true);
+      setCrewAssistExpanded(false);
+      setCrewHealExpanded(false);
       setCrewHistoryOpen(false);
     };
     if (characterId == null || characterId === "") {
@@ -6017,9 +6055,9 @@ const CharacterSheetWrapper = ({
       readCharSheetBool(characterId, "crew-group", false),
     );
     setCrewAssistExpanded(
-      readCharSheetBool(characterId, "crew-assist", true),
+      readCharSheetBool(characterId, "crew-assist", false),
     );
-    setCrewHealExpanded(readCharSheetBool(characterId, "crew-heal", true));
+    setCrewHealExpanded(readCharSheetBool(characterId, "crew-heal", false));
     setCrewHistoryOpen(
       readCharSheetBool(characterId, "crew-history", false),
     );
@@ -7278,11 +7316,10 @@ const CharacterSheetWrapper = ({
                   (r.roll_type || "").toUpperCase() === "FORTUNE" &&
                   !r.fortune_reveal_outcome
                     ? `${r.action_name || "Fortune"} (redacted)`
-                    : `${r.action_name || "Roll"} · ${diceStr} → ${outcomeDisp}`
+                    : historyRollHeadline(r, diceStr, outcomeDisp)
                 }`,
                 modifiers: [
-                  r.position ? `Pos ${r.position}` : null,
-                  r.effect ? `Eff ${r.effect}` : null,
+                  ...historyRollPositionEffectModifiers(r),
                   r.push_for_dice ? "Push(+1d)" : null,
                   r.push_for_effect ? "Push(+effect)" : null,
                   r.uses_devil_bargain ? "Devil's bargain" : null,
@@ -7443,10 +7480,9 @@ const CharacterSheetWrapper = ({
                       ? `Recovery → ${recTgtNm}: ${r.action_name || "recover"} · ${diceStr} → ${outcomeDisp}`
                       : recCtx === "self_treatment_roll"
                         ? `Recovery (self treatment): ${r.action_name || "recover"} · ${diceStr} → ${outcomeDisp}`
-                        : `${r.action_name || "Roll"} · ${diceStr} → ${outcomeDisp}`,
+                        : historyRollHeadline(r, diceStr, outcomeDisp),
             modifiers: [
-              r.position ? `Pos ${r.position}` : null,
-              r.effect ? `Eff ${r.effect}` : null,
+              ...historyRollPositionEffectModifiers(r),
               Number(r.pool_bonus_dice) > 0
                 ? `Pool +${r.pool_bonus_dice}d (abilities / heritage)`
                 : null,
@@ -8420,20 +8456,11 @@ const CharacterSheetWrapper = ({
     setRippleBreathingFreePush(false);
   }, [healAttemptIsDowntimeRecovery]);
 
-  /** Session default + push + ability/heritage steps — matches server roll_action order. */
+  /** Clicked starting effect + push + ability/heritage steps — matches server roll_action order. */
   const rollModalPreviewEffect = useMemo(() => {
-    const base =
-      sessionOverridePositionEffect?.effect ||
-      charCampaign?.active_session_detail?.default_effect ||
-      "standard";
     const pushSteps = rollModal.push_effect ? 1 : 0;
-    return bumpEffectTier(base, pushSteps + totalAbilityEffectSteps);
-  }, [
-    sessionOverridePositionEffect?.effect,
-    charCampaign?.active_session_detail?.default_effect,
-    rollModal.push_effect,
-    totalAbilityEffectSteps,
-  ]);
+    return bumpEffectTier(rollStartingEffect, pushSteps + totalAbilityEffectSteps);
+  }, [rollStartingEffect, rollModal.push_effect, totalAbilityEffectSteps]);
 
   /** Roll modal: effect-tier step list + preview label for the read-only effect preview (shown below P/E row). */
   const rollModalPositionEffectBreakdown = useMemo(() => {
@@ -8936,6 +8963,8 @@ const CharacterSheetWrapper = ({
           : []),
       ];
       const payload = {
+        position: rollStartingPosition,
+        effect: rollStartingEffect,
         action: (
           standSlug ||
           String(rollPending.actionName || rollActionName || selectedRollAction || "")
@@ -9144,15 +9173,17 @@ const CharacterSheetWrapper = ({
           );
         }
       }
-      // Match roll modal + session GM map: per-PC session override beats API echo (same order as PositionStack preview).
+      // Server stores the clicked starting position, then bumps effect from the clicked start.
       const effectivePosition =
-        sessionOverridePositionEffect?.position ||
         res.position ||
+        rollStartingPosition ||
+        sessionOverridePositionEffect?.position ||
         asd?.default_position ||
         "";
       const effectiveEffect =
-        sessionOverridePositionEffect?.effect ||
         res.effect ||
+        rollModalPreviewEffect ||
+        sessionOverridePositionEffect?.effect ||
         asd?.default_effect ||
         "";
       if (payload.group_action_id && res.roll_id) {
@@ -12050,8 +12081,8 @@ const CharacterSheetWrapper = ({
                                                   </code>
                                                   . Online{" "}
                                                   <code style={{ color: "#9ca3af" }}>rollAction</code>{" "}
-                                                  still resolves P/E from the same session map on the server
-                                                  (no client-sent position override).
+                                                  sends the clicked starting position and starting effect;
+                                                  push / +effect steps still stack on that effect.
                                                 </div>
                                                 {manualHistorySuggestedDice != null ? (
                                                   <div
@@ -18081,38 +18112,44 @@ const CharacterSheetWrapper = ({
                     >
                       <div
                         style={{
-                          fontWeight: "bold",
-                          marginBottom: "4px",
-                          color: "#a78bfa",
-                        }}
-                      >
-                        Dice pool — {rollActionName || rollPending.actionName}
-                        {rollPending?.healAttempt?.targetName
-                          ? ` — Healing ${rollPending.healAttempt.targetName}`
-                          : ""}
-                      </div>
-                      <div
-                        style={{
-                          fontSize: "11px",
-                          color: "#6b7280",
+                          display: "flex",
+                          alignItems: "flex-start",
+                          justifyContent: "space-between",
+                          gap: 8,
                           marginBottom: "12px",
                         }}
                       >
-                        {rollPending?.healAttempt &&
-                        !showDiceRollModalPositionEffect ? (
-                          <>
-                            Preview your dice pool, then roll. Position and effect
-                            are hidden for heals that are not recover-in-play
-                            (including downtime cadence). Cancel to pick another
-                            action.
-                          </>
-                        ) : (
-                          <>
-                            Preview your pool, check position and effect, add push
-                            / assist / bargain, then roll. Cancel to pick another
-                            action.
-                          </>
-                        )}
+                        <div
+                          style={{
+                            fontWeight: "bold",
+                            color: "#a78bfa",
+                          }}
+                        >
+                          Dice pool — {rollActionName || rollPending.actionName}
+                          {rollPending?.healAttempt?.targetName
+                            ? ` — Healing ${rollPending.healAttempt.targetName}`
+                            : ""}
+                        </div>
+                        <SessionHelpTip
+                          label="Roll preview help"
+                          panelId="character-sheet-roll-preview-help"
+                        >
+                          {rollPending?.healAttempt &&
+                          !showDiceRollModalPositionEffect ? (
+                            <>
+                              Preview your dice pool, then roll. Position and effect
+                              are hidden for heals that are not recover-in-play
+                              (including downtime cadence). Cancel to pick another
+                              action.
+                            </>
+                          ) : (
+                            <>
+                              Preview your pool, click a starting position and effect, then
+                              apply +effect abilities. Add push / assist / bargain, then
+                              roll. Cancel to pick another action.
+                            </>
+                          )}
+                        </SessionHelpTip>
                       </div>
                       {rollPending?.healAttempt && (
                         <div
@@ -18205,21 +18242,36 @@ const CharacterSheetWrapper = ({
                         <div style={{ flex: "1 1 160px", minWidth: 0 }}>
                           <div
                             style={{
-                              fontSize: "10px",
-                              color: "#9ca3af",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              gap: 8,
                               marginBottom: "4px",
                             }}
                           >
-                            Position (this action)
+                            <div
+                              style={{
+                                fontSize: "10px",
+                                color: "#9ca3af",
+                              }}
+                            >
+                              Starting position (this action)
+                            </div>
+                            <SessionHelpTip
+                              label="Starting position help"
+                              panelId="character-sheet-roll-starting-position-help"
+                            >
+                              Click Controlled, Risky, or Desperate before you toggle
+                              +effect abilities. Those steps change effect only.
+                            </SessionHelpTip>
                           </div>
                           <PositionStack
-                            activePosition={
-                              sessionOverridePositionEffect?.position ||
-                              charCampaign?.active_session_detail
-                                ?.default_position ||
-                              "risky"
-                            }
-                            readOnly
+                            activePosition={rollStartingPosition}
+                            readOnly={false}
+                            onSelect={(value) => {
+                              rollPositionTouchedRef.current = true;
+                              setRollStartingPosition(value);
+                            }}
                           />
                         </div>
                         <div style={{ flex: "1 1 180px", minWidth: 0 }}>
@@ -18230,12 +18282,32 @@ const CharacterSheetWrapper = ({
                               marginBottom: "4px",
                             }}
                           >
-                            Effect (this action — after bonuses)
+                            Starting effect (this action)
                           </div>
                           <EffectShapes
-                            activeEffect={rollModalPreviewEffect}
-                            readOnly
+                            activeEffect={rollStartingEffect}
+                            readOnly={false}
+                            onSelect={(tier) => {
+                              rollEffectTouchedRef.current = true;
+                              setRollStartingEffect(tier);
+                            }}
                           />
+                          <div
+                            style={{
+                              fontSize: "9px",
+                              color: "#6b7280",
+                              marginTop: "4px",
+                              lineHeight: 1.35,
+                            }}
+                          >
+                            Click Limited, Standard, or Extreme before +effect
+                            abilities. After those steps:{" "}
+                            {String(rollModalPreviewEffect || "standard")
+                              .charAt(0)
+                              .toUpperCase() +
+                              String(rollModalPreviewEffect || "standard").slice(1)}
+                            .
+                          </div>
                         </div>
                       </div>
                       {rollModalPositionEffectBreakdown ? (
@@ -18275,12 +18347,21 @@ const CharacterSheetWrapper = ({
                             </ul>
                           )}
                           <div style={{ fontSize: "9px", color: "#6b7280" }}>
-                            Highlighted effect shape (
+                            Highlighted shape is the starting effect. After these steps
+                            the result is{" "}
                             <strong style={{ color: "#c4b5fd" }}>
-                              {rollModalPositionEffectBreakdown.previewTierLabel}
+                              {String(
+                                rollModalPositionEffectBreakdown.previewTierLabel ||
+                                  "",
+                              )
+                                .charAt(0)
+                                .toUpperCase() +
+                                String(
+                                  rollModalPositionEffectBreakdown.previewTierLabel ||
+                                    "",
+                                ).slice(1)}
                             </strong>
-                            ) stacks session default then these steps in the same order as
-                            the server roll.
+                            . Same order as the server roll.
                           </div>
                         </div>
                       ) : null}
@@ -18408,34 +18489,39 @@ const CharacterSheetWrapper = ({
                         >
                           <div
                             style={{
-                              fontSize: "11px",
-                              color: "#a78bfa",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              gap: 8,
                               marginBottom: "8px",
-                              fontWeight: "bold",
                             }}
                           >
-                            Your dice pool
-                          </div>
-                          <div
-                            style={{
-                              fontSize: 10,
-                              color: "#6b7280",
-                              marginBottom: 8,
-                              lineHeight: 1.35,
-                            }}
-                          >
-                            Tick what applies to <strong>this</strong> roll (fiction only).
-                            Some abilities are hidden here on purpose (counterattack / ally
-                            perks); Iron Will uses the checkbox under RESOLVE resistance.
-                            See{" "}
-                            <code style={{ color: "#9ca3af" }}>
-                              docs/codebase/standard-ability-roll-bonus-audit.md
-                            </code>
-                            . Choices update dice here, are sent on the roll, appear in
-                            session dice history, and add{" "}
-                            <code style={{ color: "#9ca3af" }}>[Abilities: …]</code> /{" "}
-                            <code style={{ color: "#9ca3af" }}>[Heritage: …]</code> on the
-                            stored roll (encoded vice/trauma pass + heritage XP hooks read those).
+                            <div
+                              style={{
+                                fontSize: "11px",
+                                color: "#a78bfa",
+                                fontWeight: "bold",
+                              }}
+                            >
+                              Your dice pool
+                            </div>
+                            <SessionHelpTip
+                              label="Dice pool bonus help"
+                              panelId="character-sheet-roll-dice-pool-help"
+                            >
+                              Tick what applies to <strong>this</strong> roll (fiction only).
+                              Some abilities are hidden here on purpose (counterattack / ally
+                              perks); Iron Will uses the checkbox under RESOLVE resistance.
+                              See{" "}
+                              <code style={{ color: "#9ca3af" }}>
+                                docs/codebase/standard-ability-roll-bonus-audit.md
+                              </code>
+                              . Choices update dice here, are sent on the roll, appear in
+                              session dice history, and add{" "}
+                              <code style={{ color: "#9ca3af" }}>[Abilities: …]</code> /{" "}
+                              <code style={{ color: "#9ca3af" }}>[Heritage: …]</code> on the
+                              stored roll (encoded vice/trauma pass + heritage XP hooks read those).
+                            </SessionHelpTip>
                           </div>
                           <DicePoolStrip
                             label="Action rating (dice in this action only)"
@@ -19936,18 +20022,8 @@ const CharacterSheetWrapper = ({
                                         return next;
                                       });
                                     }
-                                    setDiceResult((prev) =>
-                                      prev
-                                        ? {
-                                            ...prev,
-                                            resistanceApplied: true,
-                                            resistanceHarmReductionCount:
-                                              (Number(
-                                                prev.resistanceHarmReductionCount,
-                                              ) || 0) + 1,
-                                          }
-                                        : prev,
-                                    );
+                                    setResistanceHarmTarget("");
+                                    setDiceResult(null);
                                   }}
                                   style={{
                                     ...S.btn,
@@ -20049,20 +20125,8 @@ const CharacterSheetWrapper = ({
                                         applyStressCost(cost);
                                       }
                                     }
-                                    setDiceResult((prev) =>
-                                      prev
-                                        ? {
-                                            ...prev,
-                                            resistanceApplied: true,
-                                            mitigationAbility:
-                                              resistanceMitigationChoice || "",
-                                            resistanceHarmReductionCount:
-                                              (Number(
-                                                prev.resistanceHarmReductionCount,
-                                              ) || 0) + 1,
-                                          }
-                                        : prev,
-                                    );
+                                    setResistanceHarmTarget("");
+                                    setDiceResult(null);
                                   }}
                                   style={{
                                     ...S.btn,

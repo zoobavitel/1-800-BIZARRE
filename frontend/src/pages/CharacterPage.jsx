@@ -1322,7 +1322,9 @@ export default function CharacterPage({
       .finally(() => setNpcsLoading(false));
   }, [initialNpcId, mode, campaignId]);
 
-  // ── NPC logic: normal load when no initialNpcId
+  // ── NPC logic: list load when no NPC id is selected.
+  // #npcs with nothing open stays on the chooser. #npcs/new/:campaign is an
+  // explicit create — open one blank sheet seeded with that campaign.
   useEffect(() => {
     if (mode !== MODES.NPC || initialNpcId != null) return;
     setNpcsLoading(true);
@@ -1332,17 +1334,17 @@ export default function CharacterPage({
         const npcList = list || [];
         setNpcs(npcList);
         if (!npcTabsInitialized.current) {
-          const seededCampaign =
-            initialNpcCampaignId != null ? initialNpcCampaignId : null;
           npcTabsInitialized.current = true;
-          const tab = {
-            tabId: nextTabId++,
-            npcId: null,
-            npc: seededCampaign ? { campaign: seededCampaign } : null,
-            label: "New NPC",
-          };
-          setNpcTabs([tab]);
-          setActiveNpcTabId(tab.tabId);
+          if (initialNpcCampaignId != null) {
+            const tab = {
+              tabId: nextTabId++,
+              npcId: null,
+              npc: { campaign: initialNpcCampaignId },
+              label: "New NPC",
+            };
+            setNpcTabs([tab]);
+            setActiveNpcTabId(tab.tabId);
+          }
         }
       })
       .catch(() => setNpcs([]))
@@ -1423,15 +1425,17 @@ export default function CharacterPage({
   );
 
   const handleCreateNewNpcTab = useCallback(() => {
+    const seededCampaign =
+      initialNpcCampaignId != null ? initialNpcCampaignId : null;
     const tab = {
       tabId: nextTabId++,
       npcId: null,
-      npc: null,
+      npc: seededCampaign ? { campaign: seededCampaign } : null,
       label: "New NPC",
     };
     setNpcTabs((prev) => [...prev, tab]);
     setActiveNpcTabId(tab.tabId);
-  }, []);
+  }, [initialNpcCampaignId]);
 
   const handleCloseNpcTab = useCallback(
     (tabId) => {
@@ -2009,8 +2013,8 @@ export default function CharacterPage({
             </>
           )}
 
-          {/* ── NPC tabs (+ New NPC always in NPC mode so empty list can create first tab) ── */}
-          {mode === MODES.NPC && (
+          {/* ── NPC tabs (hidden until an NPC is open; empty state uses the chooser) ── */}
+          {mode === MODES.NPC && npcTabs.length > 0 && (
             <>
               <div style={TAB_STYLES.divider} />
               {npcTabs.map((tab) => (
@@ -2440,9 +2444,94 @@ export default function CharacterPage({
             })
           ) : (
             <div
-              style={{ padding: "24px", textAlign: "center", color: "#9ca3af" }}
+              style={{
+                ...PAGE_STYLES.content,
+                padding: "32px 24px",
+                maxWidth: 420,
+                margin: "0 auto",
+                textAlign: "center",
+              }}
             >
-              Click "+ New NPC" to create one.
+              <div
+                style={{
+                  fontSize: "14px",
+                  fontWeight: "bold",
+                  color: "#e5e7eb",
+                  marginBottom: "8px",
+                  fontFamily: "monospace",
+                }}
+              >
+                Choose an NPC to view
+              </div>
+              <div
+                style={{
+                  fontSize: "12px",
+                  color: "#9ca3af",
+                  marginBottom: "16px",
+                  lineHeight: 1.45,
+                }}
+              >
+                Open an existing NPC, or start a new blank sheet.
+              </div>
+              {npcs.length > 0 ? (
+                <select
+                  aria-label="Choose NPC to view"
+                  style={{
+                    ...PAGE_STYLES.modeSelect,
+                    width: "100%",
+                    marginBottom: "10px",
+                    color: "#e5e7eb",
+                  }}
+                  value=""
+                  onChange={(e) => {
+                    const id = parseInt(e.target.value, 10);
+                    e.target.value = "";
+                    if (!Number.isFinite(id)) return;
+                    const npc = npcs.find((n) => Number(n.id) === id);
+                    if (!npc) return;
+                    handleOpenExistingNpc(npc);
+                  }}
+                >
+                  <option value="">Select NPC…</option>
+                  {npcs.map((n) => (
+                    <option key={n.id} value={n.id}>
+                      {n.name || `NPC #${n.id}`}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div
+                  style={{
+                    fontSize: "12px",
+                    color: "#6b7280",
+                    marginBottom: "10px",
+                  }}
+                >
+                  No saved NPCs yet.
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  handleCreateNewNpcTab();
+                  if (typeof window !== "undefined") {
+                    window.location.hash =
+                      initialNpcCampaignId != null
+                        ? `npcs/new/${initialNpcCampaignId}`
+                        : "npcs";
+                  }
+                }}
+                style={{
+                  ...PAGE_STYLES.modeSelect,
+                  width: "100%",
+                  cursor: "pointer",
+                  borderStyle: "dashed",
+                  color: "#93c5fd",
+                  borderColor: "#1d4ed8",
+                }}
+              >
+                + New NPC
+              </button>
             </div>
           )}
         </div>

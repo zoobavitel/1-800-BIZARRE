@@ -568,102 +568,6 @@
   overflow: hidden;
   margin-left: auto;
 }
-.home-poc .hero-art-ghost {
-  position: absolute;
-  top: 12px;
-  left: 14px;
-  font-family: var(--font-display);
-  font-size: 56px;
-  line-height: 1;
-  color: rgba(234, 222, 183, 0.08);
-}
-.home-poc .hero-stats {
-  position: relative;
-  z-index: 1;
-  padding: 14px 16px 0;
-}
-.home-poc .hero-stats-title {
-  font-family: var(--font-heading);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: rgba(234, 222, 183, 0.4);
-  margin-bottom: 10px;
-}
-.home-poc .hero-stat-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 5px 0;
-  border-bottom: 1px solid rgba(234, 222, 183, 0.08);
-  font-size: 11px;
-}
-.home-poc .hero-stat-row:last-child {
-  border-bottom: none;
-}
-.home-poc .hero-stat-row-tall {
-  align-items: flex-start;
-}
-.home-poc .hero-stat-value-compact {
-  font-size: 10px;
-  line-height: 1.35;
-  text-align: right;
-  max-width: 58%;
-  font-weight: 600;
-  word-break: break-word;
-}
-.home-poc .hero-stat-label {
-  color: rgba(234, 222, 183, 0.5);
-}
-.home-poc .hero-stat-value {
-  color: var(--cream);
-  font-weight: bold;
-}
-.home-poc .hero-stat-value.highlight {
-  color: var(--stripe-1);
-}
-.home-poc .hero-stat-dot {
-  display: inline-block;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  margin-right: 5px;
-  vertical-align: middle;
-}
-.home-poc .hero-stat-dot-green {
-  background: var(--green);
-}
-.home-poc .hero-stat-dot-amber {
-  background: var(--amber);
-}
-.home-poc .hero-stat-dot-purple {
-  background: var(--purple);
-}
-.home-poc .hero-stat-dot-orange {
-  background: var(--orange);
-}
-.home-poc .hero-art-label {
-  position: relative;
-  z-index: 1;
-  padding: 12px 16px;
-  margin-top: 8px;
-  background: rgba(0, 0, 0, 0.15);
-  border-top: 1px solid rgba(234, 222, 183, 0.1);
-}
-.home-poc .hero-art-label-title {
-  font-family: var(--font-display);
-  font-size: 24px;
-  color: var(--cream);
-  line-height: 1;
-}
-.home-poc .hero-art-label-sub {
-  font-size: 9px;
-  color: rgba(234, 222, 183, 0.35);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  margin-top: 3px;
-}
 
 .home-poc .home-chart {
   position: relative;
@@ -712,9 +616,6 @@
 }
 .home-poc .home-chart .recharts-cartesian-axis-tick-value {
   font-family: var(--font-mono);
-}
-.home-poc .home-chart-bar .recharts-surface {
-  overflow: visible;
 }
 
 .home-poc .split {
