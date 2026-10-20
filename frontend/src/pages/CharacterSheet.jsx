@@ -6776,30 +6776,17 @@ const CharacterSheetWrapper = ({
       setXpToggleError(null);
       setXpToggleBusyTrigger(trigger);
       try {
-        if (delta > 0) {
-          const res = await experienceTrackerAPI.award({
-            character: characterId,
-            trigger,
-          });
-          const granted = Number(res?.granted) || 0;
-          if (granted > 0) {
-            setXp((prev) => ({
-              ...prev,
-              playbook: Math.min(10, (Number(prev.playbook) || 0) + granted),
-            }));
-          }
-        } else {
-          const res = await experienceTrackerAPI.revoke({
-            character: characterId,
-            trigger,
-          });
-          const revoked = Number(res?.revoked) || 0;
-          if (revoked > 0) {
-            setXp((prev) => ({
-              ...prev,
-              playbook: Math.max(0, (Number(prev.playbook) || 0) - revoked),
-            }));
-          }
+        // Trigger XP banks to the free pool server-side. Reload the character
+        // so pool + parent tab match the server (no local guess).
+        const res =
+          delta > 0
+            ? await experienceTrackerAPI.award({ character: characterId, trigger })
+            : await experienceTrackerAPI.revoke({ character: characterId, trigger });
+        const changed =
+          delta > 0 ? Number(res?.granted) || 0 : Number(res?.revoked) || 0;
+        if (changed > 0) {
+          const fresh = await characterAPI.getCharacter(characterId);
+          if (fresh) applyAllocationBackendCharacter(fresh);
         }
         await refetchXpReqTracker();
       } catch (err) {
@@ -6808,7 +6795,12 @@ const CharacterSheetWrapper = ({
         setXpToggleBusyTrigger(null);
       }
     },
-    [characterId, xpReqSnapshot.hasActiveSession, refetchXpReqTracker],
+    [
+      characterId,
+      xpReqSnapshot.hasActiveSession,
+      refetchXpReqTracker,
+      applyAllocationBackendCharacter,
+    ],
   );
 
   /**
