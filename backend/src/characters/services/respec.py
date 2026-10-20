@@ -109,10 +109,19 @@ def capture_chargen_baseline(character: Character) -> dict:
 
 
 def ensure_chargen_baseline(character: Character) -> dict:
-    """Persist chargen_baseline once before the first XP allocation."""
+    """Persist chargen_baseline once before the first XP allocation.
+
+    Returns {} without saving when active allocations already exist: the live
+    sheet then includes their effects, and replaying them on top of it would
+    count each one twice (e.g. "Cannot raise grade beyond S").
+    """
     existing = character.chargen_baseline
     if isinstance(existing, dict) and existing.get("action_dots") is not None:
         return existing
+    if CharacterXPAllocation.objects.filter(
+        character=character, undone_at__isnull=True
+    ).exists():
+        return {}
     snap = capture_chargen_baseline(character)
     character.chargen_baseline = snap
     character.save(update_fields=["chargen_baseline"])
@@ -356,8 +365,21 @@ def _normalize_compare_state(d: dict) -> dict:
 
 
 def diff_fold_vs_live(character: Character) -> dict:
-    """Return {field: {fold, live}} for mismatches; empty if reconciled."""
-    rebuilt = rebuild_from_allocations(character)
+    """Return {field: {fold, live}} for mismatches; empty if reconciled.
+
+    A replay that cannot be applied to the baseline (e.g. a stat bump past S)
+    is itself a mismatch, reported under "replay" instead of raising.
+    """
+    baseline = character.chargen_baseline
+    if not (isinstance(baseline, dict) and baseline.get("action_dots") is not None):
+        if CharacterXPAllocation.objects.filter(
+            character=character, undone_at__isnull=True
+        ).exists():
+            return {"baseline": {"fold": None, "live": "missing"}}
+    try:
+        rebuilt = rebuild_from_allocations(character)
+    except XPAllocationError as exc:
+        return {"replay": {"fold": str(exc), "live": None}}
     fold = _normalize_compare_state(rebuilt.to_dict())
     live = _normalize_compare_state(live_state_from_character(character))
     diffs = {}
@@ -657,7 +679,11 @@ def commit_respec(
             "Ask a GM to run verify_allocation_ledger / repair before Respec."
         )
 
-    ensure_chargen_baseline(character)
+    if not ensure_chargen_baseline(character):
+        raise RespecError(
+            "This character has XP spends but no starting snapshot, so Respec "
+            "cannot replay them. Ask a GM to repair the ledger."
+        )
     character.refresh_from_db()
 
     dropped_ids = [int(x) for x in (draft.get("dropped_allocation_ids") or [])]
