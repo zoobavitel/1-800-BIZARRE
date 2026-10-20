@@ -14,8 +14,8 @@ Environment="BIZARRE_ENV_FILE=/etc/bizarre/perf.env"
 ExecStart=/opt/bizarre-prod/.venv/bin/gunicorn app.wsgi:application \
   --bind 127.0.0.1:8001 \
   --worker-class gthread \
-  --workers 2 \
-  --threads 32 \
+  --workers 4 \
+  --threads 16 \
   --timeout 120 \
   --graceful-timeout 60 \
   --max-requests 5000 \

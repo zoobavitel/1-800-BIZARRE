@@ -20,8 +20,8 @@ Environment="BIZARRE_ENV_FILE=/etc/bizarre/prod.env"
 ExecStart=/opt/bizarre-prod/.venv/bin/gunicorn app.wsgi:application \
   --bind 127.0.0.1:8000 \
   --worker-class gthread \
-  --workers 2 \
-  --threads 32 \
+  --workers 4 \
+  --threads 16 \
   --timeout 120 \
   --keep-alive 120 \
   --graceful-timeout 60 \
@@ -31,7 +31,7 @@ ExecStart=/opt/bizarre-prod/.venv/bin/gunicorn app.wsgi:application \
   --access-logformat '%%(h)s "%%(r)s" %%(s)s %%(b)s %%(M)sms'
 # max-requests 5000 with jitter 500 recycled both workers within seconds of
 # each other about every 7 minutes at a 5-player table, stalling the API.
-# Wide jitter keeps the two recycles apart. Access log names each URL and its
+# Wide jitter keeps worker recycles apart. Access log names each URL and its
 # duration in the journal, so load can be traced by endpoint.
 # %% is systemd's escape for a literal %.
 # keep-alive > tailscaled's idle timeout (Go default 90s). With gunicorn's 2s

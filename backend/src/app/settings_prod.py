@@ -42,7 +42,7 @@ DATABASES = {
         "PORT": config("DB_PORT", default="5432"),
         # Reuse connections across requests. Without this every request paid a
         # fresh Postgres connect (40-70ms floor on near-empty endpoints).
-        # Worst case 2 workers x 32 threads = 64 open connections, under the
+        # Worst case 4 workers x 16 threads = 64 open connections, under the
         # Postgres default max_connections=100 with room for celery and agents.
         "CONN_MAX_AGE": config("DB_CONN_MAX_AGE", default=60, cast=int),
         "CONN_HEALTH_CHECKS": True,
