@@ -25,8 +25,15 @@ ExecStart=/opt/bizarre-prod/.venv/bin/gunicorn app.wsgi:application \
   --timeout 120 \
   --keep-alive 120 \
   --graceful-timeout 60 \
-  --max-requests 5000 \
-  --max-requests-jitter 500
+  --max-requests 50000 \
+  --max-requests-jitter 12500 \
+  --access-logfile - \
+  --access-logformat '%%(h)s "%%(r)s" %%(s)s %%(b)s %%(M)sms'
+# max-requests 5000 with jitter 500 recycled both workers within seconds of
+# each other about every 7 minutes at a 5-player table, stalling the API.
+# Wide jitter keeps the two recycles apart. Access log names each URL and its
+# duration in the journal, so load can be traced by endpoint.
+# %% is systemd's escape for a literal %.
 # keep-alive > tailscaled's idle timeout (Go default 90s). With gunicorn's 2s
 # default, tailscaled reused sockets gunicorn had already closed, and Firefox
 # saw NS_ERROR_NET_RESET / "CORS request did not succeed" on parallel loads.

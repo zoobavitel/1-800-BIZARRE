@@ -3664,7 +3664,7 @@ function SessionDetail({
   // clock tick cannot trigger getCharacters()+getCrews() for every open client
   // (thundering herd → gunicorn worker timeout on the 2GiB CT).
   const refetchSessionPanel = useCallback(
-    async (source = "unknown", sseReason = null) => {
+    async (source = "unknown", sseReason = null, characterIds = null) => {
       if (!session?.id) return;
       const sid = session.id;
       const cid = campaign?.id;
@@ -3681,6 +3681,24 @@ function SessionDetail({
           setClocks(normalizeListResponse(data));
         } catch {
           /* keep previous clocks — never wipe on error */
+        }
+        return;
+      }
+
+      // Character-scoped: SSE named which characters changed. GET just those
+      // and merge, instead of pulling every character in the campaign.
+      if (source === "sse" && reason === "character_scoped") {
+        const ids = Array.isArray(characterIds) ? characterIds : [];
+        const fresh = await Promise.all(
+          ids.map((id) => characterAPI.getCharacter(id).catch(() => null)),
+        );
+        const byId = new Map(
+          fresh.filter(Boolean).map((c) => [Number(c.id), c]),
+        );
+        if (byId.size) {
+          setCharacters((prev) =>
+            (prev || []).map((c) => byId.get(Number(c.id)) || c),
+          );
         }
         return;
       }
@@ -3785,6 +3803,8 @@ function SessionDetail({
     if (!campaign?.id || !session?.id) return undefined;
     let pending = null;
     let pendingReasons = new Set();
+    let pendingCharacterIds = new Set();
+    let unscopedCharacter = false;
     const HEAVY = new Set([
       "character",
       "crew",
@@ -3795,13 +3815,31 @@ function SessionDetail({
       "update",
       "",
     ]);
-    const schedule = (reason) => {
-      pendingReasons.add(String(reason || ""));
+    const schedule = (reason, event) => {
+      const r = String(reason || "");
+      pendingReasons.add(r);
+      if (r === "character") {
+        const id = Number(event?.character_id);
+        if (id) pendingCharacterIds.add(id);
+        else unscopedCharacter = true;
+      }
       if (pending) return;
       pending = setTimeout(() => {
         pending = null;
-        const reasons = [...pendingReasons];
+        let reasons = [...pendingReasons];
+        const charIds = [...pendingCharacterIds];
+        const charUnscoped = unscopedCharacter;
         pendingReasons = new Set();
+        pendingCharacterIds = new Set();
+        unscopedCharacter = false;
+        // Only character saves among the heavy reasons, all with ids: fetch
+        // those characters, then handle the light reasons that remain.
+        const otherHeavy = reasons.some((x) => x !== "character" && HEAVY.has(x));
+        if (reasons.includes("character") && !otherHeavy && !charUnscoped) {
+          refetchSessionPanel("sse", "character_scoped", charIds);
+          reasons = reasons.filter((x) => x !== "character");
+          if (!reasons.length) return;
+        }
         const heavyReason = reasons.find((r) => HEAVY.has(r));
         const chosen =
           heavyReason != null

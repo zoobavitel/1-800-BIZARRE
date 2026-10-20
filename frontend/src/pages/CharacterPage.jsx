@@ -40,6 +40,7 @@ import {
   isCampaignSseHealthy,
   subscribeCampaignEvents,
 } from "../features/character-sheet/services/campaignEvents";
+import { routeSheetEvents } from "../features/character-sheet/services/sheetSseRouting.mjs";
 import { useAuth } from "../features/auth";
 import { CharacterSheetWrapper } from "./CharacterSheet";
 import { characterHashFromIdAndName } from "../utils/spaNavigation";
@@ -49,6 +50,8 @@ import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 const MODES = { CHARACTER: "character", NPC: "npc" };
 /** Poll open character sheets + campaigns while the tab is visible (backup if SSE disconnects). */
 const SHEET_SYNC_INTERVAL_MS = 30000;
+/** Coalesce SSE campaign_update bursts into one sheet sync (ms). */
+const SHEET_SSE_DEBOUNCE_MS = 1000;
 
 /** Staff / creator / campaign GM may edit; campaign players view See-on NPCs read-only. */
 function userCanEditNpcSheet(user, npc, campaigns) {
@@ -565,27 +568,34 @@ export default function CharacterPage({
    * Refresh campaigns list and merge full character detail into every open tab (GM edits, session P/E, etc.).
    * Always GET /characters/:id/ per open PC so stats stay aligned with the server.
    */
-  const syncOpenSheetsFromServer = useCallback(async () => {
-    const [c, chars] = await Promise.all([
-      campaignAPI.getCampaigns().catch(() => []),
-      characterAPI.getCharacters({ mine: true }).catch(() => []),
-    ]);
-    setCampaigns(c || []);
-    const front = (chars || []).map(transformBackendToFrontend);
-    setCharacters(front);
-    const byId = new Map(front.map((x) => [x.id, x]));
+  const syncOpenSheetsFromServer = useCallback(async (onlyCharacterIds = null) => {
+    // onlyCharacterIds: refetch just these open sheets and skip the list GETs.
+    const only = onlyCharacterIds ? new Set(onlyCharacterIds) : null;
+    let byId = new Map();
+    if (!only) {
+      const [c, chars] = await Promise.all([
+        campaignAPI.getCampaigns().catch(() => []),
+        characterAPI.getCharacters({ mine: true }).catch(() => []),
+      ]);
+      setCampaigns(c || []);
+      const front = (chars || []).map(transformBackendToFrontend);
+      setCharacters(front);
+      byId = new Map(front.map((x) => [x.id, x]));
+    }
     setCharTabs((prev) => {
       void (async () => {
         const metaSnap = charTabUnsavedMetaRef.current || {};
         const next = await Promise.all(
           prev.map(async (t) => {
             if (!t.characterId) return t;
+            if (only && !only.has(t.characterId)) return t;
             // Protect local draft (XP/inventory/clocks) while editing, saving,
             // or in the dirtyIntent window — but still overlay server stress/
             // trauma so a clock edit cannot hide roll/GM stress (incapacitated
             // actions key off server filled count).
             const metaAtStart = metaSnap[t.tabId];
-            if (sheetTabIsProtected(metaAtStart)) {
+            // Scoped sync has no list snapshot, so it fetches and merges below.
+            if (!only && sheetTabIsProtected(metaAtStart)) {
               return applyServerOwnedSheetFields(
                 t,
                 byId.get(t.characterId),
@@ -1510,17 +1520,66 @@ export default function CharacterPage({
       sheetSseUnsubRef.current = null;
       return undefined;
     }
+    // Every save in the campaign broadcasts to every client, and each sync is
+    // 2 list GETs plus one GET per open tab. Coalesce bursts into one sync, and
+    // never run two at once: a rerun waits for the one in flight.
+    let pending = null;
+    let inFlight = false;
+    let rerun = false;
+    let disposed = false;
+    let pendingEvents = [];
+    const scheduleSync = () => {
+      if (pending || disposed) return;
+      pending = setTimeout(() => {
+        pending = null;
+        void runSync();
+      }, SHEET_SSE_DEBOUNCE_MS);
+    };
+    const runSync = async () => {
+      if (inFlight) {
+        rerun = true;
+        return;
+      }
+      inFlight = true;
+      const events = pendingEvents;
+      pendingEvents = [];
+      const openIds = (charTabsRef.current || [])
+        .map((t) => t.characterId)
+        .filter(Boolean);
+      const plan = routeSheetEvents(events, openIds);
+      try {
+        if (plan.full) {
+          await syncOpenSheetsFromServer();
+        } else {
+          if (plan.characterIds.length) {
+            await syncOpenSheetsFromServer(plan.characterIds);
+          }
+          if (plan.rolls) setSheetPollTick((x) => x + 1);
+        }
+      } finally {
+        inFlight = false;
+        if (rerun) {
+          rerun = false;
+          scheduleSync();
+        }
+      }
+    };
     const unsub = subscribeCampaignEvents(campaignIdForRealtime, {
-      onUpdate: (reason) => {
+      onUpdate: (reason, event) => {
         const r = String(reason || "update");
         if (SHEET_ABORT_SSE_REASONS.has(r)) {
           setSheetRealtimeReason(r);
         }
-        void syncOpenSheetsFromServer();
+        pendingEvents.push({ ...(event || {}), reason: r });
+        scheduleSync();
       },
     });
     sheetSseUnsubRef.current = unsub;
     return () => {
+      disposed = true;
+      if (pending) clearTimeout(pending);
+      pending = null;
+      pendingEvents = [];
       sheetSseUnsubRef.current = null;
       unsub();
     };
