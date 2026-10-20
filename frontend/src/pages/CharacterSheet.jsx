@@ -1006,6 +1006,13 @@ const CharacterSheetWrapper = ({
   onCharacterStressTraumaSync,
   /** Incremented when CharacterPage finishes a remote sync (poll, SSE, visibility) so session rolls refetch. */
   sessionDataPollTick = 0,
+  /**
+   * Scoped sync counters from CharacterPage: { full, character, ownRolls, groupActions, rolls }.
+   * Each effect listens only to the counter for the data it shows, so a roll by
+   * another player does not refetch this sheet. Absent: every counter falls back
+   * to sessionDataPollTick (old behavior).
+   */
+  sheetSync = null,
   /** SSE reason that should abort in-flight sheet PATCH (character / experience_tracker / pending_advance). */
   sheetRealtimeReason = "",
   onSheetRealtimeReasonHandled,
@@ -1015,6 +1022,13 @@ const CharacterSheetWrapper = ({
   onCharacterReloaded,
 }) => {
   const { user } = useAuth();
+  const tickFull = sheetSync ? sheetSync.full : sessionDataPollTick;
+  const tickCharacter = sheetSync ? sheetSync.character : sessionDataPollTick;
+  const tickOwnRolls = sheetSync ? sheetSync.ownRolls : sessionDataPollTick;
+  const tickGroupActions = sheetSync
+    ? sheetSync.groupActions
+    : sessionDataPollTick;
+  const tickRolls = sheetSync ? sheetSync.rolls : sessionDataPollTick;
   /** Last XP clocks/pool applied from a dedicated XP API; blocks stale parent hydrate until tab catches up. */
   const xpClocksTruthRef = useRef(null);
   /** Local stress+trauma after marking trauma at max stress; blocks stale poll/hydrate restore. */
@@ -1393,7 +1407,7 @@ const CharacterSheetWrapper = ({
 
   useEffect(() => {
     lastSavedPayloadRef.current = null;
-  }, [sessionDataPollTick]);
+  }, [tickFull, tickCharacter]);
 
   const openPortraitUrlModal = useCallback(() => {
     setPortraitUrlDraft(String(imageUrl || "").trim());
@@ -2252,7 +2266,8 @@ const CharacterSheetWrapper = ({
     character?.id,
     character?.coin,
     character?.coinFilled,
-    sessionDataPollTick,
+    tickFull,
+    tickCharacter,
     sheetDraftIsDirty,
   ]);
 
@@ -2280,7 +2295,8 @@ const CharacterSheetWrapper = ({
   }, [
     character?.id,
     character?.stash,
-    sessionDataPollTick,
+    tickFull,
+    tickCharacter,
     sheetDraftIsDirty,
   ]);
 
@@ -3617,7 +3633,7 @@ const CharacterSheetWrapper = ({
     return () => {
       cancelled = true;
     };
-  }, [activeMode, charData.crewId, sessionDataPollTick]);
+  }, [activeMode, charData.crewId, tickFull]);
 
   useEffect(() => {
     if (activeMode !== "CREW MODE" || !charData.crewId) return;
@@ -6933,17 +6949,18 @@ const CharacterSheetWrapper = ({
     ],
   );
 
+  // Only active-session rows are read (xpReqActiveSessionEntries, XP snapshot).
   useEffect(() => {
-    if (!characterId) {
+    if (!characterId || !activeSessionId) {
       setXpReqTracker([]);
       return;
     }
     const asArray = (res) => (Array.isArray(res) ? res : res?.results || []);
     experienceTrackerAPI
-      .list({ character: characterId })
+      .list({ character: characterId, session: activeSessionId })
       .then((r) => setXpReqTracker(asArray(r)))
       .catch(() => setXpReqTracker([]));
-  }, [characterId, sessionDataPollTick]);
+  }, [characterId, activeSessionId, tickFull, tickOwnRolls]);
 
   useEffect(() => {
     if (!characterId || !activeSessionId) {
@@ -6951,11 +6968,12 @@ const CharacterSheetWrapper = ({
       return;
     }
     const asArray = (res) => (Array.isArray(res) ? res : res?.results || []);
+    // XP tallies only count this character's rolls.
     rollAPI
-      .getRolls({ session: activeSessionId })
+      .getRolls({ session: activeSessionId, character: characterId })
       .then((r) => setXpReqRolls(asArray(r)))
       .catch(() => setXpReqRolls([]));
-  }, [characterId, activeSessionId, sessionDataPollTick]);
+  }, [characterId, activeSessionId, tickFull, tickOwnRolls]);
 
   useEffect(() => {
     setHistorySessionId(activeSessionId || null);
@@ -6988,7 +7006,13 @@ const CharacterSheetWrapper = ({
   useEffect(() => {
     refreshGmUndoStatus();
     refreshGmRedoStatus();
-  }, [refreshGmUndoStatus, refreshGmRedoStatus, sessionDataPollTick, historyRefreshTick]);
+  }, [
+    refreshGmUndoStatus,
+    refreshGmRedoStatus,
+    tickFull,
+    tickCharacter,
+    historyRefreshTick,
+  ]);
 
   useEffect(() => {
     if (!showXpHistoryModal || !characterId) return;
@@ -7713,7 +7737,7 @@ const CharacterSheetWrapper = ({
       .catch(() => {
         /* keep prior OPEN GA; clearing here caused missing group_action_id on submit */
       });
-  }, [activeSessionId, sessionDataPollTick]);
+  }, [activeSessionId, tickFull, tickGroupActions]);
 
   // Leader may create a group action after this sheet already has activeSessionId; refetch when opening an action roll.
   useEffect(() => {
@@ -7776,7 +7800,7 @@ const CharacterSheetWrapper = ({
       })
       .catch(() => setGroupActionRolls([]))
       .finally(() => setGroupActionLoading(false));
-  }, [activeGroupAction?.id, activeSessionId, sessionDataPollTick]);
+  }, [activeGroupAction?.id, activeSessionId, tickFull, tickRolls]);
 
   const groupRollBoard = useMemo(() => {
     if (!activeGroupAction?.id) return [];
