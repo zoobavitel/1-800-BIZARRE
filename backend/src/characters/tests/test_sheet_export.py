@@ -429,13 +429,14 @@ class SheetExportHiddenFactionTests(TestCase):
         self.assertIn("Shown Family", text)
         self.assertIn("Visible Giorno", text)
 
-    def test_gm_pc_export_shows_everything(self):
+    def test_gm_pc_export_is_also_player_view(self):
         text, _ = self._pdf_text(
             self.gm, f"/api/characters/{self.character.id}/export-pdf/"
         )
-        self.assertIn("Secret Boss Faction", text)
-        self.assertIn("Hidden Diavolo", text)
-        self.assertIn("Masked Name Faction", text)
+        self.assertNotIn("Secret Boss Faction", text)
+        self.assertNotIn("Hidden Diavolo", text)
+        self.assertNotIn("Masked Name Faction", text)
+        self.assertIn("Shown Family", text)
 
     def test_player_npc_export_omits_hidden_faction(self):
         _, reader = self._pdf_text(

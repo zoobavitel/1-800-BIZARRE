@@ -167,8 +167,9 @@ def export_pc_pdf(character, viewer=None) -> tuple[bytes, str]:
     field_values = build_pc_field_values(character)
     portrait = load_portrait_bytes(character.image, character.image_url)
     pdf_bytes = fill_pdf(pc_path, field_values, portrait_bytes=portrait)
-    player_view = not viewer_sees_everything(viewer, character.campaign)
-    append_bytes = build_standing_crew_pdf_bytes(character, player_view=player_view)
+    # A character sheet is the player's document: always the player view,
+    # even when the GM exports it. viewer is accepted for API symmetry.
+    append_bytes = build_standing_crew_pdf_bytes(character, player_view=True)
     pdf_bytes = merge_pdf_bytes(pdf_bytes, append_bytes)
     filename = f"{sanitize_filename(character.true_name, 'character')}-character-sheet.pdf"
     return pdf_bytes, filename
