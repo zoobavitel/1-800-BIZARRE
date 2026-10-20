@@ -69,16 +69,13 @@ def _overlay_portrait(pdf_bytes: bytes, portrait_bytes: bytes) -> bytes:
     can.save()
     packet.seek(0)
 
+    # clone_from copies the whole document, AcroForm included, with proper
+    # pypdf objects. Copying /AcroForm by hand with a plain str key crashed
+    # writer.write() with "'str' object has no attribute 'write_to_stream'".
     reader = PdfReader(io.BytesIO(pdf_bytes))
     overlay_reader = PdfReader(packet)
-    writer = PdfWriter()
-    for page_index, page in enumerate(reader.pages):
-        if page_index == 0:
-            page.merge_page(overlay_reader.pages[0])
-        writer.add_page(page)
-
-    if reader.trailer.get("/Root", {}).get("/AcroForm"):
-        writer._root_object.update({"/AcroForm": reader.trailer["/Root"]["/AcroForm"]})
+    writer = PdfWriter(clone_from=reader)
+    writer.pages[0].merge_page(overlay_reader.pages[0])
 
     out = io.BytesIO()
     writer.write(out)
