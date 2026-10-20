@@ -160,6 +160,74 @@ class SessionRollLoopIntegrationTests(TestCase):
         self.assertEqual(rolled.data["position"], "controlled")
         self.assertEqual(rolled.data["effect"], "extreme")
 
+    def test_roll_action_explicit_position_is_start_before_effect_steps(self):
+        self.session.position_effect_by_character = {
+            str(self.player.id): {"position": "desperate", "effect": "limited"},
+        }
+        self.session.save(update_fields=["position_effect_by_character"])
+        rolled = self.client.post(
+            f"/api/characters/{self.player.id}/roll-action/",
+            {
+                "action": "hunt",
+                "session_id": self.session.id,
+                "position": "controlled",
+                "ability_effect_steps": 1,
+            },
+            format="json",
+        )
+        self.assertEqual(rolled.status_code, status.HTTP_200_OK, rolled.data)
+        self.assertEqual(rolled.data["position"], "controlled")
+        self.assertEqual(rolled.data["effect"], "standard")
+
+    def test_roll_action_invalid_position_keeps_session_position(self):
+        self.session.default_position = "desperate"
+        self.session.save(update_fields=["default_position"])
+        rolled = self.client.post(
+            f"/api/characters/{self.player.id}/roll-action/",
+            {
+                "action": "hunt",
+                "session_id": self.session.id,
+                "position": "nope",
+            },
+            format="json",
+        )
+        self.assertEqual(rolled.status_code, status.HTTP_200_OK, rolled.data)
+        self.assertEqual(rolled.data["position"], "desperate")
+
+    def test_roll_action_explicit_effect_is_start_before_effect_steps(self):
+        self.session.position_effect_by_character = {
+            str(self.player.id): {"position": "risky", "effect": "extreme"},
+        }
+        self.session.save(update_fields=["position_effect_by_character"])
+        rolled = self.client.post(
+            f"/api/characters/{self.player.id}/roll-action/",
+            {
+                "action": "hunt",
+                "session_id": self.session.id,
+                "effect": "limited",
+                "ability_effect_steps": 1,
+            },
+            format="json",
+        )
+        self.assertEqual(rolled.status_code, status.HTTP_200_OK, rolled.data)
+        self.assertEqual(rolled.data["position"], "risky")
+        self.assertEqual(rolled.data["effect"], "standard")
+
+    def test_roll_action_invalid_effect_keeps_session_effect(self):
+        self.session.default_effect = "extreme"
+        self.session.save(update_fields=["default_effect"])
+        rolled = self.client.post(
+            f"/api/characters/{self.player.id}/roll-action/",
+            {
+                "action": "hunt",
+                "session_id": self.session.id,
+                "effect": "nope",
+            },
+            format="json",
+        )
+        self.assertEqual(rolled.status_code, status.HTTP_200_OK, rolled.data)
+        self.assertEqual(rolled.data["effect"], "extreme")
+
     def test_roll_action_requires_action_for_action_rolls(self):
         rolled = self.client.post(
             f"/api/characters/{self.player.id}/roll-action/",

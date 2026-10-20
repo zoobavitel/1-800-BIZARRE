@@ -596,8 +596,25 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 }
             )
 
-        position = normalize_position(request.data.get("position"))
-        effect = normalize_effect(request.data.get("effect") or "standard")
+        raw_position = request.data.get("position", None)
+        explicit_position = None
+        if isinstance(raw_position, str):
+            candidate = raw_position.strip().lower()
+            if candidate in ("controlled", "risky", "desperate"):
+                explicit_position = candidate
+        raw_effect = request.data.get("effect", None)
+        explicit_effect = None
+        if isinstance(raw_effect, str) and raw_effect.strip():
+            effect_candidate = raw_effect.strip().lower()
+            if effect_candidate in ("great", "greater"):
+                effect_candidate = "extreme"
+            if effect_candidate in ("limited", "standard", "extreme"):
+                explicit_effect = effect_candidate
+        # No session: request position/effect, else risky/standard. With a
+        # session, a clicked starting position and starting effect win; push
+        # and ability_effect_steps bump that effect below.
+        position = explicit_position or normalize_position(None)
+        effect = explicit_effect or normalize_effect(None)
         if session and roll_type.upper() == "ACTION":
             pe_map = getattr(session, "position_effect_by_character", None) or {}
             if not isinstance(pe_map, dict):
@@ -605,15 +622,17 @@ class CharacterViewSet(viewsets.ModelViewSet):
             key = str(character.id)
             entry = pe_map.get(key) or pe_map.get(character.id)
             if isinstance(entry, dict) and entry:
-                position = normalize_position(
+                session_position = normalize_position(
                     entry.get("position") or session.default_position
                 )
-                effect = normalize_effect(
+                session_effect = normalize_effect(
                     entry.get("effect") or session.default_effect
                 )
             else:
-                position = normalize_position(session.default_position)
-                effect = normalize_effect(session.default_effect)
+                session_position = normalize_position(session.default_position)
+                session_effect = normalize_effect(session.default_effect)
+            position = explicit_position or session_position
+            effect = explicit_effect or session_effect
             gl_map = getattr(session, "roll_goal_by_character", None) or {}
             if not isinstance(gl_map, dict):
                 gl_map = {}
