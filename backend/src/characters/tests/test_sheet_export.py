@@ -162,6 +162,24 @@ class SheetExportServiceTests(TestCase):
         self.assertIn("pc_name", fields)
         self.assertEqual(fields["pc_name"].get("/V"), "Jotaro Kujo")
 
+    def test_portrait_overlay_keeps_form_fields(self):
+        # A portrait used to crash writer.write() with
+        # AttributeError: 'str' object has no attribute 'write_to_stream'.
+        from PIL import Image
+
+        from characters.services.sheet_export.pdf_fill import fill_pdf
+
+        img = io.BytesIO()
+        Image.new("RGB", (40, 40), (200, 50, 50)).save(img, format="PNG")
+        pc_path, _ = ensure_templates()
+        pdf_bytes = fill_pdf(
+            pc_path, {"pc_name": "Jotaro Kujo"}, portrait_bytes=img.getvalue()
+        )
+        reader = PdfReader(io.BytesIO(pdf_bytes))
+        fields = reader.get_fields() or {}
+        self.assertEqual(fields["pc_name"].get("/V"), "Jotaro Kujo")
+        self.assertTrue(reader.pages[0].images)
+
     def test_stress_track_exports_durability_length(self):
         # No Durability grade → default 9-box track in field values.
         self.character.stress = 4
