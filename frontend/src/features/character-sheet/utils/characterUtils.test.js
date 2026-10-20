@@ -235,6 +235,20 @@ describe("mergeServerOwnedCharacterFields", () => {
     expect(next.name).toBe("Draft");
   });
 
+  test("overlays server pending advances even while XP was touched", () => {
+    const next = mergeServerOwnedCharacterFields(
+      { ...local, pendingAdvanceCounts: {} },
+      {
+        ...server,
+        pendingAdvanceCounts: { insight: 2 },
+        pendingAdvances: [{ id: 1, track: "insight" }],
+      },
+      { xp: true },
+    );
+    expect(next.pendingAdvanceCounts).toEqual({ insight: 2 });
+    expect(next.pendingAdvances).toHaveLength(1);
+  });
+
   test("keeps local stress when the player touched the stress track", () => {
     const next = mergeServerOwnedCharacterFields(local, server, {
       stress: true,
