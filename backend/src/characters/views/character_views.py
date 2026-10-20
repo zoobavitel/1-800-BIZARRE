@@ -2209,6 +2209,12 @@ class CharacterViewSet(viewsets.ModelViewSet):
             if character.ledger_reconcile_ok != ok:
                 character.ledger_reconcile_ok = ok
                 character.save(update_fields=["ledger_reconcile_ok"])
+        elif CharacterXPAllocation.objects.filter(
+            character=character, undone_at__isnull=True
+        ).exists():
+            # Spends exist but no starting snapshot: cannot replay safely.
+            ok = False
+            diffs = {"baseline": {"fold": None, "live": "missing"}}
         else:
             ok = True
 
