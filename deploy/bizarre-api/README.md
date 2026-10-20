@@ -66,7 +66,16 @@ Manual GitHub Actions `workflow_dispatch` → `deploy-lxc` (must run on `master`
 
 1. Abort if `/opt/bizarre-prod` or `/etc/bizarre/prod.env` missing, or prod tree dirty (`git status --porcelain`).
 2. `git fetch` + `git checkout --detach origin/master`.
-3. pip into **prod** venv / migrate / collectstatic / restart units.
+3. pip into **prod** venv / migrate / collectstatic.
+4. `sudo /usr/local/sbin/bizarre-apply-units` (`apply-units.sh`): installs changed `gunicorn.service` / `celery-worker.service`, **reloads** gunicorn (HUP, no dropped requests), restarts celery, waits for `127.0.0.1:8000`. Gunicorn is fully restarted only when its unit file changed. If the helper is not installed yet, CI falls back to `systemctl restart` and warns.
+
+The job refuses to run Mon 7:45–10:30pm ET (game session) unless dispatched with `allow_during_session`.
+
+One-time root setup for step 4 (re-run when `apply-units.sh` changes):
+
+```bash
+bash /opt/bizarre-prod/deploy/bizarre-api/setup-deploy-sudo.sh
+```
 
 Fail loud. No `reset --hard`, no `clean -fd`, no checkout of `/opt/bizarre`, no media rsync from the agent tree (that is cutover-only).
 
