@@ -1,0 +1,15 @@
+[Unit]
+Description=Loopback load balancer for bizarre-api gunicorn pool
+After=network.target gunicorn@1.service gunicorn@2.service
+Wants=gunicorn@1.service gunicorn@2.service
+
+[Service]
+User=root
+Group=root
+ExecStart=/usr/bin/caddy run --config /etc/bizarre/lb.caddy --adapter caddyfile
+ExecReload=/usr/bin/caddy reload --config /etc/bizarre/lb.caddy --adapter caddyfile --address 127.0.0.1:2021
+Restart=on-failure
+# Funnel and any local Caddy on :80 keep targeting 127.0.0.1:8000.
+
+[Install]
+WantedBy=multi-user.target

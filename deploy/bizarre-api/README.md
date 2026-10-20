@@ -131,6 +131,24 @@ sudo systemctl enable --now gunicorn celery-worker
 sudo systemctl status gunicorn celery-worker --no-pager
 ```
 
+### High availability on this container
+
+The single `gunicorn.service` master is one failure domain. After a deploy that includes `/api/health/`, and while nobody is playing:
+
+```bash
+BIZARRE_HA_CUTOVER=1 bash /opt/bizarre-prod/deploy/bizarre-api/install-ha.sh
+```
+
+That script requires Caddy. It starts `gunicorn@1` on `127.0.0.1:8001` and `gunicorn@2` on `127.0.0.1:8002`, checks both, then moves port `8000` to `bizarre-lb`. Funnel keeps targeting `127.0.0.1:8000`. `bizarre-scale.timer` adds instance 3 or 4 when every running instance stays busy, and stops the highest extra instance after it stays idle. Instances 1 and 2 stay up. Celery stays one worker. Postgres, Redis, and media stay on this container. If the host or the database dies, the API still dies.
+
+While `bizarre-lb` is active, `bizarre-apply-units` reloads the active `gunicorn@` instances one at a time and waits for each one's `/api/health/`. If `gunicorn@.service` changed, it restarts them one at a time instead. Caddy retries requests on the other instance for up to 5s, so players don't see errors. Before the cutover, it still reloads `gunicorn.service`. `install-ha.sh` refreshes `/usr/local/sbin/bizarre-apply-units`, so you don't need to re-run `setup-deploy-sudo.sh`.
+
+Rollback, also between sessions:
+
+```bash
+BIZARRE_HA_ROLLBACK=1 bash /opt/bizarre-prod/deploy/bizarre-api/rollback-ha.sh
+```
+
 ## 4. Caddy
 
 ```bash

@@ -47,6 +47,9 @@ CORS_ALLOW_CREDENTIALS = True
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SECURE_SSL_REDIRECT = config("DJANGO_SECURE_SSL_REDIRECT", default=True, cast=bool)
+# The pool probe is plain HTTP from Caddy on 127.0.0.1. A redirect would
+# mark every instance down. Path is matched without the leading slash.
+SECURE_REDIRECT_EXEMPT = [r"^api/health/$"]
 # When false, session/CSRF cookies work over plain HTTP (e.g. LAN testing). When true,
 # browsers only send cookies on HTTPS — required for real TLS deployments.
 DJANGO_SECURE_COOKIES = config("DJANGO_SECURE_COOKIES", default=True, cast=bool)
