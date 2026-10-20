@@ -180,6 +180,26 @@ class SheetExportServiceTests(TestCase):
         self.assertEqual(fields["pc_name"].get("/V"), "Jotaro Kujo")
         self.assertTrue(reader.pages[0].images)
 
+    def test_portrait_box_does_not_cover_page_one_fields(self):
+        # Form fields draw on top of page content, so any overlap hides the
+        # portrait under them (it used to sit under Look/Background/Playbook).
+        from characters.services.sheet_export.pdf_fill import PORTRAIT_RECT
+
+        x, y, w, h = PORTRAIT_RECT
+        for path in ensure_templates():
+            page = PdfReader(str(path)).pages[0]
+            self.assertLessEqual(x + w, float(page.mediabox.width))
+            self.assertLessEqual(y + h, float(page.mediabox.height))
+            for annot in page.get("/Annots") or []:
+                annot = annot.get_object()
+                rx1, ry1, rx2, ry2 = map(float, annot["/Rect"])
+                lo_x, hi_x = sorted((rx1, rx2))
+                lo_y, hi_y = sorted((ry1, ry2))
+                overlaps = lo_x < x + w and hi_x > x and lo_y < y + h and hi_y > y
+                self.assertFalse(
+                    overlaps, f"{path.name}: portrait covers {annot.get('/T')}"
+                )
+
     def test_stress_track_exports_durability_length(self):
         # No Durability grade → default 9-box track in field values.
         self.character.stress = 4
