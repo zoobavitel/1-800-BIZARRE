@@ -98,12 +98,8 @@ def _clock_rows(npc: NPC) -> list[dict[str, Any]]:
     return rows
 
 
-def build_npc_field_values(npc: NPC, player_view: bool = False) -> dict[str, str]:
-    """Return AcroForm field name -> value for an NPC sheet export.
-
-    player_view blanks what the GM hid from players, matching the NPC API
-    (redact_npc_player_payload).
-    """
+def build_npc_field_values(npc: NPC) -> dict[str, str]:
+    """Return AcroForm field name -> value for an NPC sheet export (GM-only)."""
     npc = (
         NPC.objects.select_related("campaign", "faction", "heritage")
         .prefetch_related(
@@ -171,41 +167,5 @@ def build_npc_field_values(npc: NPC, player_view: bool = False) -> dict[str, str
     values["npc_relationships"] = _format_mapping(npc.relationships)
     values["npc_faction_status"] = _format_mapping(npc.faction_status)
 
-    if player_view:
-        _redact_npc_values_for_player(values, npc)
     return values
 
-
-def _redact_npc_values_for_player(values: dict[str, str], npc: NPC) -> None:
-    from characters.services.npc_section_visibility import (
-        npc_section_visible,
-        player_sees_faction_membership,
-    )
-
-    see = getattr(npc, "players_see", None)
-    if not player_sees_faction_membership(npc):
-        values["npc_faction"] = ""
-        values["npc_faction_status"] = ""
-    if not npc_section_visible(see, "playbook"):
-        values["npc_playbook"] = ""
-    if not npc_section_visible(see, "abilities"):
-        values["npc_abilities"] = ""
-        values["npc_abilities_overflow"] = ""
-    if not npc_section_visible(see, "notes"):
-        values["npc_notes"] = ""
-    if not npc_section_visible(see, "stand_identity"):
-        for key in (
-            "npc_stand_name",
-            "npc_stand_description",
-            "npc_stand_appearance",
-            "npc_stand_manifestation",
-            "npc_special_traits",
-        ):
-            values[key] = ""
-    if not npc_section_visible(see, "heritage"):
-        values["npc_heritage"] = ""
-    if not npc_section_visible(see, "contacts"):
-        values["npc_contacts"] = ""
-    if not getattr(npc, "players_see_inventory", True):
-        values["npc_inventory"] = ""
-        values["npc_inventory_notes"] = ""

@@ -438,12 +438,10 @@ class SheetExportHiddenFactionTests(TestCase):
         self.assertNotIn("Masked Name Faction", text)
         self.assertIn("Shown Family", text)
 
-    def test_player_npc_export_omits_hidden_faction(self):
-        _, reader = self._pdf_text(
-            self.player, f"/api/npcs/{self.shown_npc.id}/export-pdf/"
-        )
-        fields = reader.get_fields() or {}
-        self.assertFalse(fields["npc_faction"].get("/V"))
+    def test_player_cannot_export_npc(self):
+        self.client.force_authenticate(user=self.player)
+        response = self.client.get(f"/api/npcs/{self.shown_npc.id}/export-pdf/")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_gm_npc_export_shows_faction(self):
         _, reader = self._pdf_text(

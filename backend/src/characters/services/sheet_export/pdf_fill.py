@@ -124,17 +124,7 @@ def fill_pdf(
     return pdf_bytes
 
 
-def viewer_sees_everything(viewer, campaign) -> bool:
-    """Staff and the campaign GM see hidden NPCs/factions. viewer=None is an
-    internal call (tests, management commands) and also sees everything."""
-    if viewer is None:
-        return True
-    if getattr(viewer, "is_staff", False):
-        return True
-    return bool(campaign is not None and campaign.gm_id == viewer.id)
-
-
-def export_pc_pdf(character, viewer=None) -> tuple[bytes, str]:
+def export_pc_pdf(character) -> tuple[bytes, str]:
     from characters.models import Character
 
     from .pc_builder import build_pc_field_values
@@ -168,21 +158,20 @@ def export_pc_pdf(character, viewer=None) -> tuple[bytes, str]:
     portrait = load_portrait_bytes(character.image, character.image_url)
     pdf_bytes = fill_pdf(pc_path, field_values, portrait_bytes=portrait)
     # A character sheet is the player's document: always the player view,
-    # even when the GM exports it. viewer is accepted for API symmetry.
+    # even when the GM exports it.
     append_bytes = build_standing_crew_pdf_bytes(character, player_view=True)
     pdf_bytes = merge_pdf_bytes(pdf_bytes, append_bytes)
     filename = f"{sanitize_filename(character.true_name, 'character')}-character-sheet.pdf"
     return pdf_bytes, filename
 
 
-def export_npc_pdf(npc, viewer=None) -> tuple[bytes, str]:
+def export_npc_pdf(npc) -> tuple[bytes, str]:
     from .npc_builder import build_npc_field_values
     from .template_builder import ensure_templates
 
     ensure_pdf_dependencies()
     _, npc_path = ensure_templates()
-    player_view = not viewer_sees_everything(viewer, npc.campaign)
-    field_values = build_npc_field_values(npc, player_view=player_view)
+    field_values = build_npc_field_values(npc)
     portrait = load_portrait_bytes(npc.image, npc.image_url)
     pdf_bytes = fill_pdf(npc_path, field_values, portrait_bytes=portrait)
     filename = f"{sanitize_filename(npc.name, 'npc')}-npc-sheet.pdf"

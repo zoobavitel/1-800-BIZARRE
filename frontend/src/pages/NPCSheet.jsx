@@ -2975,7 +2975,8 @@ const NPCSheet = ({
           )}
         </div>
         <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-          {npc?.id && (
+          {/* Export is GM-only; the API refuses players too. */}
+          {npc?.id && !readOnly && (
             <button
               type="button"
               onClick={handleExportPdf}
