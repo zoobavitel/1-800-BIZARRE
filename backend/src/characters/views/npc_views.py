@@ -145,8 +145,14 @@ class NPCViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
         npc = self.get_object()
+        # GM-only: players can view some NPCs but never export them.
+        if not self._user_can_edit_npc(request, npc):
+            return Response(
+                {"error": "Only the GM can export NPC sheets."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         try:
-            pdf_bytes, filename = export_npc_pdf(npc, viewer=request.user)
+            pdf_bytes, filename = export_npc_pdf(npc)
         except ImportError as exc:
             return Response(
                 {"error": str(exc)},

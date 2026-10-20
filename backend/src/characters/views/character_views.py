@@ -3182,7 +3182,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
             )
         character = self.get_object()
         try:
-            pdf_bytes, filename = export_pc_pdf(character, viewer=request.user)
+            pdf_bytes, filename = export_pc_pdf(character)
         except ImportError as exc:
             return Response(
                 {"error": str(exc)},
