@@ -259,6 +259,43 @@ class RespecFoldTests(TestCase):
         self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
         self.assertTrue(r.data.get("allowed"))
 
+    def test_respec_status_bad_baseline_is_not_500(self):
+        # Baseline already at S plus a recorded stat bump used to raise
+        # "Cannot raise grade beyond S" and return 500.
+        self.character.xp_clocks = {**self.character.xp_clocks, "playbook": 10}
+        self.character.save(update_fields=["xp_clocks"])
+        apply_level_up(
+            self.character, xp_track="playbook", choice="stat", stand_stat="power"
+        )
+        self.character.refresh_from_db()
+        baseline = dict(self.character.chargen_baseline)
+        baseline["coin_stats"] = {**baseline["coin_stats"], "power": "S"}
+        self.character.chargen_baseline = baseline
+        self.character.save(update_fields=["chargen_baseline"])
+
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        r = client.get(f"/api/characters/{self.character.id}/respec-status/")
+        self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
+        self.assertFalse(r.data["allowed"])
+        self.assertIn("replay", r.data["diffs"])
+
+    def test_missing_baseline_with_spends_is_not_recaptured(self):
+        apply_minor_advance(self.character, xp_track="insight", action="HUNT")
+        self.character.refresh_from_db()
+        self.character.chargen_baseline = {}
+        self.character.save(update_fields=["chargen_baseline"])
+
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        r = client.get(f"/api/characters/{self.character.id}/respec-status/")
+        self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
+        self.assertFalse(r.data["allowed"])
+        self.assertIn("baseline", r.data["diffs"])
+        self.character.refresh_from_db()
+        # The post-spend sheet must not become the starting snapshot.
+        self.assertFalse(self.character.chargen_baseline)
+
     def test_chargen_baseline_captured_on_first_spend(self):
         self.assertFalse(self.character.chargen_baseline)
         apply_minor_advance(self.character, xp_track="insight", action="HUNT")
