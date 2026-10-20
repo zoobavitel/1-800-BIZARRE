@@ -233,7 +233,15 @@ class ExperienceTrackerViewSet(
         if char_id:
             char = Character.objects.filter(pk=char_id).select_related('campaign').first()
             if char and (char.user_id == user.id or (char.campaign_id and char.campaign.gm_id == user.id)):
-                return qs.filter(character_id=char_id)
+                qs = qs.filter(character_id=char_id)
+                # ?session=<id>: the sheet's XP panel reads only the active session.
+                session_id = self.request.query_params.get('session')
+                if session_id is not None and self.action == 'list':
+                    try:
+                        qs = qs.filter(session_id=int(session_id))
+                    except (TypeError, ValueError):
+                        return ExperienceTracker.objects.none()
+                return qs
             return ExperienceTracker.objects.none()
         return qs.filter(
             Q(character__user=user) | Q(character__campaign__gm=user)

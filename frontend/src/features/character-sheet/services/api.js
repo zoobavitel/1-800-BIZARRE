@@ -322,8 +322,14 @@ const apiRequest = async (endpoint, options = {}) => {
 // Character API functions
 export const characterAPI = {
   // Get all characters for current user
-  getCharacters: ({ mine } = {}) =>
-    apiRequest(mine ? "/characters/?mine=true" : "/characters/"),
+  // campaign: only that campaign's PCs (server-side filter; smaller payload).
+  getCharacters: ({ mine, campaign } = {}) => {
+    const qs = new URLSearchParams();
+    if (mine) qs.set("mine", "true");
+    if (campaign != null) qs.set("campaign", String(campaign));
+    const q = qs.toString();
+    return apiRequest(`/characters/${q ? "?" + q : ""}`);
+  },
 
   // Get character creation guide with rules and options
   getCreationGuide: () => apiRequest("/characters/creation-guide/"),

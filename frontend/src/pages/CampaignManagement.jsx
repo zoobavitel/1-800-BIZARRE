@@ -2883,7 +2883,7 @@ function CampaignSessionsPanel({
         .getProgressClocks({ campaign: campaign.id, session: sid })
         .catch(() => []),
       characterAPI
-        .getCharacters()
+        .getCharacters({ campaign: campaign.id })
         .then((list) =>
           (list || []).filter((c) => Number(c.campaign) === Number(campaign.id)),
         )
@@ -3648,7 +3648,7 @@ function SessionDetail({
   const refreshSessionCharacters = useCallback(async () => {
     if (!campaign?.id) return;
     try {
-      const list = await characterAPI.getCharacters();
+      const list = await characterAPI.getCharacters({ campaign: campaign.id });
       const rows = Array.isArray(list)
         ? list.filter(
             (c) => Number(c?.campaign) === Number(campaign.id),
@@ -3733,7 +3733,6 @@ function SessionDetail({
             reason === "campaign" ||
             reason === "npc" ||
             reason === "faction" ||
-            reason === "session" ||
             reason === "update" ||
             reason === ""));
 
@@ -3756,10 +3755,11 @@ function SessionDetail({
               .catch(() => {})
           : Promise.resolve(),
       ];
-      if (includeHeavy && !intervalLight) {
+      if (includeHeavy && !intervalLight && cid != null) {
+        // Server-side campaign filter: other campaigns' rows never leave the API.
         tasks.push(
           crewAPI
-            .getCrews()
+            .getCrewsByCampaign(cid)
             .then((list) =>
               setCrews(
                 cid != null
@@ -3771,7 +3771,7 @@ function SessionDetail({
             )
             .catch(() => {}),
           characterAPI
-            .getCharacters()
+            .getCharacters({ campaign: cid })
             .then((list) =>
               setCharacters(
                 cid != null
@@ -3805,13 +3805,14 @@ function SessionDetail({
     let pendingReasons = new Set();
     let pendingCharacterIds = new Set();
     let unscopedCharacter = false;
+    // "session" is light: a session save (GM position/effect, title) does not
+    // change characters or crews, so it refetches session + rolls + clocks.
     const HEAVY = new Set([
       "character",
       "crew",
       "campaign",
       "npc",
       "faction",
-      "session",
       "update",
       "",
     ]);
@@ -4346,7 +4347,7 @@ function SessionDetail({
         session_id: session.id,
       });
       characterAPI
-        .getCharacters()
+        .getCharacters({ campaign: campaign.id })
         .then((list) =>
           setCharacters(
             list?.filter((c) => c.campaign === campaign.id) || [],
