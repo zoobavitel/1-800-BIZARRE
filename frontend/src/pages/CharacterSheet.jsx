@@ -154,6 +154,10 @@ import {
   historyManualResistanceActionName,
 } from "../features/character-sheet/utils/historyManualResistance";
 import {
+  historyRollHeadline,
+  historyRollPositionEffectModifiers,
+} from "../features/character-sheet/utils/historyRollHeadline";
+import {
   tierDieFromActionPool,
   outcomeFromActionRoll,
   outcomeFromFortuneDiceResults,
@@ -7312,11 +7316,10 @@ const CharacterSheetWrapper = ({
                   (r.roll_type || "").toUpperCase() === "FORTUNE" &&
                   !r.fortune_reveal_outcome
                     ? `${r.action_name || "Fortune"} (redacted)`
-                    : `${r.action_name || "Roll"} · ${diceStr} → ${outcomeDisp}`
+                    : historyRollHeadline(r, diceStr, outcomeDisp)
                 }`,
                 modifiers: [
-                  r.position ? `Pos ${r.position}` : null,
-                  r.effect ? `Eff ${r.effect}` : null,
+                  ...historyRollPositionEffectModifiers(r),
                   r.push_for_dice ? "Push(+1d)" : null,
                   r.push_for_effect ? "Push(+effect)" : null,
                   r.uses_devil_bargain ? "Devil's bargain" : null,
@@ -7477,10 +7480,9 @@ const CharacterSheetWrapper = ({
                       ? `Recovery → ${recTgtNm}: ${r.action_name || "recover"} · ${diceStr} → ${outcomeDisp}`
                       : recCtx === "self_treatment_roll"
                         ? `Recovery (self treatment): ${r.action_name || "recover"} · ${diceStr} → ${outcomeDisp}`
-                        : `${r.action_name || "Roll"} · ${diceStr} → ${outcomeDisp}`,
+                        : historyRollHeadline(r, diceStr, outcomeDisp),
             modifiers: [
-              r.position ? `Pos ${r.position}` : null,
-              r.effect ? `Eff ${r.effect}` : null,
+              ...historyRollPositionEffectModifiers(r),
               Number(r.pool_bonus_dice) > 0
                 ? `Pool +${r.pool_bonus_dice}d (abilities / heritage)`
                 : null,
