@@ -40,6 +40,10 @@ ExecStart=/opt/bizarre-prod/.venv/bin/gunicorn app.wsgi:application \
 # graceful-timeout > SSE_STREAM_MAX_SECONDS so recycles drain instead of SIGKILL.
 # TimeoutStopSec > graceful-timeout so systemd does not shoot the master mid-drain.
 TimeoutStopSec=90
+# Deploys reload instead of restart (apply-units.sh). HUP keeps the listening
+# socket, boots workers on the new code, then drains the old ones, so players
+# see no connection errors. Flag changes above still need a restart.
+ExecReload=/bin/kill -s HUP $MAINPID
 KillMode=mixed
 Restart=on-failure
 
