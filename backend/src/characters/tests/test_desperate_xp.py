@@ -196,8 +196,8 @@ class DesperateActionXpRollActionAPITests(TestCase):
         self.client.force_authenticate(user=self.player)
 
     def test_roll_action_desperate_skirmish_awards_prowess(self):
-        # roll-action uses session default_position / per-character P/E when
-        # a session is attached — request body position is overridden.
+        # Omitted position uses session default_position. An explicit
+        # controlled/risky/desperate value is the starting position for this roll.
         self.session.default_position = "desperate"
         self.session.save(update_fields=["default_position"])
         url = f"/api/characters/{self.character.id}/roll-action/"

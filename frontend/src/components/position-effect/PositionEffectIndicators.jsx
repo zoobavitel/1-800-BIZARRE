@@ -122,19 +122,32 @@ export function EffectShapes({ activeEffect, readOnly = true, onSelect }) {
           const fill = on ? "#7c3aed" : "#374151";
           const letterColor = on ? "#fff" : "#6b7280";
           const interactive = !readOnly && typeof onSelect === "function";
+          const choose = () => onSelect(tier);
           return (
             <div
               key={tier}
+              role={interactive ? "button" : undefined}
+              tabIndex={interactive ? 0 : undefined}
+              onClick={interactive ? choose : undefined}
+              onKeyDown={
+                interactive
+                  ? (e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        choose();
+                      }
+                    }
+                  : undefined
+              }
               style={{
                 display: "flex",
                 flexDirection: "column",
                 alignItems: "center",
                 gap: 6,
+                cursor: readOnly ? "default" : "pointer",
               }}
             >
               <div
-                role={interactive ? "button" : undefined}
-                tabIndex={interactive ? 0 : undefined}
                 style={{
                   width: EFFECT_SHAPE_BOX,
                   height: EFFECT_SHAPE_BOX,
@@ -148,19 +161,7 @@ export function EffectShapes({ activeEffect, readOnly = true, onSelect }) {
                   fontWeight: 800,
                   fontSize: 17,
                   lineHeight: 1,
-                  cursor: readOnly ? "default" : "pointer",
                 }}
-                onClick={interactive ? () => onSelect(tier) : undefined}
-                onKeyDown={
-                  interactive
-                    ? (e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          onSelect(tier);
-                        }
-                      }
-                    : undefined
-                }
               >
                 {EFFECT_LETTER[tier]}
               </div>
