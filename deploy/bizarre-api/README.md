@@ -141,8 +141,13 @@ Do this between sessions:
 sudo cp /opt/bizarre-prod/deploy/bizarre-api/Caddyfile.example /etc/caddy/Caddyfile
 sudo caddy validate --config /etc/caddy/Caddyfile
 sudo systemctl enable --now caddy   # or: sudo systemctl reload caddy
-# Expect Content-Encoding on a JSON response:
-curl -sI -H 'Accept-Encoding: gzip' http://127.0.0.1:8080/api/ | grep -i content-encoding
+# Expect 200 and Content-Encoding on a JSON response. Needs a token (Caddy
+# compresses bodies over 512 bytes; a 401 is too small) and X-Forwarded-Proto
+# (without it Django answers 301 to https). Do not paste the token anywhere.
+cd /opt/bizarre-prod/backend/src && source /opt/bizarre-prod/.venv/bin/activate
+export BIZARRE_ENV_FILE=/etc/bizarre/prod.env DJANGO_SETTINGS_MODULE=app.settings_prod
+T=$(python manage.py shell -c "from rest_framework.authtoken.models import Token; print(Token.objects.first().key)" | tail -1)
+curl -sI -H "Authorization: Token $T" -H 'X-Forwarded-Proto: https' -H 'Accept-Encoding: gzip' http://127.0.0.1:8080/api/abilities/ | grep -iE '^HTTP|content-encoding'
 sudo tailscale funnel --bg http://127.0.0.1:8080
 sudo tailscale funnel status   # expect: / proxy http://127.0.0.1:8080
 ```

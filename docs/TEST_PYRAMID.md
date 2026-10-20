@@ -51,7 +51,7 @@ Realistic table play: long-lived SSE + idle silences + short roll bursts. **Not*
 
 ```bash
 python manage.py seed_perf_tables --tier target --reset --output /tmp/bizarre-perf-seed-target.json
-# Prefer prod-like gunicorn: gthread, 2 workers, 32 threads — not runserver
+# Prefer prod-like gunicorn: gthread, 4 workers, 16 threads — not runserver
 PERF_SEED_JSON=/tmp/bizarre-perf-seed-target.json npm run test:load:saturday
 PERF_LOAD_TIER=stretch PERF_SEED_JSON=/tmp/bizarre-perf-seed-stretch.json npm run test:load:saturday:stretch
 ```
