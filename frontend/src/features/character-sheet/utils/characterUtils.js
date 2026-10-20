@@ -822,6 +822,16 @@ export function mergeServerOwnedCharacterFields(
   if (!touches.stash && Array.isArray(serverCharacter.stash)) {
     next.stash = serverCharacter.stash;
   }
+  // Open pendings change only through XP APIs, never sheet edits: server wins.
+  if (
+    serverCharacter.pendingAdvanceCounts &&
+    typeof serverCharacter.pendingAdvanceCounts === "object"
+  ) {
+    next.pendingAdvanceCounts = serverCharacter.pendingAdvanceCounts;
+  }
+  if (Array.isArray(serverCharacter.pendingAdvances)) {
+    next.pendingAdvances = serverCharacter.pendingAdvances;
+  }
   return next;
 }
 
