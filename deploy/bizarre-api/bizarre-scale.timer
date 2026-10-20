@@ -1,0 +1,10 @@
+[Unit]
+Description=Scale the bizarre-api gunicorn pool every 30 seconds
+
+[Timer]
+OnBootSec=45
+OnUnitActiveSec=30
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target

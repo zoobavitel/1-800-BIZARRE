@@ -1,0 +1,9 @@
+[Unit]
+Description=Scale the bizarre-api gunicorn pool
+After=bizarre-lb.service
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+ExecStart=/opt/bizarre-prod/.venv/bin/python /opt/bizarre-prod/deploy/bizarre-api/ha_scale_run.py
