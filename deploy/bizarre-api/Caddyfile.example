@@ -1,26 +1,46 @@
-# Replace api.example.com with your public hostname (or use Tailscale Serve/Funnel hostname).
-# Caddy obtains Let's Encrypt certs automatically for public DNS pointing at this host.
+# Install to /etc/caddy/Caddyfile on the bizarre-api CT.
+#
+# Path: Tailscale Funnel (TLS) -> Caddy 127.0.0.1:8080 -> gunicorn 127.0.0.1:8000
+#   tailscale funnel --bg http://127.0.0.1:8080
+# Rollback (Funnel straight to gunicorn):
+#   tailscale funnel --bg http://127.0.0.1:8000
+#
+# Funnel terminates TLS, so Caddy listens on plain HTTP and only on localhost.
 
-api.example.com {
-	# Serve uploaded portraits/avatars from MEDIA_ROOT (outside git trees).
+{
+	# Trust Funnel's X-Forwarded-Proto: https. Without this Caddy rewrites it
+	# to http and SECURE_SSL_REDIRECT sends every request into a redirect loop.
+	servers {
+		trusted_proxies static 127.0.0.1/32
+	}
+}
+
+:8080 {
+	bind 127.0.0.1
+
+	# Compress JSON and HTML only. SSE (text/event-stream) must stay
+	# uncompressed or events sit in the encoder buffer.
+	encode {
+		zstd
+		gzip
+		match {
+			header Content-Type application/json*
+			header Content-Type text/html*
+		}
+	}
+
+	# Serve uploaded portraits/avatars from MEDIA_ROOT (outside git trees)
+	# instead of through gunicorn threads.
 	handle_path /media/* {
 		root * /var/lib/bizarre/media
+		header Cache-Control "public, max-age=3600"
 		file_server
 	}
 
 	handle {
-		reverse_proxy 127.0.0.1:8000
+		# flush_interval -1 streams SSE through immediately.
+		reverse_proxy 127.0.0.1:8000 {
+			flush_interval -1
+		}
 	}
 }
-
-# Optional: also listen on LAN for testing (replace IP if needed)
-# :443 {
-# 	tls internal
-# 	handle_path /media/* {
-# 		root * /var/lib/bizarre/media
-# 		file_server
-# 	}
-# 	handle {
-# 		reverse_proxy 127.0.0.1:8000
-# 	}
-# }

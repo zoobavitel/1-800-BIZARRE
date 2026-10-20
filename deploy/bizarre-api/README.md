@@ -133,10 +133,37 @@ sudo systemctl status gunicorn celery-worker --no-pager
 
 ## 4. Caddy
 
+Public path: **Tailscale Funnel → Caddy `127.0.0.1:8080` → gunicorn `127.0.0.1:8000`**. Funnel terminates TLS. Caddy compresses JSON, serves `/media/` from disk with cache headers, and streams SSE through unbuffered. If Funnel points straight at `:8000`, there's no compression, and every portrait ties up a gunicorn thread.
+
+Do this between sessions:
+
 ```bash
 sudo cp /opt/bizarre-prod/deploy/bizarre-api/Caddyfile.example /etc/caddy/Caddyfile
-# Edit domain; media root must be /var/lib/bizarre/media
-sudo systemctl reload caddy
+sudo caddy validate --config /etc/caddy/Caddyfile
+sudo systemctl enable --now caddy   # or: sudo systemctl reload caddy
+# Expect Content-Encoding on a JSON response:
+curl -sI -H 'Accept-Encoding: gzip' http://127.0.0.1:8080/api/ | grep -i content-encoding
+sudo tailscale funnel --bg http://127.0.0.1:8080
+sudo tailscale funnel status   # expect: / proxy http://127.0.0.1:8080
+```
+
+Rollback: `sudo tailscale funnel --bg http://127.0.0.1:8000`. CI deploys don't touch Caddy or Funnel.
+
+### Persistent logs
+
+The gunicorn access log records each URL with its duration. Keep it across reboots so you can profile game nights:
+
+```bash
+# /etc/systemd/journald.conf
+#   Storage=persistent
+#   SystemMaxUse=500M
+sudo systemctl restart systemd-journald
+```
+
+Rank endpoints by total server time, for example the morning after a session:
+
+```bash
+journalctl -u gunicorn --since "<date> 23:30" --until "<next date> 03:00" -o cat | awk '$NF ~ /ms$/ {split($3,u,"?"); p=u[1]; gsub(/[0-9]+/,":id",p); ms=$NF; sub(/ms/,"",ms); n[p]++; t[p]+=ms; b[p]+=$(NF-1)} END {for (p in n) printf "%8d %10.0fms %6.0favg %8.1fMB %s\n", n[p], t[p], t[p]/n[p], b[p]/1e6, p}' | sort -k2 -nr | head -25
 ```
 
 Back up `/var/lib/bizarre/media` with the database — Postgres dumps do not contain uploads.
