@@ -291,12 +291,25 @@ def unsubscribe_campaign(campaign_id: int, q: queue.Queue) -> None:
     )
 
 
-def broadcast_campaign_update(campaign_id: int, reason: str = "") -> None:
-    """Notify all SSE clients watching this campaign (Redis and/or in-process)."""
+def broadcast_campaign_update(
+    campaign_id: int,
+    reason: str = "",
+    character_id: Optional[int] = None,
+    session_id: Optional[int] = None,
+) -> None:
+    """Notify all SSE clients watching this campaign (Redis and/or in-process).
+
+    ``character_id`` / ``session_id`` name the row that changed, so clients can
+    refetch only that row instead of every open sheet.
+    """
     payload: Dict[str, Any] = {
         "type": "campaign_update",
         "reason": reason or "update",
     }
+    if character_id:
+        payload["character_id"] = character_id
+    if session_id:
+        payload["session_id"] = session_id
     client = get_redis_client()
     if client is not None:
         channel = channel_name(campaign_id)
