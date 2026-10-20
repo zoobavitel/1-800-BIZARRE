@@ -116,14 +116,3 @@ export function buildSessionScatterPoints(campaigns, monthsBack = MONTHS_BACK) {
     xDomain: [windowStart.getTime(), windowEnd.getTime()],
   };
 }
-
-/** Bar chart rows aligned with new palette: p1=purple, p2=gold, p3=burnt-orange, p4=warm-gold, green for sessions. */
-export function buildBarChartRows(heroStats) {
-  return [
-    { name: "Campaigns", value: heroStats.activeCampaigns, fill: "#6c3989" },
-    { name: "Sessions", value: heroStats.sessionCount, fill: "#e8ca70" },
-    { name: "Crews", value: heroStats.crewCount, fill: "#b64200" },
-    { name: "PCs", value: heroStats.pcCount, fill: "#b38f27" },
-    { name: "NPCs", value: heroStats.npcCount, fill: "#a09060" },
-  ];
-}
