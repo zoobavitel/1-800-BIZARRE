@@ -1,4 +1,5 @@
 """Campaign SSE endpoint: token auth and GM/player access."""
+
 from django.test import Client, TestCase, override_settings
 from django.contrib.auth.models import User
 from rest_framework.authtoken.models import Token
@@ -46,4 +47,59 @@ class CampaignSSEViewTests(TestCase):
         self.assertEqual(r.status_code, 200)
         body = b"".join(r.streaming_content).decode()
         self.assertIn("retry: 2000", body)
+        self.assertIn('"type": "connected"', body)
+
+
+@override_settings(SSE_MAX_STREAMS_PER_USER=2)
+class SSEStreamCapTests(TestCase):
+    """One user cannot pin unbounded gunicorn threads with stale streams."""
+
+    def setUp(self):
+        from characters import sse_slots
+
+        sse_slots._local_slots.clear()
+        self.client = Client()
+        self.gm = User.objects.create_user("gm2", "gm2@example.com", "pw")
+        self.player = User.objects.create_user("pl2", "pl2@example.com", "pw")
+        self.campaign = Campaign.objects.create(name="Cap", gm=self.gm)
+        self.campaign.players.add(self.player)
+        self.token = Token.objects.create(user=self.player)
+
+    def test_newest_streams_keep_slots_oldest_evicted(self):
+        from characters.sse_slots import claim_slot, holds_slot, release_slot
+
+        cid = self.campaign.id
+        a = claim_slot(self.player.id, cid)
+        b = claim_slot(self.player.id, cid)
+        c = claim_slot(self.player.id, cid)
+        self.assertFalse(holds_slot(self.player.id, cid, a))
+        self.assertTrue(holds_slot(self.player.id, cid, b))
+        self.assertTrue(holds_slot(self.player.id, cid, c))
+        # Other users and campaigns are unaffected.
+        g = claim_slot(self.gm.id, cid)
+        self.assertTrue(holds_slot(self.gm.id, cid, g))
+        self.assertTrue(holds_slot(self.player.id, cid, c))
+        release_slot(self.player.id, cid, c)
+        self.assertFalse(holds_slot(self.player.id, cid, c))
+
+    @override_settings(
+        SSE_STREAM_MAX_SECONDS=30,
+        SSE_HEARTBEAT_SECONDS=10,
+        SSE_SLOT_CHECK_SECONDS=0.01,
+    )
+    def test_evicted_stream_ends_early(self):
+        import time
+
+        from characters.sse_slots import claim_slot
+
+        r = self.client.get(
+            f"/api/campaigns/{self.campaign.id}/events/?token={self.token.key}"
+        )
+        self.assertEqual(r.status_code, 200)
+        # Two newer streams from the same user push the first past the cap.
+        claim_slot(self.player.id, self.campaign.id)
+        claim_slot(self.player.id, self.campaign.id)
+        started = time.monotonic()
+        body = b"".join(r.streaming_content).decode()
+        self.assertLess(time.monotonic() - started, 2)
         self.assertIn('"type": "connected"', body)
