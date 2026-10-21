@@ -553,6 +553,17 @@ function actionOptionsForXpSpendTrack(actionRatings, spendTrack) {
   return filtered.length ? filtered : actions;
 }
 
+/** Compare open PendingAdvance counts by track (missing key = 0). */
+function samePendingAdvanceCounts(a, b) {
+  const x = a && typeof a === "object" ? a : {};
+  const y = b && typeof b === "object" ? b : {};
+  const keys = new Set([...Object.keys(x), ...Object.keys(y)]);
+  for (const k of keys) {
+    if ((Number(x[k]) || 0) !== (Number(y[k]) || 0)) return false;
+  }
+  return true;
+}
+
 /** One-line summary when a sheet save touched XP / advancement fields. */
 function summarizeXpSpendFromHistoryEntry(entry) {
   const changed = entry?.changed_fields;
@@ -2240,9 +2251,29 @@ const CharacterSheetWrapper = ({
     if (sheetDraftIsDirty) return;
     const counts = character?.pendingAdvanceCounts;
     if (counts && typeof counts === "object") {
-      setPendingAdvanceCounts({ ...counts });
+      setPendingAdvanceCounts((prev) =>
+        samePendingAdvanceCounts(prev, counts) ? prev : { ...counts },
+      );
     }
   }, [character?.id, character?.pendingAdvanceCounts, sheetDraftIsDirty]);
+
+  // Pending counts change only through XP APIs. Push them to the parent tab so
+  // the hydrate above cannot restore a stale snapshot (hid "Take advance").
+  // Runs only when local counts change; the parent callback is a fresh inline
+  // fn each render and must not re-trigger a push of stale local counts.
+  const onCharacterXpSyncRef = useRef(onCharacterXpSync);
+  onCharacterXpSyncRef.current = onCharacterXpSync;
+  const parentPendingCountsRef = useRef(character?.pendingAdvanceCounts);
+  parentPendingCountsRef.current = character?.pendingAdvanceCounts;
+  useEffect(() => {
+    if (!character?.id) return;
+    if (samePendingAdvanceCounts(pendingAdvanceCounts, parentPendingCountsRef.current)) {
+      return;
+    }
+    onCharacterXpSyncRef.current?.({
+      pendingAdvanceCounts: { ...pendingAdvanceCounts },
+    });
+  }, [pendingAdvanceCounts, character?.id]);
 
   useEffect(() => {
     const plan = character?.advancementPlan;
@@ -6745,30 +6776,17 @@ const CharacterSheetWrapper = ({
       setXpToggleError(null);
       setXpToggleBusyTrigger(trigger);
       try {
-        if (delta > 0) {
-          const res = await experienceTrackerAPI.award({
-            character: characterId,
-            trigger,
-          });
-          const granted = Number(res?.granted) || 0;
-          if (granted > 0) {
-            setXp((prev) => ({
-              ...prev,
-              playbook: Math.min(10, (Number(prev.playbook) || 0) + granted),
-            }));
-          }
-        } else {
-          const res = await experienceTrackerAPI.revoke({
-            character: characterId,
-            trigger,
-          });
-          const revoked = Number(res?.revoked) || 0;
-          if (revoked > 0) {
-            setXp((prev) => ({
-              ...prev,
-              playbook: Math.max(0, (Number(prev.playbook) || 0) - revoked),
-            }));
-          }
+        // Trigger XP banks to the free pool server-side. Reload the character
+        // so pool + parent tab match the server (no local guess).
+        const res =
+          delta > 0
+            ? await experienceTrackerAPI.award({ character: characterId, trigger })
+            : await experienceTrackerAPI.revoke({ character: characterId, trigger });
+        const changed =
+          delta > 0 ? Number(res?.granted) || 0 : Number(res?.revoked) || 0;
+        if (changed > 0) {
+          const fresh = await characterAPI.getCharacter(characterId);
+          if (fresh) applyAllocationBackendCharacter(fresh);
         }
         await refetchXpReqTracker();
       } catch (err) {
@@ -6777,7 +6795,12 @@ const CharacterSheetWrapper = ({
         setXpToggleBusyTrigger(null);
       }
     },
-    [characterId, xpReqSnapshot.hasActiveSession, refetchXpReqTracker],
+    [
+      characterId,
+      xpReqSnapshot.hasActiveSession,
+      refetchXpReqTracker,
+      applyAllocationBackendCharacter,
+    ],
   );
 
   /**

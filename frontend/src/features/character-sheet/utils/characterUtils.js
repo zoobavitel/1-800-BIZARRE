@@ -822,6 +822,34 @@ export function mergeServerOwnedCharacterFields(
   if (!touches.stash && Array.isArray(serverCharacter.stash)) {
     next.stash = serverCharacter.stash;
   }
+  // XP tracks + free pool are server-owned (autosave never sends them). Take the
+  // server copy unless the player is mid-spend on the XP card.
+  if (!touches.xp) {
+    if (serverCharacter.xp && typeof serverCharacter.xp === "object") {
+      next.xp = serverCharacter.xp;
+    }
+    if (typeof serverCharacter.unallocatedXp === "number") {
+      next.unallocatedXp = serverCharacter.unallocatedXp;
+    }
+  }
+  if (Array.isArray(serverCharacter.advancementPlan)) {
+    next.advancementPlan = serverCharacter.advancementPlan;
+  }
+  if (
+    Object.prototype.hasOwnProperty.call(serverCharacter, "pendingStandAReward")
+  ) {
+    next.pendingStandAReward = serverCharacter.pendingStandAReward;
+  }
+  // Open pendings change only through XP APIs, never sheet edits: server wins.
+  if (
+    serverCharacter.pendingAdvanceCounts &&
+    typeof serverCharacter.pendingAdvanceCounts === "object"
+  ) {
+    next.pendingAdvanceCounts = serverCharacter.pendingAdvanceCounts;
+  }
+  if (Array.isArray(serverCharacter.pendingAdvances)) {
+    next.pendingAdvances = serverCharacter.pendingAdvances;
+  }
   return next;
 }
 

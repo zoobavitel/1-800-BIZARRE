@@ -2403,6 +2403,10 @@ export default function CharacterPage({
                       ...(typeof patch.actionDiceGained === "number"
                         ? { actionDiceGained: patch.actionDiceGained }
                         : {}),
+                      ...(patch.pendingAdvanceCounts &&
+                      typeof patch.pendingAdvanceCounts === "object"
+                        ? { pendingAdvanceCounts: patch.pendingAdvanceCounts }
+                        : {}),
                     },
                   };
                 }),
