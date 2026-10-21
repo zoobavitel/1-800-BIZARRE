@@ -5,6 +5,7 @@ Clients authenticate with ?token=<DRF token> because EventSource cannot set Auth
 """
 
 import json
+import logging
 import queue as queue_module
 import random
 import time
@@ -15,6 +16,9 @@ from rest_framework.authtoken.models import Token
 
 from .models import Campaign
 from .realtime import subscribe_campaign, unsubscribe_campaign
+from .sse_slots import claim_slot, holds_slot, release_slot
+
+logger = logging.getLogger(__name__)
 
 
 def _user_from_token_query(request):
@@ -42,12 +46,16 @@ def campaign_events_stream(request, campaign_id):
     if not is_gm and not is_player:
         return HttpResponse(status=403)
 
-    q = subscribe_campaign(int(campaign_id))
+    cid = int(campaign_id)
+    stream_id = claim_slot(user.id, cid)
+    q = subscribe_campaign(cid)
 
     def event_stream():
         retry_ms = int(getattr(settings, "SSE_CLIENT_RETRY_MS", 2000))
         max_seconds = float(getattr(settings, "SSE_STREAM_MAX_SECONDS", 45))
         heartbeat = float(getattr(settings, "SSE_HEARTBEAT_SECONDS", 15))
+        # How often an idle stream checks whether a newer one evicted it.
+        slot_check = float(getattr(settings, "SSE_SLOT_CHECK_SECONDS", 5))
         try:
             yield f"retry: {retry_ms}\n\n"
             yield f"data: {json.dumps({'type': 'connected'})}\n\n"
@@ -60,17 +68,28 @@ def campaign_events_stream(request, campaign_id):
                     max_seconds + 10.0,
                 )
             deadline = time.monotonic() + lifetime
+            next_heartbeat = time.monotonic() + heartbeat
             while time.monotonic() < deadline:
-                wait = min(heartbeat, deadline - time.monotonic())
-                if wait <= 0:
+                if not holds_slot(user.id, cid, stream_id):
+                    # A newer stream from this user replaced this one; free the thread.
+                    logger.info("sse evict campaign=%s user=%s", cid, user.id)
                     break
+                now = time.monotonic()
+                wait = min(next_heartbeat - now, slot_check, deadline - now)
+                if wait <= 0:
+                    if deadline - now <= 0:
+                        break
+                    yield f"data: {json.dumps({'type': 'heartbeat'})}\n\n"
+                    next_heartbeat = time.monotonic() + heartbeat
+                    continue
                 try:
                     msg = q.get(timeout=wait)
                     yield f"data: {json.dumps(msg)}\n\n"
                 except queue_module.Empty:
-                    yield f"data: {json.dumps({'type': 'heartbeat'})}\n\n"
+                    pass
         finally:
-            unsubscribe_campaign(int(campaign_id), q)
+            unsubscribe_campaign(cid, q)
+            release_slot(user.id, cid, stream_id)
 
     response = StreamingHttpResponse(
         event_stream(),
