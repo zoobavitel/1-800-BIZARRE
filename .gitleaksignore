@@ -1,0 +1,3 @@
+# Known false positives (gitleaks fingerprints: commit:file:rule:line).
+# API host names in a test set, matched by generic-api-key.
+82f72310964fd5c0097d49a66e819135f5047f29:backend/src/characters/tests/test_own_media_urls.py:generic-api-key:25
