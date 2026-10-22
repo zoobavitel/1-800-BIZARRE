@@ -133,7 +133,7 @@ sudo systemctl status gunicorn celery-worker --no-pager
 
 ## 4. Caddy
 
-Public path: **Tailscale Funnel → Caddy `127.0.0.1:8080` → gunicorn `127.0.0.1:8000`**. Funnel terminates TLS. Caddy compresses JSON, serves `/media/` from disk with cache headers, and streams SSE through unbuffered. If Funnel points straight at `:8000`, there's no compression, and every portrait ties up a gunicorn thread.
+Public path: **Cloudflare Tunnel (`api.1-800-bizarre.com`) → Caddy `127.0.0.1:8080` → gunicorn `127.0.0.1:8000`**. Tailscale Funnel (`bizarre-api.<tailnet>.ts.net`) points at the same Caddy port and is the fallback. Cloudflare and Funnel terminate TLS. Caddy compresses JSON, serves `/media/` from disk with cache headers, and streams SSE through unbuffered. If Funnel points straight at `:8000`, there's no compression, and every portrait ties up a gunicorn thread.
 
 Do this between sessions:
 
@@ -152,7 +152,30 @@ sudo tailscale funnel --bg http://127.0.0.1:8080
 sudo tailscale funnel status   # expect: / proxy http://127.0.0.1:8080
 ```
 
-Rollback: `sudo tailscale funnel --bg http://127.0.0.1:8000`. CI deploys don't touch Caddy or Funnel.
+Rollback: `sudo tailscale funnel --bg http://127.0.0.1:8000`. CI deploys don't touch Caddy, Funnel or the tunnel.
+
+### Cloudflare Tunnel
+
+Why: the Funnel name is under `*.ts.net`. Any device with Tailscale on resolves it to the CT's private `100.x` address, so it skips Funnel, goes over a DERP relay when away from home, and browsers block it as a local-network request. `api.1-800-bizarre.com` resolves publicly for everyone, VPN on or off.
+
+The tunnel `bizarre-api` is remotely managed (ingress lives in Cloudflare, not on the CT):
+
+- Ingress: `api.1-800-bizarre.com` → `http://127.0.0.1:8080`, catch-all `http_status:404`.
+- DNS: proxied CNAME `api` → `<tunnel-id>.cfargotunnel.com`.
+- Zone: Bot Fight Mode off (API calls must never get a challenge page); cache rule bypasses cache for the API host.
+
+Connector on the CT (Debian):
+
+```bash
+sudo mkdir -p --mode=0755 /usr/share/keyrings
+curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null
+echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main' | sudo tee /etc/apt/sources.list.d/cloudflared.list
+sudo apt-get update && sudo apt-get install -y cloudflared
+sudo cloudflared service install <TUNNEL_TOKEN>   # token: cf tunnels token get <tunnel-id>
+systemctl status cloudflared --no-pager
+```
+
+`prod.env` must list `api.1-800-bizarre.com` in `ALLOWED_HOSTS`. `cloudflared` keeps the original Host header, so portrait URLs built with `build_absolute_uri()` use the public host. SSE is fine through Cloudflare: heartbeats every 15s and streams end within 55s, well under Cloudflare's 100s idle limit.
 
 ### Persistent logs
 

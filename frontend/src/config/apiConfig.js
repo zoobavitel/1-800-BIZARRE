@@ -33,11 +33,19 @@ function getRuntimeDefaultBase() {
   return `${protocol}//${hostname}:8000/api`;
 }
 
-/** Drop a saved tunnel URL so the baked host is used instead. */
-function discardStoredNgrokUrl() {
+/**
+ * Drop a saved URL for a retired public host so the baked host is used instead.
+ * - ngrok tunnels: always retired.
+ * - Tailscale Funnel (*.ts.net): retired once the build bakes a host. Devices
+ *   with Tailscale on resolved that name to a private 100.x address and failed
+ *   (relay, browser local-network block), so players must not stay pinned to it.
+ */
+function discardStoredRetiredUrl() {
   if (typeof localStorage === "undefined") return;
   const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored && stored.toLowerCase().includes("ngrok")) {
+  if (!stored) return;
+  const lower = stored.toLowerCase();
+  if (lower.includes("ngrok") || (hasEnvApi && lower.includes(".ts.net"))) {
     localStorage.removeItem(STORAGE_KEY);
   }
 }
@@ -61,7 +69,7 @@ function normalizeBaseUrl(url) {
 }
 
 export function getApiBaseUrl() {
-  discardStoredNgrokUrl();
+  discardStoredRetiredUrl();
   const stored = localStorage.getItem(STORAGE_KEY);
   if (stored && stored.trim() !== "") {
     return normalizeBaseUrl(stored);
@@ -92,7 +100,7 @@ export function setApiBaseUrl(url) {
 }
 
 export function getStoredApiBaseUrl() {
-  discardStoredNgrokUrl();
+  discardStoredRetiredUrl();
   const stored = localStorage.getItem(STORAGE_KEY);
   return stored ? stored.trim() : "";
 }
