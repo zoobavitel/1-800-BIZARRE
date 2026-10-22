@@ -2,6 +2,8 @@ from django.db.models import Q
 from django.db.models.functions import Lower
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
+
+from .media_urls import own_media_file_name
 from django.contrib.auth.models import User
 from .models import (
     _default_stash_slots,
@@ -172,7 +174,19 @@ def validate_card_image_upload(value):
 
 
 def apply_portrait_exclusivity(serializer, attrs, file_key="image", url_key="image_url"):
-    """New file clears URL; newly set non-empty URL clears stored file."""
+    """New file clears URL; newly set non-empty URL clears stored file.
+
+    An ``image_url`` that is our own uploaded-media URL (a client echoing the
+    file URL back) is stored as the file, never as a host-pinned link.
+    """
+    if url_key in attrs and not (
+        file_key in attrs and attrs.get(file_key) is not None
+    ):
+        own_name = own_media_file_name(attrs.get(url_key) or "")
+        if own_name:
+            attrs[file_key] = own_name
+            attrs[url_key] = ""
+            return attrs
     if file_key in attrs and attrs.get(file_key) is not None:
         attrs[url_key] = ""
         return attrs
