@@ -28,6 +28,10 @@
 	handle_path /media/* {
 		root * /var/lib/bizarre/media
 		header Cache-Control "public, max-age=3600"
+		# Sheets load portraits with crossOrigin="anonymous" (canvas crop, PDF).
+		# Media is public and fetched without credentials, so "*" is safe.
+		# Django's CORS middleware used to add this before Caddy served media.
+		header Access-Control-Allow-Origin "*"
 		file_server
 	}
 

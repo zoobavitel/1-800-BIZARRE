@@ -14,24 +14,37 @@ describe("NPCSheet portrait state helpers", () => {
     });
   });
 
-  test("successful replacement save prefers the persisted path from the response", () => {
+  test("upload save previews the uploaded file but keeps image_url empty", () => {
     expect(
       getNpcPortraitSavedState(
-        { image: "/media/npcs/new.png" },
+        {
+          image: "https://api.example.com/media/npc_images/new.png",
+          image_url: "",
+        },
         "/media/npcs/old.png",
       ),
     ).toEqual({
       imageFile: null,
-      imageUrl: "/media/npcs/new.png",
-      imagePreview: "/media/npcs/new.png",
+      imageUrl: "",
+      imagePreview: "https://api.example.com/media/npc_images/new.png",
     });
   });
 
-  test("successful replacement save falls back to the last persisted path when omitted", () => {
+  test("upload save falls back to the last persisted preview when omitted", () => {
     expect(getNpcPortraitSavedState({}, "/media/npcs/existing.png")).toEqual({
       imageFile: null,
-      imageUrl: "/media/npcs/existing.png",
+      imageUrl: "",
       imagePreview: "/media/npcs/existing.png",
+    });
+  });
+
+  test("an external image_url in the response stays the link", () => {
+    expect(
+      getNpcPortraitSavedState({ image: null, image_url: "https://cdn.example.org/a.png" }),
+    ).toEqual({
+      imageFile: null,
+      imageUrl: "https://cdn.example.org/a.png",
+      imagePreview: "https://cdn.example.org/a.png",
     });
   });
 });

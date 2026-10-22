@@ -423,12 +423,18 @@ export function getNpcPortraitReplacementFailureState(persistedPreview = "") {
   };
 }
 
+/**
+ * State after an upload save. `imageUrl` holds only an external link
+ * (`image_url`); the uploaded file's URL goes to the preview. Copying the file
+ * URL into `imageUrl` made the next autosave send it back as `image_url`,
+ * which cleared the upload and pinned the API host into the database.
+ */
 export function getNpcPortraitSavedState(result, fallbackPersisted = "") {
-  const persisted = result?.image_url || result?.image || fallbackPersisted || "";
+  const preview = result?.image_url || result?.image || fallbackPersisted || "";
   return {
     imageFile: null,
-    imageUrl: persisted,
-    imagePreview: persisted,
+    imageUrl: result?.image_url || "",
+    imagePreview: preview,
   };
 }
 
@@ -2748,7 +2754,7 @@ const NPCSheet = ({
           result,
           lastPersistedImageRef.current,
         );
-        lastPersistedImageRef.current = savedPortrait.imageUrl;
+        lastPersistedImageRef.current = savedPortrait.imagePreview;
         setImageFile(savedPortrait.imageFile);
         setImagePreview(savedPortrait.imagePreview);
         setImageUrl(savedPortrait.imageUrl);
