@@ -22,7 +22,7 @@ MEDIA_ROOT = "/tmp/bizarre_test_media_own_urls"
 
 
 class MediaNameFromUrlTests(SimpleTestCase):
-    hosts = {"bizarre-api.tailb65341.ts.net", "api.1-800-bizarre.com"}
+    hosts = {"bizarre-api.tailb65341.ts.net", "api.1-800-bizarre.com"}  # gitleaks:allow
 
     def test_own_host_media_url(self):
         self.assertEqual(
