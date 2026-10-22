@@ -61,11 +61,11 @@ Wait 1â€“2 minutes, then open **https://zoobavitel.github.io/1-800-BIZARRE/** â€
 
 ---
 
-## Remote play: the live site and Funnel
+## Remote play: the live site and API host
 
-Players open **https://zoobavitel.github.io/1-800-BIZARRE/**. The Pages build bakes the public API host `https://bizarre-api.tailb65341.ts.net/api`. Leave **Game server** blank so that host is used.
+Players open **https://zoobavitel.github.io/1-800-BIZARRE/**. The Pages build bakes the public API host from the `REACT_APP_API_URL` secret: `https://api.1-800-bizarre.com/api` (Cloudflare Tunnel). Leave **Game server** blank so that host is used.
 
-A saved Game server URL overrides the baked host. Clear the field if sign-in reaches the wrong server.
+A saved Game server URL overrides the baked host. Clear the field if sign-in reaches the wrong server. A saved Tailscale Funnel URL (`*.ts.net`) is dropped automatically: devices with Tailscale on resolve that name to a private `100.x` address, which fails off the home network.
 
 ---
 

@@ -1,11 +1,12 @@
 # Install to /etc/caddy/Caddyfile on the bizarre-api CT.
 #
-# Path: Tailscale Funnel (TLS) -> Caddy 127.0.0.1:8080 -> gunicorn 127.0.0.1:8000
+# Path: Cloudflare Tunnel (api.1-800-bizarre.com, TLS) -> Caddy 127.0.0.1:8080 -> gunicorn 127.0.0.1:8000
+# Fallback: Tailscale Funnel (TLS) -> the same Caddy port
 #   tailscale funnel --bg http://127.0.0.1:8080
 # Rollback (Funnel straight to gunicorn):
 #   tailscale funnel --bg http://127.0.0.1:8000
 #
-# Funnel terminates TLS, so Caddy listens on plain HTTP and only on localhost.
+# Cloudflare / Funnel terminate TLS, so Caddy listens on plain HTTP and only on localhost.
 # Works on Caddy 2.6 (Debian package). The global trusted_proxies option is
 # 2.7+, so the proxy sets X-Forwarded-Proto itself.
 
@@ -34,7 +35,7 @@
 	handle {
 		# flush_interval -1 streams SSE through immediately.
 		reverse_proxy 127.0.0.1:8000 {
-			# Funnel is always HTTPS. Without this Caddy sends http and
+			# Cloudflare and Funnel are always HTTPS. Without this Caddy sends http and
 			# SECURE_SSL_REDIRECT sends every request into a redirect loop.
 			header_up X-Forwarded-Proto https
 			flush_interval -1

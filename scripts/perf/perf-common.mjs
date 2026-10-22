@@ -7,6 +7,8 @@ const FORBIDDEN_HOST_SNIPPETS = [
   "zoobavitel.github.io",
   "github.io/1-800-BIZARRE",
   "roger-premunicipal-branden.ngrok-free.dev",
+  // Live API (Cloudflare Tunnel). Players are on it; never load-test it.
+  "api.1-800-bizarre.com",
 ];
 
 /** Live Funnel. Direct runs use 127.0.0.1:8001. Public probe uses port 8443 only. */
