@@ -1044,6 +1044,7 @@ const CharacterSheetWrapper = ({
     ? sheetSync.groupActions
     : sessionDataPollTick;
   const tickRolls = sheetSync ? sheetSync.rolls : sessionDataPollTick;
+  const tickClocks = sheetSync ? sheetSync.clocks ?? 0 : sessionDataPollTick;
   /** Last XP clocks/pool applied from a dedicated XP API; blocks stale parent hydrate until tab catches up. */
   const xpClocksTruthRef = useRef(null);
   /** Local stress+trauma after marking trauma at max stress; blocks stale poll/hydrate restore. */
@@ -7668,6 +7669,8 @@ const CharacterSheetWrapper = ({
     historyRosterIds,
     isGM,
     historyRefreshTick,
+    // Session and campaign clock rows; the effect only fetches while the panel is open.
+    tickClocks,
   ]);
 
   const helpCandidates = useMemo(() => {
