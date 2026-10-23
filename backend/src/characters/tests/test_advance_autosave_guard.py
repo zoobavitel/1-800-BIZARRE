@@ -248,23 +248,14 @@ class AdvanceAutosaveGuardTests(TestCase):
         self.assertEqual(self.character.stand.power, "A")
         self.assertEqual(self.character.stand.speed, "F")
 
-    def test_gm_update_field_can_set_level_after_allocation(self):
-        apply_level_up(
-            self.character,
-            xp_track="playbook",
-            choice="stat",
-            stand_stat="development",
-        )
-        gm = User.objects.create_user(username="gm_lvl", password="x", is_staff=True)
-        self.client.force_authenticate(user=gm)
+    def test_update_field_endpoint_is_gone(self):
+        """The any-field endpoint let owners set user_id / campaign_id."""
         response = self.client.patch(
             f"/api/characters/{self.character.id}/update-field/",
-            {"field": "level", "value": 2},
+            {"field": "campaign_id", "value": None},
             format="json",
         )
-        self.assertEqual(response.status_code, 200, response.data)
-        self.character.refresh_from_db()
-        self.assertEqual(self.character.level, 2)
+        self.assertEqual(response.status_code, 404)
 
     def test_add_xp_endpoint_bypasses_sheet_guard(self):
         Character.objects.filter(pk=self.character.pk).update(
