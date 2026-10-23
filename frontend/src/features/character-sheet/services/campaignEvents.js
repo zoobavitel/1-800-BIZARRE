@@ -1,6 +1,9 @@
 /**
  * Subscribe to server-sent campaign updates (position/effect, rolls, character saves).
- * Uses DRF token in the query string because EventSource cannot send Authorization headers.
+ * EventSource cannot send an Authorization header, so each connect first POSTs
+ * (with the normal token header) for a one-use ticket and opens the stream with
+ * ?ticket=. The login token never goes in a URL, where access logs record it.
+ * A ticket works once: every reconnect, including after a 401, gets a new one.
  *
  * On error, reconnects with backoff instead of closing forever —
  * Firefox / extensions can drop the stream; permanent close left panels stale until reload.
@@ -33,7 +36,27 @@ export function subscribeCampaignEvents(campaignId, { onUpdate } = {}) {
     noop.getLastEventAt = () => 0;
     return noop;
   }
-  const url = `${base.replace(/\/+$/, "")}/campaigns/${campaignId}/events/?token=${encodeURIComponent(token)}`;
+  const campaignUrl = `${base.replace(/\/+$/, "")}/campaigns/${campaignId}/events`;
+
+  /** One-use stream ticket, or null when the POST fails. */
+  const fetchTicket = async () => {
+    try {
+      const authToken =
+        typeof localStorage !== "undefined"
+          ? localStorage.getItem("authToken")
+          : null;
+      if (!authToken) return null;
+      const res = await fetch(`${campaignUrl}/ticket/`, {
+        method: "POST",
+        headers: { Authorization: `Token ${authToken}` },
+      });
+      if (!res.ok) return null;
+      const body = await res.json();
+      return typeof body?.ticket === "string" && body.ticket ? body.ticket : null;
+    } catch {
+      return null;
+    }
+  };
 
   let es = null;
   let reconnectTimer = null;
@@ -43,6 +66,9 @@ export function subscribeCampaignEvents(campaignId, { onUpdate } = {}) {
   let sawConnected = false;
   let openedAt = 0;
   let sawHeartbeat = false;
+  // Bumped by each connect and by unsubscribe, so a ticket that arrives late
+  // for an older connect is dropped instead of opening a second stream.
+  let connectGen = 0;
 
   const touchTraffic = () => {
     lastEventAt = Date.now();
@@ -71,8 +97,9 @@ export function subscribeCampaignEvents(campaignId, { onUpdate } = {}) {
     }, decision.delayMs);
   };
 
-  const connect = () => {
+  const connect = async () => {
     if (closed) return;
+    const gen = ++connectGen;
     if (es) {
       try {
         es.close();
@@ -83,9 +110,18 @@ export function subscribeCampaignEvents(campaignId, { onUpdate } = {}) {
     }
     openedAt = Date.now();
     sawHeartbeat = false;
+    const ticket = await fetchTicket();
+    if (closed || gen !== connectGen) return;
+    if (!ticket) {
+      // No fallback to ?token=: back off and ask for a ticket again.
+      scheduleReconnect();
+      return;
+    }
     let next;
     try {
-      next = new EventSource(url);
+      next = new EventSource(
+        `${campaignUrl}/?ticket=${encodeURIComponent(ticket)}`,
+      );
     } catch {
       scheduleReconnect();
       return;
@@ -128,6 +164,8 @@ export function subscribeCampaignEvents(campaignId, { onUpdate } = {}) {
         /* ignore */
       }
     };
+    // Always close on error. EventSource would otherwise retry the same URL,
+    // and the ticket in it is already spent.
     next.onerror = () => {
       try {
         next.close();
@@ -143,6 +181,7 @@ export function subscribeCampaignEvents(campaignId, { onUpdate } = {}) {
 
   const unsubscribe = () => {
     closed = true;
+    connectGen += 1;
     clearReconnect();
     if (es) {
       try {
