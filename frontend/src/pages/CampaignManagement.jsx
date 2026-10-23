@@ -20,6 +20,10 @@ import {
   isCampaignSseHealthy,
   subscribeCampaignEvents,
 } from "../features/character-sheet/services/campaignEvents";
+import {
+  pickSessionPanelRefetches,
+  SESSION_PANEL_HEAVY_REASONS,
+} from "../features/character-sheet/services/sessionPanelSseRouting.mjs";
 import SessionGMManagementPanels from "../components/session/SessionGMManagementPanels";
 import { SessionHelpTip } from "../components/session/sessionShellUi";
 import ProgressClock from "../components/ProgressClock";
@@ -3797,8 +3801,8 @@ function SessionDetail({
   // Realtime: listen to campaign SSE stream and refetch this panel on any
   // backend-broadcast change (rolls, character saves, clocks). Coalesce bursts
   // through a short timer so a flurry of updates only triggers one refetch.
-  // Latest reason wins within the debounce window (clock-only preferred when
-  // mixed with heavier reasons in the same burst? Prefer heavy if any heavy.).
+  // A heavy reason in the burst wins; otherwise pickSessionPanelRefetches
+  // picks the lightest refetches that still cover every reason.
   useEffect(() => {
     if (!campaign?.id || !session?.id) return undefined;
     let pending = null;
@@ -3807,15 +3811,7 @@ function SessionDetail({
     let unscopedCharacter = false;
     // "session" is light: a session save (GM position/effect, title) does not
     // change characters or crews, so it refetches session + rolls + clocks.
-    const HEAVY = new Set([
-      "character",
-      "crew",
-      "campaign",
-      "npc",
-      "faction",
-      "update",
-      "",
-    ]);
+    const HEAVY = SESSION_PANEL_HEAVY_REASONS;
     const schedule = (reason, event) => {
       const r = String(reason || "");
       pendingReasons.add(r);
@@ -3841,18 +3837,11 @@ function SessionDetail({
           reasons = reasons.filter((x) => x !== "character");
           if (!reasons.length) return;
         }
-        const heavyReason = reasons.find((r) => HEAVY.has(r));
-        const chosen =
-          heavyReason != null
-            ? heavyReason
-            : reasons.includes("roll") ||
-                reasons.includes("group_action") ||
-                reasons.includes("experience_tracker")
-              ? reasons.find((r) =>
-                  ["roll", "group_action", "experience_tracker"].includes(r),
-                )
-              : reasons[0] || "progress_clock";
-        refetchSessionPanel("sse", chosen);
+        // A roll-type pick skips clocks, so a clock in the same burst gets
+        // its own clocks-only refetch.
+        for (const chosen of pickSessionPanelRefetches(reasons)) {
+          refetchSessionPanel("sse", chosen);
+        }
       }, 350);
     };
     const unsubscribe = subscribeCampaignEvents(campaign.id, {

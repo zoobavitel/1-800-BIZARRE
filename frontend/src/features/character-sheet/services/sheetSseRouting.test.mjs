@@ -4,7 +4,7 @@ import { routeSheetEvents } from "./sheetSseRouting.mjs";
 
 test("other player's character save costs nothing", () => {
   const r = routeSheetEvents([{ reason: "character", character_id: 9 }], [1]);
-  assert.deepEqual(r, { full: false, characterIds: [], rolls: false, ownRolls: false, groupActions: false });
+  assert.deepEqual(r, { full: false, characterIds: [], rolls: false, ownRolls: false, groupActions: false, clocks: false });
 });
 
 test("open character save refetches only that character", () => {
@@ -31,12 +31,13 @@ test("roll on another character only bumps rolls", () => {
     rolls: true,
     ownRolls: false,
     groupActions: false,
+    clocks: false,
   });
 });
 
 test("npc and faction are ignored", () => {
   const r = routeSheetEvents([{ reason: "npc" }, { reason: "faction" }], [1]);
-  assert.deepEqual(r, { full: false, characterIds: [], rolls: false, ownRolls: false, groupActions: false });
+  assert.deepEqual(r, { full: false, characterIds: [], rolls: false, ownRolls: false, groupActions: false, clocks: false });
 });
 
 test("campaign, reconnect, and unscoped events force full sync", () => {
@@ -63,6 +64,7 @@ test("own roll refetches that character and its rolls", () => {
     rolls: true,
     ownRolls: true,
     groupActions: false,
+    clocks: false,
   });
 });
 
@@ -87,4 +89,53 @@ test("group action and session changes refresh group actions", () => {
 test("crew change forces full sync", () => {
   const r = routeSheetEvents([{ reason: "crew" }], [1]);
   assert.equal(r.full, true);
+});
+
+test("campaign, crew, or faction clock refreshes clocks, not every sheet", () => {
+  const r = routeSheetEvents([{ reason: "progress_clock" }], [1]);
+  assert.deepEqual(r, {
+    full: false,
+    characterIds: [],
+    rolls: false,
+    ownRolls: false,
+    groupActions: false,
+    clocks: true,
+  });
+});
+
+test("another player's party clock refreshes clocks only", () => {
+  const r = routeSheetEvents(
+    [{ reason: "progress_clock", character_id: 9 }],
+    [1],
+  );
+  assert.equal(r.full, false);
+  assert.equal(r.clocks, true);
+  assert.deepEqual(r.characterIds, []);
+});
+
+test("open character's own clock refetches that character only", () => {
+  const r = routeSheetEvents(
+    [{ reason: "progress_clock", character_id: 1 }],
+    [1],
+  );
+  assert.equal(r.clocks, false);
+  assert.deepEqual(r.characterIds, [1]);
+});
+
+test("clock with a roll keeps both", () => {
+  const r = routeSheetEvents(
+    [{ reason: "progress_clock" }, { reason: "roll", character_id: 9, session_id: 4 }],
+    [1],
+  );
+  assert.equal(r.clocks, true);
+  assert.equal(r.rolls, true);
+});
+
+test("full sync wins over clocks", () => {
+  const r = routeSheetEvents(
+    [{ reason: "progress_clock" }, { reason: "campaign" }],
+    [1],
+  );
+  assert.equal(r.full, true);
+  assert.equal(r.clocks, false);
 });
