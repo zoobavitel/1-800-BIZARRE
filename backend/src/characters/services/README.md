@@ -29,7 +29,7 @@ Handles all character-related business logic:
 
 - **Dice Rolling**: `roll_action_dice()`, `determine_outcome()`
 - **Character Actions**: `indulge_vice()`, `take_harm()`, `heal_harm()`
-- **Character Management**: `add_xp()`, `update_field()`, `create_character_template()`
+- **Character Management**: `add_xp()`, `create_character_template()`
 - **Permissions**: `can_edit_character()`, `get_user_characters()`
 
 ### CampaignService

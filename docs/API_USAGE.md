@@ -86,9 +86,9 @@ curl -X POST \
 
 ## 4. Modifying a Test Character
 
-To modify a specific field of a character, use the `/api/characters/{id}/update-field/` endpoint with a `PATCH` request.
+To change fields on a character, send a `PATCH` to the character itself with only the fields you want to change.
 
-**Endpoint:** `/api/characters/{id}/update-field/` (replace `{id}` with the character's ID)
+**Endpoint:** `/api/characters/{id}/` (replace `{id}` with the character's ID)
 **Method:** `PATCH`
 **Content-Type:** `application/json`
 **Authorization:** `Token <your_auth_token>`
@@ -98,30 +98,11 @@ To modify a specific field of a character, use the `/api/characters/{id}/update-
 curl -X PATCH \
   -H "Content-Type: application/json" \
   -H "Authorization: Token your_auth_token_here" \
-  -d '{"field": "true_name", "value": "Jotaro Kujo (Updated)"}' \
-  http://127.0.0.1:8000/api/characters/1/update-field/
+  -d '{"true_name": "Jotaro Kujo (Updated)"}' \
+  http://127.0.0.1:8000/api/characters/1/
 ```
 
-**Example Request (using curl to update `coin_stats`):
-```bash
-curl -X PATCH \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Token your_auth_token_here" \
-  -d '{"field": "coin_stats", "value": {"power": "A", "speed": "C", "range": "C", "durability": "D", "precision": "D", "development": "F"}}' \
-  http://127.0.0.1:8000/api/characters/1/update-field/
-```
-**Note:** The `development` stat grants an XP bonus at the end of each session, and an 'A' rank can grant a temporary ability.
-
-
-**Expected Response (on success):**
-```json
-{
-  "success": true,
-  "field": "true_name",
-  "value": "Jotaro Kujo (Updated)",
-  "message": "true_name updated successfully"
-}
-```
+The response is the updated character. Fields the server owns are not changed this way: XP clocks and unspent XP always, and stand grades and creation-only fields such as `level` once character creation is done. They are listed in `rejected_fields`. Use the XP and level-up endpoints for those.
 
 ## 5. Testing Endpoints (General)
 

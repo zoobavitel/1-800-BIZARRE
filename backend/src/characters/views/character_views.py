@@ -333,48 +333,6 @@ class CharacterViewSet(viewsets.ModelViewSet):
         }
         return Response(guide)
 
-    @action(detail=True, methods=["patch"], url_path="update-field")
-    def update_field(self, request, pk=None):
-        """Update a specific field on a character."""
-        character = self.get_object()
-        is_owner = character.user_id == request.user.id
-        is_gm = character.campaign_id and character.campaign.gm_id == request.user.id
-        if not (request.user.is_staff or is_owner or is_gm):
-            raise PermissionDenied(
-                "You may only edit your own characters unless you are the campaign GM."
-            )
-        field_name = request.data.get("field")
-        value = request.data.get("value")
-
-        if not field_name:
-            return Response(
-                {"error": "Field name is required"}, status=status.HTTP_400_BAD_REQUEST
-            )
-
-        if field_name == "coin_stats":
-            return Response(
-                {
-                    "error": (
-                        "coin_stats is derived from Stand. "
-                        "PATCH nested stand grades (or use XP allocation) instead."
-                    )
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        # Check if field exists and is editable
-        if not hasattr(character, field_name):
-            return Response(
-                {"error": f"Field {field_name} does not exist"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        # Update the field
-        setattr(character, field_name, value)
-        character.save()
-
-        return Response({"message": f"Field {field_name} updated successfully"})
-
     @action(detail=True, methods=["post"], url_path="roll-action")
     def roll_action(self, request, pk=None):
         """Roll dice for a character action. Supports position, effect, push (stress), and persists to Roll when session_id provided."""
