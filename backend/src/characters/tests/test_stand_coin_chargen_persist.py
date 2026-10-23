@@ -134,17 +134,6 @@ class StandCoinChargenPersistTests(TestCase):
         self.assertEqual(stand.speed, "C")
         self.assertEqual(stand.range, "F")
 
-    def test_update_field_rejects_coin_stats(self):
-        request = self.factory.post(
-            f"/api/characters/{self.character.id}/update_field/",
-            {"field": "coin_stats", "value": {"power": "S"}},
-            format="json",
-        )
-        force_authenticate(request, user=self.user)
-        view = CharacterViewSet.as_view({"post": "update_field"})
-        response = view(request, pk=self.character.id)
-        self.assertEqual(response.status_code, 400)
-
     def test_create_round_trip_nonuniform_grades(self):
         heritage, _ = Heritage.objects.get_or_create(
             name="Human", defaults={"base_hp": 0, "description": ""}

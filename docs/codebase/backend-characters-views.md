@@ -26,7 +26,7 @@ There is no sibling `characters/views.py` module — the **`views/` package** is
 | Symbol | Role |
 |--------|------|
 | `_character_queryset_for_user` | PCs owned by user **or** in campaigns the user GMs; staff sees all |
-| `CharacterViewSet` | Full PC CRUD; `MultipartJsonParser` for image + JSON; `get_queryset` uses helper; destroy limited to owner (or staff); custom actions e.g. `creation_guide`, `update_field`, field-GM locks |
+| `CharacterViewSet` | Full PC CRUD; `MultipartJsonParser` for image + JSON; `get_queryset` uses helper; destroy limited to owner (or staff); custom actions e.g. `creation_guide`, field-GM locks |
 
 **Queryset rule:** Players see their characters; GMs additionally see PCs in campaigns they run.
 

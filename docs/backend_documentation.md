@@ -275,7 +275,6 @@ These endpoints are used for creating, retrieving, updating, and managing player
 *   **`/api/characters/` (GET, POST)**: List all characters accessible to the authenticated user (their own characters, or all characters in campaigns they GM), or create a new character.
 *   **`/api/characters/{id}/` (GET, PUT, PATCH, DELETE)**: Retrieve, update, or delete a specific character by its ID.
 *   **`/api/characters/creation-guide/` (GET)**: Provides a comprehensive guide to character creation, including available options (heritages, abilities, vices) and rules (action dots, coin stats).
-*   **`/api/characters/{id}/update-field/` (PATCH)**: Allows for real-time, granular updates to individual character fields with immediate validation. This is used for interactive character sheet editing.
 
 ### 6.4. Game Mechanics Endpoints
 
