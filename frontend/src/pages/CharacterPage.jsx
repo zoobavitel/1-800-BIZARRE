@@ -479,7 +479,8 @@ export default function CharacterPage({
    * Scoped sync counters for the open sheet. Each bumps only when its data may
    * have changed, so one roll does not refetch every panel on every sheet:
    * full (campaign-wide / catch-up), character (open PC refetched),
-   * ownRolls (open PC's rolls or XP tracker), groupActions, rolls (session list).
+   * ownRolls (open PC's rolls or XP tracker), groupActions, rolls (session list),
+   * clocks (the sheet's campaign record was refetched for its clocks).
    */
   const [sheetSync, setSheetSync] = useState({
     full: 0,
@@ -487,6 +488,7 @@ export default function CharacterPage({
     ownRolls: 0,
     groupActions: 0,
     rolls: 0,
+    clocks: 0,
   });
   const bumpSheetSync = useCallback((keys) => {
     if (!keys.length) return;
@@ -501,7 +503,8 @@ export default function CharacterPage({
     sheetSync.character +
     sheetSync.ownRolls +
     sheetSync.groupActions +
-    sheetSync.rolls;
+    sheetSync.rolls +
+    sheetSync.clocks;
   const [sheetRealtimeReason, setSheetRealtimeReason] = useState("");
   const SHEET_ABORT_SSE_REASONS = useMemo(
     () =>
@@ -545,7 +548,9 @@ export default function CharacterPage({
       setTraumas(normalizeListResponse(t));
       const hList = normalizeListResponse(h);
       setHeritages(hList);
-      setCampaigns(normalizeListResponse(c));
+      // A failed fetch keeps the list we have. An empty list reads as
+      // "not a member" and shows false permission errors.
+      if (c != null) setCampaigns(normalizeListResponse(c));
       if (heritageFetchFailed) {
         setHeritagesError(
           "Could not load heritages. Check your connection and try again.",
@@ -601,10 +606,11 @@ export default function CharacterPage({
     let byId = new Map();
     if (!only) {
       const [c, chars] = await Promise.all([
-        campaignAPI.getCampaigns().catch(() => []),
+        campaignAPI.getCampaigns().catch(() => null),
         characterAPI.getCharacters({ mine: true }).catch(() => []),
       ]);
-      setCampaigns(c || []);
+      // Keep the current list when the fetch fails (see loadReferenceData).
+      if (c != null) setCampaigns(c);
       const front = (chars || []).map(transformBackendToFrontend);
       setCharacters(front);
       byId = new Map(front.map((x) => [x.id, x]));
@@ -1542,6 +1548,31 @@ export default function CharacterPage({
 
   const campaignIdForRealtime = sheetCampaignContext.campaignId;
 
+  /**
+   * Refetch one campaign and swap it into the list. Clock events use this: the
+   * sheet reads session and party clocks from the campaign record, so one GET
+   * replaces the campaigns list, the character list, and a GET per open sheet.
+   * A failed fetch keeps the record we have.
+   */
+  const refreshCampaignRecord = useCallback(async (id) => {
+    if (!id) return;
+    let fresh;
+    try {
+      fresh = await campaignAPI.getCampaign(id);
+    } catch {
+      return;
+    }
+    if (!fresh || fresh.id == null) return;
+    setCampaigns((prev) => {
+      const list = prev || [];
+      const at = list.findIndex((c) => Number(c?.id) === Number(fresh.id));
+      if (at === -1) return list;
+      const next = list.slice();
+      next[at] = fresh;
+      return next;
+    });
+  }, []);
+
   const sheetCharacterIsGM = useMemo(
     () =>
       isUserCampaignGmForCharacter(user, {
@@ -1588,6 +1619,10 @@ export default function CharacterPage({
           await syncOpenSheetsFromServer();
         } else {
           const extra = [];
+          if (plan.clocks) {
+            await refreshCampaignRecord(campaignIdForRealtime);
+            extra.push("clocks");
+          }
           if (plan.ownRolls) extra.push("ownRolls");
           if (plan.groupActions) extra.push("groupActions");
           if (plan.rolls) extra.push("rolls");
@@ -1629,6 +1664,7 @@ export default function CharacterPage({
     mode,
     campaignIdForRealtime,
     syncOpenSheetsFromServer,
+    refreshCampaignRecord,
     bumpSheetSync,
     SHEET_ABORT_SSE_REASONS,
   ]);

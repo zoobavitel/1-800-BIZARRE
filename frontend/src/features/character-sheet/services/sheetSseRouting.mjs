@@ -12,10 +12,14 @@
  *   rolls: boolean,
  *   ownRolls: boolean,
  *   groupActions: boolean,
+ *   clocks: boolean,
  * }}
  *   - `rolls`: the session roll list moved (any player).
  *   - `ownRolls`: an open character's rolls or XP tracker moved.
  *   - `groupActions`: the session's group actions may have changed.
+ *   - `clocks`: a clock the sheet reads from the campaign record moved
+ *     (campaign, crew, or faction clock, or another player's party clock).
+ *     Refetch that one campaign, not every open sheet.
  */
 export function routeSheetEvents(events, openCharacterIds) {
   const open = new Set(openCharacterIds);
@@ -24,6 +28,7 @@ export function routeSheetEvents(events, openCharacterIds) {
   let rolls = false;
   let ownRolls = false;
   let groupActions = false;
+  let clocks = false;
   for (const ev of events) {
     const reason = String(ev?.reason || "update");
     if (FULL_REASONS.has(reason)) {
@@ -31,6 +36,16 @@ export function routeSheetEvents(events, openCharacterIds) {
       continue;
     }
     if (IGNORED_REASONS.has(reason)) continue;
+    if (reason === "progress_clock") {
+      const clockCharacterId = Number(ev?.character_id);
+      if (clockCharacterId && open.has(clockCharacterId)) {
+        // An open character's own clock lives on its sheet.
+        ids.add(clockCharacterId);
+      } else {
+        clocks = true;
+      }
+      continue;
+    }
     if (ROLL_REASONS.has(reason)) rolls = true;
     if (GROUP_ACTION_REASONS.has(reason)) groupActions = true;
     const cid = Number(ev?.character_id);
@@ -49,9 +64,10 @@ export function routeSheetEvents(events, openCharacterIds) {
       rolls: false,
       ownRolls: false,
       groupActions: false,
+      clocks: false,
     };
   }
-  return { full, characterIds: [...ids], rolls, ownRolls, groupActions };
+  return { full, characterIds: [...ids], rolls, ownRolls, groupActions, clocks };
 }
 
 /** Campaign-wide changes or reconnect catch-up: refetch everything. */
