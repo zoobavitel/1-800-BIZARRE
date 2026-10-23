@@ -95,26 +95,6 @@ class CharacterService:
         return amount
     
     @staticmethod
-    def update_field(character, field_name, value):
-        """Update a specific field on a character."""
-        if not hasattr(character, field_name):
-            raise ValueError(f'Field {field_name} does not exist')
-        
-        old_value = getattr(character, field_name)
-        setattr(character, field_name, value)
-        character.save()
-        
-        # Log the change
-        CharacterHistory.objects.create(
-            character=character,
-            action='field_updated',
-            details=f'Updated {field_name}: {old_value} → {value}',
-            value=value
-        )
-        
-        return True
-    
-    @staticmethod
     def create_character_template(template_data):
         """Create a character template for quick character creation."""
         required_fields = ['name', 'heritage', 'vice']
