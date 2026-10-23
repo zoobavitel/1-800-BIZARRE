@@ -1,7 +1,10 @@
 """
 Server-Sent Events stream for campaign-scoped updates (position/effect, rolls, character saves).
 
-Clients authenticate with ?token=<DRF token> because EventSource cannot set Authorization headers.
+EventSource cannot set Authorization headers. Clients POST to the ticket
+endpoint with their normal token header, then open the stream with
+?ticket=<one-use ticket> (see sse_tickets.py). ?token=<DRF token> still works
+for tabs running older frontend code; it goes away once those have reloaded.
 """
 
 import json
@@ -11,12 +14,16 @@ import random
 import time
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.http import HttpResponse, StreamingHttpResponse
 from rest_framework.authtoken.models import Token
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
 
 from .models import Campaign
 from .realtime import subscribe_campaign, unsubscribe_campaign
 from .sse_slots import claim_slot, holds_slot, release_slot
+from .sse_tickets import issue_ticket, redeem_ticket
 
 logger = logging.getLogger(__name__)
 
@@ -31,20 +38,55 @@ def _user_from_token_query(request):
         return None
 
 
-def campaign_events_stream(request, campaign_id):
-    user = _user_from_token_query(request)
-    if not user or not user.is_authenticated:
-        return HttpResponse(status=401)
+def _user_from_ticket_query(request, campaign_id):
+    """User for a valid ticket issued for this campaign. The ticket is spent
+    even when the campaign does not match."""
+    redeemed = redeem_ticket(request.GET.get("ticket", ""))
+    if redeemed is None:
+        return None
+    user_id, ticket_campaign_id = redeemed
+    if ticket_campaign_id != int(campaign_id):
+        return None
+    return get_user_model().objects.filter(pk=user_id, is_active=True).first()
 
+
+def _campaign_access_status(user, campaign_id):
+    """None when the user may follow this campaign, else an HTTP status."""
     try:
         campaign = Campaign.objects.get(pk=campaign_id)
     except Campaign.DoesNotExist:
-        return HttpResponse(status=404)
+        return 404
+    if campaign.gm_id == user.id:
+        return None
+    if campaign.players.filter(pk=user.id).exists():
+        return None
+    return 403
 
-    is_gm = campaign.gm_id == user.id
-    is_player = campaign.players.filter(pk=user.id).exists()
-    if not is_gm and not is_player:
-        return HttpResponse(status=403)
+
+@api_view(["POST"])
+def campaign_events_ticket(request, campaign_id):
+    """Issue a one-use ticket for opening this campaign's event stream."""
+    status = _campaign_access_status(request.user, campaign_id)
+    if status is not None:
+        return Response(status=status)
+    ticket = issue_ticket(request.user.id, int(campaign_id))
+    response = Response({"ticket": ticket})
+    response["Cache-Control"] = "no-store"
+    return response
+
+
+def campaign_events_stream(request, campaign_id):
+    if "ticket" in request.GET:
+        user = _user_from_ticket_query(request, campaign_id)
+    else:
+        user = _user_from_token_query(request)
+    if not user or not user.is_authenticated:
+        return HttpResponse(status=401)
+
+    # Checked again at stream time: the user may have left since the ticket.
+    status = _campaign_access_status(user, campaign_id)
+    if status is not None:
+        return HttpResponse(status=status)
 
     cid = int(campaign_id)
     stream_id = claim_slot(user.id, cid)
