@@ -72,6 +72,23 @@ export function apiRoot(base) {
   return b.endsWith("/api") ? b : `${b}/api`;
 }
 
+/**
+ * Stream URL for one SSE connect. The server takes a one-use ticket, not the
+ * login token, so every connect (and every reconnect) asks for a new one.
+ */
+export async function sseStreamUrl(root, campaignId, token, signal) {
+  const res = await fetch(`${root}/campaigns/${campaignId}/events/ticket/`, {
+    method: "POST",
+    headers: { Authorization: `Token ${token}` },
+    signal,
+  });
+  if (!res.ok) {
+    throw new Error(`SSE ticket HTTP ${res.status} for campaign ${campaignId}`);
+  }
+  const { ticket } = await res.json();
+  return `${root}/campaigns/${campaignId}/events/?ticket=${encodeURIComponent(ticket)}`;
+}
+
 export function summarize(samples, durationMs) {
   const sorted = [...samples].sort((a, b) => a - b);
   const seconds = Math.max(durationMs / 1000, 0.001);

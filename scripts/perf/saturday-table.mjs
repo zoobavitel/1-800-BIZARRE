@@ -19,6 +19,7 @@ import {
   apiRoot,
   assertSafePerfTarget,
   percentile,
+  sseStreamUrl,
   summarize,
 } from "./perf-common.mjs";
 
@@ -82,7 +83,6 @@ const PNG = Uint8Array.from(
 );
 
 function openSse(client) {
-  const url = `${root}/campaigns/${client.campaignId}/events/?token=${encodeURIComponent(client.token)}`;
   const started = performance.now();
   const ac = new AbortController();
   let connected = false;
@@ -118,6 +118,8 @@ function openSse(client) {
     while (!ac.signal.aborted) {
       let res;
       try {
+        // A ticket works once, so each reconnect gets a new one.
+        const url = await sseStreamUrl(root, client.campaignId, client.token, ac.signal);
         res = await fetch(url, {
           headers: { Accept: "text/event-stream" },
           signal: ac.signal,

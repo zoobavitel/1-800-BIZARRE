@@ -1,10 +1,20 @@
-"""Campaign SSE endpoint: token auth and GM/player access."""
+"""Campaign SSE endpoint: ticket auth and GM/player access."""
 
 from django.test import Client, TestCase, override_settings
 from django.contrib.auth.models import User
 from rest_framework.authtoken.models import Token
 
 from characters.models import Campaign
+
+
+def stream_path(client, token, campaign_id):
+    """Stream URL with a fresh one-use ticket, the way the frontend opens it."""
+    r = client.post(
+        f"/api/campaigns/{campaign_id}/events/ticket/",
+        HTTP_AUTHORIZATION=f"Token {token.key}",
+    )
+    assert r.status_code == 200, r.status_code
+    return f"/api/campaigns/{campaign_id}/events/?ticket={r.json()['ticket']}"
 
 
 class CampaignSSEViewTests(TestCase):
@@ -18,19 +28,27 @@ class CampaignSSEViewTests(TestCase):
         self.player_token = Token.objects.create(user=self.player)
         self.stranger_token = Token.objects.create(user=self.stranger)
 
-    def test_events_401_without_token(self):
+    def test_events_401_without_ticket(self):
         r = self.client.get(f"/api/campaigns/{self.campaign.id}/events/")
         self.assertEqual(r.status_code, 401)
 
-    def test_events_403_for_non_member(self):
+    def test_login_token_in_url_is_rejected(self):
+        """The login token never opens a stream: access logs record URLs."""
         r = self.client.get(
-            f"/api/campaigns/{self.campaign.id}/events/?token={self.stranger_token.key}"
+            f"/api/campaigns/{self.campaign.id}/events/?token={self.player_token.key}"
+        )
+        self.assertEqual(r.status_code, 401)
+
+    def test_non_member_cannot_get_ticket(self):
+        r = self.client.post(
+            f"/api/campaigns/{self.campaign.id}/events/ticket/",
+            HTTP_AUTHORIZATION=f"Token {self.stranger_token.key}",
         )
         self.assertEqual(r.status_code, 403)
 
     def test_events_200_for_player(self):
         r = self.client.get(
-            f"/api/campaigns/{self.campaign.id}/events/?token={self.player_token.key}"
+            stream_path(self.client, self.player_token, self.campaign.id)
         )
         self.assertEqual(r.status_code, 200)
         self.assertIn("text/event-stream", r.get("Content-Type", ""))
@@ -42,7 +60,7 @@ class CampaignSSEViewTests(TestCase):
     )
     def test_stream_sends_retry_and_closes(self):
         r = self.client.get(
-            f"/api/campaigns/{self.campaign.id}/events/?token={self.player_token.key}"
+            stream_path(self.client, self.player_token, self.campaign.id)
         )
         self.assertEqual(r.status_code, 200)
         body = b"".join(r.streaming_content).decode()
@@ -92,9 +110,7 @@ class SSEStreamCapTests(TestCase):
 
         from characters.sse_slots import claim_slot
 
-        r = self.client.get(
-            f"/api/campaigns/{self.campaign.id}/events/?token={self.token.key}"
-        )
+        r = self.client.get(stream_path(self.client, self.token, self.campaign.id))
         self.assertEqual(r.status_code, 200)
         # Two newer streams from the same user push the first past the cap.
         claim_slot(self.player.id, self.campaign.id)
