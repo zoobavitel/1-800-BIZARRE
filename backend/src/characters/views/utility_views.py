@@ -408,9 +408,10 @@ def api_documentation(request):
         'description': 'API for the 1-800-BIZARRE Platform',
         'endpoints': {
             'authentication': {
-                'register': 'POST /api/auth/register/',
-                'login': 'POST /api/auth/login/',
-                'logout': 'POST /api/auth/logout/',
+                'register': 'POST /api/accounts/signup/',
+                'login': 'POST /api/accounts/login/',
+                'logout': 'POST /api/accounts/logout/',
+                'logout_all': 'POST /api/accounts/logoutall/',
             },
             'characters': {
                 'list': 'GET /api/characters/',
@@ -465,8 +466,9 @@ def api_documentation(request):
             }
         },
         'authentication': {
-            'type': 'Token Authentication',
+            'type': 'Token Authentication (django-rest-knox)',
             'header': 'Authorization: Token {your_token}',
+            'expiry': '30 days after last use',
         }
     }
     

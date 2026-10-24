@@ -18,7 +18,7 @@ from django.contrib.auth.models import User
 from django.core.files.base import ContentFile
 from django.core.management.base import BaseCommand, CommandError
 from django.db import connection
-from rest_framework.authtoken.models import Token
+from knox.models import AuthToken
 
 from characters.models import (
     Campaign,
@@ -190,7 +190,8 @@ class Command(BaseCommand):
             campaign.active_session = session
             campaign.save(update_fields=["active_session"])
 
-        gm_token, _ = Token.objects.get_or_create(user=gm)
+        # Knox stores only a hash, so each seed run issues fresh tokens.
+        _, gm_token = AuthToken.objects.create(gm)
         player_rows = []
         for p in range(1, players + 1):
             uname = f"perf_p{p}_t{table_num}_{tier}"
@@ -201,7 +202,7 @@ class Command(BaseCommand):
             user.set_password(PERF_PASSWORD)
             user.save()
             campaign.players.add(user)
-            token, _ = Token.objects.get_or_create(user=user)
+            _, token = AuthToken.objects.create(user)
             char, _ = Character.objects.get_or_create(
                 user=user,
                 campaign=campaign,
@@ -235,7 +236,7 @@ class Command(BaseCommand):
             player_rows.append(
                 {
                     "username": uname,
-                    "token": token.key,
+                    "token": token,
                     "character_id": char.id,
                 }
             )
@@ -244,7 +245,7 @@ class Command(BaseCommand):
             "campaign_id": campaign.id,
             "session_id": session.id,
             "crew_id": crew.id,
-            "gm": {"username": gm_name, "token": gm_token.key},
+            "gm": {"username": gm_name, "token": gm_token},
             "players": player_rows,
         }
 

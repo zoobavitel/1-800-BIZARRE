@@ -45,13 +45,24 @@ curl -X POST \
 ```json
 {
   "token": "your_auth_token_here",
+  "expiry": "2026-11-23T20:00:00+00:00",
   "user": {
     "id": 123,
-    "username": "my_new_user"
+    "username": "my_new_user",
+    "email": ""
   }
 }
 ```
 **Important:** Save the `token` value. You will use it in the `Authorization` header for subsequent authenticated requests.
+
+Each login issues a new token for that device (django-rest-knox). A token expires 30 days after it was last used; each request pushes the expiry out again. An expired or revoked token gets `401`, as does a request with no credentials.
+
+**Logout:** `POST /api/accounts/logout/` revokes the token the request carries. `POST /api/accounts/logoutall/` revokes every token the user has. Both answer `204`.
+
+```bash
+curl -X POST -H "Authorization: Token your_auth_token_here" \
+  http://127.0.0.1:8000/api/accounts/logout/
+```
 
 ## 3. Adding a Test Character
 
