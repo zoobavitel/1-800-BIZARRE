@@ -60,7 +60,8 @@ Each login issues a new token for that device (django-rest-knox). A token expire
 **Logout:** `POST /api/accounts/logout/` revokes the token the request carries. `POST /api/accounts/logoutall/` revokes every token the user has. Both answer `204`.
 
 ```bash
-curl -X POST -H "Authorization: Token your_auth_token_here" \
+curl -X POST \
+  -H "Authorization: Token your_auth_token_here" \
   http://127.0.0.1:8000/api/accounts/logout/
 ```
 
