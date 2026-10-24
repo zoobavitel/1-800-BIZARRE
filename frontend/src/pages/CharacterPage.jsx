@@ -41,6 +41,7 @@ import {
   subscribeCampaignEvents,
 } from "../features/character-sheet/services/campaignEvents";
 import { routeSheetEvents } from "../features/character-sheet/services/sheetSseRouting.mjs";
+import { shouldDropAbortedSaveResult } from "../features/character-sheet/utils/pcAutosaveQueue";
 import { useAuth } from "../features/auth";
 import { CharacterSheetWrapper } from "./CharacterSheet";
 import { characterHashFromIdAndName } from "../utils/spaNavigation";
@@ -1067,7 +1068,8 @@ export default function CharacterPage({
           );
         }
         // Aborted by a newer local edit — do not write tab character (stale echo).
-        if (options?.signal?.aborted) {
+        // A create is never dropped: its reply carries the new id.
+        if (shouldDropAbortedSaveResult(payload.id, options?.signal)) {
           const abortErr = new Error("Save aborted");
           abortErr.name = "AbortError";
           throw abortErr;
@@ -1258,7 +1260,7 @@ export default function CharacterPage({
             { emptyPreferredClearsCustoms: true },
           ),
         };
-        if (options?.signal?.aborted) {
+        if (shouldDropAbortedSaveResult(payload.id, options?.signal)) {
           const abortErr = new Error("Save aborted");
           abortErr.name = "AbortError";
           throw abortErr;
