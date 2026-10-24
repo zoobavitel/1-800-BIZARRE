@@ -1,3 +1,4 @@
+from datetime import timedelta
 from pathlib import Path
 import os
 from corsheaders.defaults import default_headers
@@ -18,7 +19,9 @@ ALLOWED_HOSTS = [
 
 # Application definition
 INSTALLED_APPS = [
+    # Old DRF token table: kept so migrations can empty it. Nothing reads it.
     'rest_framework.authtoken',
+    'knox',
     'characters',
     'django.contrib.admin',
     'django.contrib.auth',
@@ -101,14 +104,28 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Django REST Framework config
 REST_FRAMEWORK = {
+    # Token auth first: a rejected or missing token gets 401 (with a
+    # WWW-Authenticate header), so the frontend can send the user to sign in.
+    # With session auth first, DRF answers 403 instead.
     'DEFAULT_AUTHENTICATION_CLASSES': [
+        'knox.auth.TokenAuthentication',
         'rest_framework.authentication.SessionAuthentication',
-        'rest_framework.authentication.TokenAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ],
     'EXCEPTION_HANDLER': 'app.api_exceptions.custom_exception_handler',
+}
+
+# Login tokens (django-rest-knox). One token per sign-in, stored hashed.
+# A token lasts 30 days from its last use: each request pushes the expiry out
+# again, at most one DB write per minute per token.
+REST_KNOX = {
+    'TOKEN_TTL': timedelta(days=30),
+    'AUTO_REFRESH': True,
+    'MIN_REFRESH_INTERVAL': 60,
+    'AUTH_HEADER_PREFIX': 'Token',
+    'TOKEN_LIMIT_PER_USER': None,
 }
 
 # Logging for development

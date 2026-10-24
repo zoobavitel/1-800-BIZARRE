@@ -6,6 +6,7 @@ Django==5.2
 python-decouple==3.8
 django-cors-headers==4.7.0
 djangorestframework==3.16.0
+django-rest-knox==5.1.0
 drf-nested-routers>=0.95.0
 Faker==37.4.0
 greenlet>=3.4.0

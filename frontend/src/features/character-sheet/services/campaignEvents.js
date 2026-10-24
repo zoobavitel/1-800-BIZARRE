@@ -18,6 +18,7 @@
  */
 import { getApiBaseUrl } from "../../../config/apiConfig";
 import { nextReconnectDelay } from "./campaignEventsReconnect.mjs";
+import { reportUnauthorized } from "../../../utils/authSession";
 
 /**
  * @param {number} campaignId
@@ -50,7 +51,11 @@ export function subscribeCampaignEvents(campaignId, { onUpdate } = {}) {
         method: "POST",
         headers: { Authorization: `Token ${authToken}` },
       });
-      if (!res.ok) return null;
+      if (!res.ok) {
+        // An expired or revoked login token: end the session, not just the stream.
+        reportUnauthorized(res.status, authToken);
+        return null;
+      }
       const body = await res.json();
       return typeof body?.ticket === "string" && body.ticket ? body.ticket : null;
     } catch {
