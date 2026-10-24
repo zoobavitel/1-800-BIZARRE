@@ -8,6 +8,7 @@ import {
   apiRoot,
   assertSafePerfTarget,
   percentile,
+  sseStreamUrl,
 } from "./perf-common.mjs";
 
 const base = process.env.PERF_API_BASE_URL || "http://127.0.0.1:8000";
@@ -41,17 +42,20 @@ const root = apiRoot(base);
 const slice = clients.slice(0, minOpen);
 
 function openSse(client) {
-  const url = `${root}/campaigns/${client.campaignId}/events/?token=${encodeURIComponent(client.token)}`;
   const started = performance.now();
   const ac = new AbortController();
   let heartbeats = 0;
   let connected = false;
   let buffer = "";
 
-  const done = fetch(url, {
-    headers: { Accept: "text/event-stream" },
-    signal: ac.signal,
-  }).then(async (res) => {
+  const done = sseStreamUrl(root, client.campaignId, client.token, ac.signal)
+    .then((url) =>
+      fetch(url, {
+        headers: { Accept: "text/event-stream" },
+        signal: ac.signal,
+      }),
+    )
+    .then(async (res) => {
     if (!res.ok) {
       throw new Error(`SSE HTTP ${res.status} for campaign ${client.campaignId}`);
     }
