@@ -170,13 +170,29 @@ def _ensure_redis_listener(campaign_id: int, q: queue.Queue) -> None:
         stop_event = threading.Event()
         _listener_stop[campaign_id] = stop_event
 
+        def _claim_exit() -> bool:
+            """Decide under the lock whether this listener leaves.
+
+            A leaving listener removes itself from the registry in the same
+            locked step, so a subscriber that arrives later starts a new one.
+            Deciding outside the lock let a subscriber attach to a listener
+            that was already on its way out, and that stream got no events.
+            """
+            me = threading.current_thread()
+            with _lock:
+                if not stop_event.is_set() and _listener_queues.get(campaign_id):
+                    return False
+                if _listener_threads.get(campaign_id) is me:
+                    _listener_threads.pop(campaign_id, None)
+                if _listener_stop.get(campaign_id) is stop_event:
+                    _listener_stop.pop(campaign_id, None)
+                return True
+
         def _run() -> None:
             backoff = 1.0
             channel = channel_name(campaign_id)
-            while not stop_event.is_set():
-                with _lock:
-                    if not _listener_queues.get(campaign_id):
-                        break
+            # Every exit goes through _claim_exit.
+            while not _claim_exit():
                 ps_client = None
                 pubsub = None
                 try:
@@ -184,10 +200,7 @@ def _ensure_redis_listener(campaign_id: int, q: queue.Queue) -> None:
                     pubsub = ps_client.pubsub(ignore_subscribe_messages=True)
                     pubsub.subscribe(channel)
                     backoff = 1.0
-                    while not stop_event.is_set():
-                        with _lock:
-                            if not _listener_queues.get(campaign_id):
-                                return
+                    while not _claim_exit():
                         message = pubsub.get_message(
                             ignore_subscribe_messages=True,
                             timeout=1.0,
@@ -207,9 +220,10 @@ def _ensure_redis_listener(campaign_id: int, q: queue.Queue) -> None:
                                 "reason": "update",
                             }
                         _fanout_to_listener_queues(campaign_id, payload)
+                    return
                 except Exception as exc:
                     if stop_event.is_set():
-                        return
+                        continue
                     logger.warning(
                         "Redis SSE listener campaign=%s error, reconnecting: %s",
                         campaign_id,
@@ -229,9 +243,6 @@ def _ensure_redis_listener(campaign_id: int, q: queue.Queue) -> None:
                             ps_client.close()
                         except Exception:
                             pass
-            with _lock:
-                _listener_threads.pop(campaign_id, None)
-                _listener_stop.pop(campaign_id, None)
 
         t = threading.Thread(
             target=_run,
