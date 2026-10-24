@@ -135,3 +135,30 @@ describe("pcAutosaveQueue", () => {
     expect(taken).toBe(1);
   });
 });
+
+describe("shouldDropAbortedSaveResult", () => {
+  const { shouldDropAbortedSaveResult } = require("./pcAutosaveQueue");
+  const aborted = () => {
+    const c = new AbortController();
+    c.abort();
+    return c.signal;
+  };
+
+  test("keeps a create reply even when aborted, so the new id is not lost", () => {
+    expect(shouldDropAbortedSaveResult(null, aborted())).toBe(false);
+    expect(shouldDropAbortedSaveResult(undefined, aborted())).toBe(false);
+    expect(shouldDropAbortedSaveResult("", aborted())).toBe(false);
+  });
+
+  test("drops an aborted update reply", () => {
+    expect(shouldDropAbortedSaveResult(35, aborted())).toBe(true);
+  });
+
+  test("keeps any reply that was not aborted", () => {
+    expect(shouldDropAbortedSaveResult(35, new AbortController().signal)).toBe(
+      false,
+    );
+    expect(shouldDropAbortedSaveResult(35, undefined)).toBe(false);
+    expect(shouldDropAbortedSaveResult(null, undefined)).toBe(false);
+  });
+});
