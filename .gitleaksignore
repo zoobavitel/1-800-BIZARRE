@@ -1,3 +1,6 @@
 # Known false positives (gitleaks fingerprints: commit:file:rule:line).
 # API host names in a test set, matched by generic-api-key.
 82f72310964fd5c0097d49a66e819135f5047f29:backend/src/characters/tests/test_own_media_urls.py:generic-api-key:25
+# Placeholder token ("your_auth_token_here") in the logout curl example, matched by curl-auth-header.
+71cefb7d8b8f2d6f3c6670058c6d35033885b266:docs/API_USAGE.md:curl-auth-header:63
+1126318f7a70de95c8f2b039f6a37611525d8ed0:docs/API_USAGE.md:curl-auth-header:63
