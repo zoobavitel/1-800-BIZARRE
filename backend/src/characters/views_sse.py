@@ -3,8 +3,8 @@ Server-Sent Events stream for campaign-scoped updates (position/effect, rolls, c
 
 EventSource cannot set Authorization headers. Clients POST to the ticket
 endpoint with their normal token header, then open the stream with
-?ticket=<one-use ticket> (see sse_tickets.py). ?token=<DRF token> still works
-for tabs running older frontend code; it goes away once those have reloaded.
+?ticket=<one-use ticket> (see sse_tickets.py). The login token is never
+accepted in the URL, where access logs would record it.
 """
 
 import json
@@ -16,7 +16,6 @@ import time
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.http import HttpResponse, StreamingHttpResponse
-from rest_framework.authtoken.models import Token
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
@@ -26,16 +25,6 @@ from .sse_slots import claim_slot, holds_slot, release_slot
 from .sse_tickets import issue_ticket, redeem_ticket
 
 logger = logging.getLogger(__name__)
-
-
-def _user_from_token_query(request):
-    key = request.GET.get("token")
-    if not key:
-        return None
-    try:
-        return Token.objects.select_related("user").get(key=key).user
-    except Token.DoesNotExist:
-        return None
 
 
 def _user_from_ticket_query(request, campaign_id):
@@ -76,10 +65,7 @@ def campaign_events_ticket(request, campaign_id):
 
 
 def campaign_events_stream(request, campaign_id):
-    if "ticket" in request.GET:
-        user = _user_from_ticket_query(request, campaign_id)
-    else:
-        user = _user_from_token_query(request)
+    user = _user_from_ticket_query(request, campaign_id)
     if not user or not user.is_authenticated:
         return HttpResponse(status=401)
 
