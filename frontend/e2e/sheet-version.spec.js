@@ -41,10 +41,11 @@ test.beforeAll(async ({ request }) => {
   token = (await res.json()).token;
 });
 
-async function openSheet(page, request, trueName) {
+async function openSheet(page, request, trueName, extra = {}) {
   const ch = await api(request, "POST", "/characters/", {
     true_name: trueName,
     heritage: 1,
+    ...extra,
   });
   await page.addInitScript(
     ([apiBase, authToken]) => {
@@ -59,6 +60,19 @@ async function openSheet(page, request, trueName) {
   await page.waitForTimeout(3000);
   return ch.id;
 }
+
+// Slow every sheet PATCH by 2 s so edits can land while a save is in flight.
+async function slowPatches(page) {
+  await page.route(/\/api\/characters\/\d+\/$/, async (route) => {
+    if (route.request().method() === "PATCH") {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+    await route.continue();
+  });
+}
+
+const isSheetPatch = (r) =>
+  r.method() === "PATCH" && /\/api\/characters\/\d+\/$/.test(r.url());
 
 async function waitForServer(request, id, check) {
   await expect
@@ -124,4 +138,74 @@ test("same field changed on both: Reload takes theirs, keeps other edits", async
   expect(row.rival).toBe("Kars");
   await expect(page.getByPlaceholder("Rival")).toHaveValue("Kars");
   await expect(page.getByPlaceholder("Close friend")).toHaveValue("Joseph");
+});
+
+// The next four came from the PR 7b verification pass.
+
+test("a change undone while its save is in flight still reaches the server", async ({
+  page,
+  request,
+}) => {
+  const id = await openSheet(page, request, "Undo In Flight", {
+    rival: "Original",
+  });
+  await slowPatches(page);
+  const first = page.waitForRequest(isSheetPatch);
+  await page.getByPlaceholder("Rival").fill("Mistake");
+  await first;
+  await page.getByPlaceholder("Rival").fill("Original");
+  await page.waitForTimeout(9000);
+  await expect(page.getByPlaceholder("Rival")).toHaveValue("Original");
+  expect((await api(request, "GET", `/characters/${id}/`)).rival).toBe(
+    "Original",
+  );
+});
+
+test("typing on while a save is in flight saves everything, no banner", async ({
+  page,
+  request,
+}) => {
+  const id = await openSheet(page, request, "Typing In Flight");
+  await slowPatches(page);
+  const first = page.waitForRequest(isSheetPatch);
+  await page.getByPlaceholder("Rival").fill("Dia");
+  await first;
+  await page.getByPlaceholder("Rival").fill("Diavolo");
+  await page.getByPlaceholder("Close friend").fill("Doppio");
+  await page.waitForTimeout(9000);
+  const row = await api(request, "GET", `/characters/${id}/`);
+  expect(row.rival).toBe("Diavolo");
+  expect(row.close_friend).toBe("Doppio");
+  await expect(page.getByTestId("sheet-conflict-banner")).toHaveCount(0);
+});
+
+test("after a silent retry the screen shows the other device's change", async ({
+  page,
+  request,
+}) => {
+  const id = await openSheet(page, request, "Shows Theirs");
+  await api(request, "PATCH", `/characters/${id}/`, {
+    background_note: "from other device",
+  });
+  await page.getByPlaceholder("Rival").fill("Diavolo");
+  await waitForServer(request, id, (c) => c.rival === "Diavolo");
+  await expect(page.getByPlaceholder("Background")).toHaveValue(
+    "from other device",
+    { timeout: 10_000 },
+  );
+});
+
+test("a reload after edits shows what the server saved", async ({
+  page,
+  request,
+}) => {
+  const id = await openSheet(page, request, "Reload Check");
+  await page.getByPlaceholder("Rival").fill("Kira");
+  await page.getByPlaceholder("Close friend").fill("Hayato");
+  await waitForServer(request, id, (c) => c.close_friend === "Hayato");
+  await page.reload();
+  await expect(page.getByPlaceholder("Rival")).toHaveValue("Kira", {
+    timeout: 20_000,
+  });
+  await expect(page.getByPlaceholder("Close friend")).toHaveValue("Hayato");
 });
