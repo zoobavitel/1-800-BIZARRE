@@ -133,7 +133,11 @@ class UserProfileViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'], url_path='change-password')
     def change_password(self, request):
-        """Change the current user's password."""
+        """Change the current user's password.
+
+        Every other device is signed out (``signals_auth``); the login token
+        that made this request keeps working.
+        """
         serializer = ChangePasswordSerializer(
             data=request.data,
             context={'user': request.user},
@@ -141,6 +145,8 @@ class UserProfileViewSet(viewsets.ModelViewSet):
         if serializer.is_valid():
             user = request.user
             user.set_password(serializer.validated_data['new_password'])
+            if isinstance(request.auth, AuthToken):
+                user._keep_auth_token_pk = request.auth.pk
             user.save()
             return Response({'message': 'Password updated successfully'})
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST) 

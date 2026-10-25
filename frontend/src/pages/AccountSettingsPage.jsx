@@ -4,6 +4,10 @@ import { useTheme } from "../features/theme/ThemeContext";
 import { resolveMediaUrl } from "../features/character-sheet/services/api";
 import AvatarCropModal from "../components/AvatarCropModal";
 
+// The server signs out every other device when the password changes.
+export const PASSWORD_CHANGED_MESSAGE =
+  "Password updated. Other devices were signed out.";
+
 const S = {
   page: {
     fontFamily: "monospace",
@@ -237,7 +241,7 @@ export default function AccountSettingsPage() {
       setOldPassword("");
       setNewPassword("");
       setConfirmPassword("");
-      setPasswordMessage("Password updated");
+      setPasswordMessage(PASSWORD_CHANGED_MESSAGE);
     } catch (err) {
       setPasswordMessage(err.message || "Failed to change password");
     } finally {
@@ -725,7 +729,7 @@ export default function AccountSettingsPage() {
                   marginLeft: "12px",
                   fontSize: "12px",
                   color:
-                    passwordMessage === "Password updated"
+                    passwordMessage === PASSWORD_CHANGED_MESSAGE
                       ? "#34d399"
                       : "#f87171",
                 }}
