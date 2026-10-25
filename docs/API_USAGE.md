@@ -118,6 +118,8 @@ curl -X PATCH \
 
 The response is the updated character. Fields the server owns are not changed this way: XP clocks and unspent XP always, and stand grades and creation-only fields such as `level` once character creation is done. They are listed in `rejected_fields`. Use the XP and level-up endpoints for those.
 
+**Stale-save check:** every character has a `version` that the server bumps on every write, including writes to its Stand, abilities and progress clocks. Send the `version` you last saw in the PATCH body to make the save conditional. If someone else saved since, the reply is `409` with `{"code": "version_conflict", "current": <the character as it is now>}` and nothing is written. A PATCH without `version` is applied as before. `version` itself can't be set.
+
 ## 5. Testing Endpoints (General)
 
 You can test any GET endpoint by providing your authentication token in the `Authorization` header.
