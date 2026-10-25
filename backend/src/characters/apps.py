@@ -8,3 +8,4 @@ class CharactersConfig(AppConfig):
     def ready(self):
         import characters.signals_auth  # noqa: F401
         import characters.signals_realtime  # noqa: F401
+        import characters.signals_version  # noqa: F401

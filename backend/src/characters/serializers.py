@@ -1890,6 +1890,9 @@ class CharacterSerializer(serializers.ModelSerializer):
     # Faction reputation and GM settings
     faction_reputation = serializers.JSONField(required=False)
     gm_character_locked = serializers.BooleanField(required=False)
+    # Bumped by the server on every write; a sheet PATCH sends it back in the
+    # body to prove it saw the latest copy (see CharacterViewSet.update).
+    version = serializers.IntegerField(read_only=True)
     gm_allowed_edit_fields = serializers.JSONField(required=False)
     inventory = serializers.JSONField(required=False)
     reputation_status = serializers.JSONField(required=False)
