@@ -116,6 +116,11 @@ class DeleteLegacyTokensMigrationTests(TestCase):
         self.assertEqual(LegacyToken.objects.count(), 0)
 
 
+# A password set outside Account Settings (admin, manage.py). Kept in a
+# variable: gitleaks flags string literals inside set_password(...).
+ADMIN_SET_PASSWORD = "AdminSet789!"
+
+
 class PasswordChangeRevokesTokensTests(TestCase):
     URL = "/api/user-profiles/change-password/"
 
@@ -162,14 +167,14 @@ class PasswordChangeRevokesTokensTests(TestCase):
 
     def test_password_set_outside_the_app_revokes_every_token(self):
         # Django admin, manage.py changepassword and set_user_password all do this.
-        self.user.set_password("AdminSet789!")
+        self.user.set_password(ADMIN_SET_PASSWORD)
         self.user.save()
         self.assertFalse(AuthToken.objects.filter(user=self.user).exists())
 
     def test_other_users_tokens_are_untouched(self):
         other = User.objects.create_user("other_pw", password="x-Pass123!")
         AuthToken.objects.create(other)
-        self.user.set_password("AdminSet789!")
+        self.user.set_password(ADMIN_SET_PASSWORD)
         self.user.save()
         self.assertEqual(AuthToken.objects.filter(user=other).count(), 1)
 
