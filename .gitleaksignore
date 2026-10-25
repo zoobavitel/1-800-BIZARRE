@@ -4,3 +4,6 @@
 # Placeholder token ("your_auth_token_here") in the logout curl example, matched by curl-auth-header.
 71cefb7d8b8f2d6f3c6670058c6d35033885b266:docs/API_USAGE.md:curl-auth-header:63
 1126318f7a70de95c8f2b039f6a37611525d8ed0:docs/API_USAGE.md:curl-auth-header:63
+# Throwaway test password passed to set_password() in the first commit of #239 (now a variable), matched by hardcoded-password-assignment.
+e3f2f126ba549175878c113405589d9f80b3d187:backend/src/characters/tests/test_knox_auth.py:hardcoded-password-assignment:165
+e3f2f126ba549175878c113405589d9f80b3d187:backend/src/characters/tests/test_knox_auth.py:hardcoded-password-assignment:172

@@ -114,3 +114,98 @@ class DeleteLegacyTokensMigrationTests(TestCase):
         )
         migration.delete_legacy_tokens(global_apps, None)
         self.assertEqual(LegacyToken.objects.count(), 0)
+
+
+# A password set outside Account Settings (admin, manage.py). Kept in a
+# variable: gitleaks flags string literals inside set_password(...).
+ADMIN_SET_PASSWORD = "AdminSet789!"
+
+
+class PasswordChangeRevokesTokensTests(TestCase):
+    URL = "/api/user-profiles/change-password/"
+
+    def setUp(self):
+        self.user = User.objects.create_user("pw_user", password="OldPass123!")
+        _, self.here = AuthToken.objects.create(self.user)
+        _, self.phone = AuthToken.objects.create(self.user)
+        _, self.laptop = AuthToken.objects.create(self.user)
+
+    def as_token(self, token):
+        c = APIClient()
+        c.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+        return c
+
+    def change(self, client, new="NewPass456!"):
+        return client.post(
+            self.URL,
+            {"old_password": "OldPass123!", "new_password": new, "confirm_password": new},
+            format="json",
+        )
+
+    def test_change_signs_out_other_devices_and_keeps_this_one(self):
+        r = self.change(self.as_token(self.here))
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(self.as_token(self.here).get(ME).status_code, 200)
+        self.assertEqual(self.as_token(self.phone).get(ME).status_code, 401)
+        self.assertEqual(self.as_token(self.laptop).get(ME).status_code, 401)
+        self.assertEqual(AuthToken.objects.filter(user=self.user).count(), 1)
+
+    def test_failed_change_revokes_nothing(self):
+        r = self.as_token(self.here).post(
+            self.URL,
+            {"old_password": "wrong", "new_password": "NewPass456!", "confirm_password": "NewPass456!"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(AuthToken.objects.filter(user=self.user).count(), 3)
+
+    def test_change_with_session_auth_revokes_every_token(self):
+        c = APIClient()
+        c.force_authenticate(user=self.user)
+        self.assertEqual(self.change(c).status_code, 200)
+        self.assertFalse(AuthToken.objects.filter(user=self.user).exists())
+
+    def test_password_set_outside_the_app_revokes_every_token(self):
+        # Django admin, manage.py changepassword and set_user_password all do this.
+        self.user.set_password(ADMIN_SET_PASSWORD)
+        self.user.save()
+        self.assertFalse(AuthToken.objects.filter(user=self.user).exists())
+
+    def test_other_users_tokens_are_untouched(self):
+        other = User.objects.create_user("other_pw", password="x-Pass123!")
+        AuthToken.objects.create(other)
+        self.user.set_password(ADMIN_SET_PASSWORD)
+        self.user.save()
+        self.assertEqual(AuthToken.objects.filter(user=other).count(), 1)
+
+    def test_saving_without_a_password_change_keeps_tokens(self):
+        self.user.first_name = "Renamed"
+        self.user.save()
+        self.assertEqual(AuthToken.objects.filter(user=self.user).count(), 3)
+
+    def test_hash_upgrade_on_login_keeps_tokens(self):
+        # Store the password with a weaker hasher; check_password() upgrades it.
+        from django.contrib.auth.hashers import make_password
+        from django.test import override_settings
+
+        with override_settings(
+            PASSWORD_HASHERS=[
+                "django.contrib.auth.hashers.MD5PasswordHasher",
+                "django.contrib.auth.hashers.PBKDF2PasswordHasher",
+            ]
+        ):
+            User.objects.filter(pk=self.user.pk).update(
+                password=make_password("OldPass123!")
+            )
+        user = User.objects.get(pk=self.user.pk)
+        self.assertTrue(user.password.startswith("md5$"))
+        with override_settings(
+            PASSWORD_HASHERS=[
+                "django.contrib.auth.hashers.PBKDF2PasswordHasher",
+                "django.contrib.auth.hashers.MD5PasswordHasher",
+            ]
+        ):
+            self.assertTrue(user.check_password("OldPass123!"))
+        user.refresh_from_db()
+        self.assertTrue(user.password.startswith("pbkdf2_"))
+        self.assertEqual(AuthToken.objects.filter(user=self.user).count(), 3)
