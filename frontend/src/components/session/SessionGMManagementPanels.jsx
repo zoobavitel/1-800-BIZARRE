@@ -26,6 +26,14 @@ import { progressClockShowsPlayersBadge } from "../../features/character-sheet/u
 import { buildRouteHref, handleSpaNavClick } from "../../utils/spaNavigation";
 import useRosterExpandAnchor from "../roster/useRosterExpandAnchor";
 import {
+  changedKeys,
+  createSerialSaveQueue,
+  pickKeys,
+  rebaseDraft,
+  sessionFactionDraft,
+  sessionFactionPatch,
+} from "../../utils/factionAutosave";
+import {
   ACTION_RATING_KEYS,
   STAND_ROLL_KEYS_ALL,
 } from "../../features/character-sheet/constants/srd";
@@ -1162,6 +1170,8 @@ export default function SessionGMManagementPanels({
   const [factionSavingId, setFactionSavingId] = useState(null);
   const [factionDraftById, setFactionDraftById] = useState({});
   const factionDraftByIdRef = useRef({});
+  /** Last faction copy the server agreed to, per id. Saves send only fields that differ. */
+  const factionBaselineByIdRef = useRef({});
   const factionAutosaveTimersRef = useRef({});
 
   useEffect(() => {
@@ -3032,57 +3042,48 @@ export default function SessionGMManagementPanels({
     }
   }, [campaignChars, goalAssignCharId]);
 
+  // Server copy refreshed (after a save, or from live sync). Fields with
+  // unsaved edits keep the local value; everything else takes the server's.
   useEffect(() => {
-    const m = {};
+    const serverDrafts = {};
     for (const f of campaign?.factions || []) {
       if (f?.id == null) continue;
-      m[f.id] = {
-        name: f.name ?? "",
-        faction_type: f.faction_type ?? "",
-        level: String(f.level ?? 0),
-        hold: String(f.hold ?? "weak"),
-        reputation: String(f.reputation ?? 0),
-        notes: f.notes ?? "",
-        crew_notes: f.crew_notes ?? "",
-        visible_to_players: !!f.visible_to_players,
-        contacts: JSON.stringify(f.contacts ?? [], null, 2),
-        inventory: JSON.stringify(f.inventory ?? [], null, 2),
-        faction_status: JSON.stringify(f.faction_status ?? {}, null, 2),
-      };
+      serverDrafts[f.id] = sessionFactionDraft(f);
     }
-    setFactionDraftById(m);
+    const baselines = factionBaselineByIdRef.current;
+    factionBaselineByIdRef.current = serverDrafts;
+    setFactionDraftById((prev) => {
+      const m = {};
+      for (const id of Object.keys(serverDrafts)) {
+        m[id] = rebaseDraft(prev[id], baselines[id], serverDrafts[id]);
+      }
+      return m;
+    });
   }, [campaign?.factions]);
 
   const patchFactionSnapshot = useCallback(async (factionId) => {
     if (!factionId) return;
     const draft = factionDraftByIdRef.current[factionId];
     if (!draft) return;
-    const parseJsonText = (raw, fallback) => {
-      const txt = String(raw ?? "").trim();
-      if (!txt) return fallback;
-      return JSON.parse(txt);
-    };
+    const baseline = factionBaselineByIdRef.current[factionId];
+    const keys = changedKeys(draft, baseline);
+    if (keys.length === 0) return;
+    let body;
+    try {
+      body = sessionFactionPatch(draft, keys);
+    } catch (e) {
+      setError(e.message || "Faction update failed");
+      return;
+    }
     setFactionSavingId(factionId);
     setError(null);
     try {
-      await factionAPI.patchFaction(factionId, {
-        name: String(draft.name ?? "").trim(),
-        faction_type: String(draft.faction_type ?? "").trim(),
-        level: Number.parseInt(String(draft.level ?? "0"), 10) || 0,
-        hold: String(draft.hold ?? "weak") || "weak",
-        reputation: Number.parseInt(String(draft.reputation ?? "0"), 10) || 0,
-        notes: String(draft.notes ?? ""),
-        crew_notes: String(draft.crew_notes ?? ""),
-        visible_to_players: !!draft.visible_to_players,
-        players_see_tier: draft.players_see_tier !== false,
-        players_see_hold: draft.players_see_hold !== false,
-        players_see_reputation: draft.players_see_reputation !== false,
-        players_see_notes: draft.players_see_notes !== false,
-        players_see_npcs: draft.players_see_npcs !== false,
-        contacts: parseJsonText(draft.contacts, []),
-        inventory: parseJsonText(draft.inventory, []),
-        faction_status: parseJsonText(draft.faction_status, {}),
-      });
+      await factionAPI.patchFaction(factionId, body);
+      const baselines = factionBaselineByIdRef.current;
+      factionBaselineByIdRef.current = {
+        ...baselines,
+        [factionId]: { ...(baselines[factionId] || {}), ...pickKeys(draft, keys) },
+      };
       onRefresh();
     } catch (e) {
       setError(e.message || "Faction update failed");
@@ -3091,18 +3092,25 @@ export default function SessionGMManagementPanels({
     }
   }, [onRefresh, setError]);
 
-  const scheduleFactionAutosave = useCallback(
-    (factionId) => {
-      if (!factionId) return;
-      const timers = factionAutosaveTimersRef.current;
-      if (timers[factionId]) clearTimeout(timers[factionId]);
-      timers[factionId] = setTimeout(() => {
-        patchFactionSnapshot(factionId);
-        delete timers[factionId];
-      }, 450);
-    },
-    [patchFactionSnapshot],
-  );
+  // One save in flight per faction; edits during a save queue one follow-up.
+  const patchFactionSnapshotRef = useRef(patchFactionSnapshot);
+  patchFactionSnapshotRef.current = patchFactionSnapshot;
+  const factionSaveQueueRef = useRef(null);
+  if (!factionSaveQueueRef.current) {
+    factionSaveQueueRef.current = createSerialSaveQueue((id) =>
+      patchFactionSnapshotRef.current(id),
+    );
+  }
+
+  const scheduleFactionAutosave = useCallback((factionId) => {
+    if (!factionId) return;
+    const timers = factionAutosaveTimersRef.current;
+    if (timers[factionId]) clearTimeout(timers[factionId]);
+    timers[factionId] = setTimeout(() => {
+      delete timers[factionId];
+      factionSaveQueueRef.current.request(factionId);
+    }, 450);
+  }, []);
 
   const handlePcSheetHandCoinBlur = useCallback(
     async (characterId, raw, currentCoinBoxes) => {
@@ -5043,25 +5051,7 @@ export default function SessionGMManagementPanels({
               factionsById[fid] ||
               (campaign?.factions || []).find((f) => String(f.id) === String(fid)) ||
               { id: fid, name: `Faction ${fid}` };
-            const draft =
-              factionDraftById[fid] || {
-                name: fac.name ?? "",
-                faction_type: fac.faction_type ?? "",
-                level: String(fac.level ?? 0),
-                hold: String(fac.hold ?? "weak"),
-                reputation: String(fac.reputation ?? 0),
-                notes: fac.notes ?? "",
-                crew_notes: fac.crew_notes ?? "",
-                visible_to_players: !!fac.visible_to_players,
-                players_see_tier: fac.players_see_tier !== false,
-                players_see_hold: fac.players_see_hold !== false,
-                players_see_reputation: fac.players_see_reputation !== false,
-                players_see_notes: fac.players_see_notes !== false,
-                players_see_npcs: fac.players_see_npcs !== false,
-                contacts: JSON.stringify(fac.contacts ?? [], null, 2),
-                inventory: JSON.stringify(fac.inventory ?? [], null, 2),
-                faction_status: JSON.stringify(fac.faction_status ?? {}, null, 2),
-              };
+            const draft = factionDraftById[fid] || sessionFactionDraft(fac);
             const setDraftField = (field, value) => {
               setFactionDraftById((prev) => ({
                 ...prev,
@@ -5512,7 +5502,7 @@ export default function SessionGMManagementPanels({
                     </div>
                   </div>
                   <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8 }}>
-                    {factionSavingId === fid ? (
+                    {factionSavingId != null && String(factionSavingId) === String(fid) ? (
                       <span style={{ fontSize: 10, color: "#9ca3af" }}>
                         Saving faction…
                       </span>
