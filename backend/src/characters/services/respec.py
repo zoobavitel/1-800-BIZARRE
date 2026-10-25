@@ -658,8 +658,10 @@ def commit_respec(
     if len(token) > 64:
         raise RespecError("commit_token is too long.")
 
+    # Lock only the character row. Postgres refuses FOR UPDATE on the nullable
+    # side of the outer joins select_related adds (heritage, stand, campaign).
     character = (
-        Character.objects.select_for_update()
+        Character.objects.select_for_update(of=("self",))
         .select_related("heritage", "stand", "campaign")
         .get(pk=character.pk)
     )
