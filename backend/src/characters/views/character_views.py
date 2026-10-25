@@ -127,6 +127,10 @@ def _allocation_list_response(character):
 def _character_response(character):
     return CharacterSerializer(character).data
 
+
+logger = logging.getLogger(__name__)
+
+
 class CharacterViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class = CharacterSerializer
@@ -173,8 +177,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
         finally:
             reset_character_history_editor(token)
 
-    def perform_update(self, serializer):
-        instance = serializer.instance
+    def _assert_can_edit(self, instance):
         user = self.request.user
         is_owner = instance.user_id == user.id
         is_gm = instance.campaign_id and instance.campaign.gm_id == user.id
@@ -182,6 +185,59 @@ class CharacterViewSet(viewsets.ModelViewSet):
             raise PermissionDenied(
                 "You may only edit your own characters unless you are the campaign GM."
             )
+
+    def update(self, request, *args, **kwargs):
+        """PUT/PATCH with an optional stale-save check.
+
+        When the body carries ``version`` (the sheet's autosave), the save only
+        goes through if it matches the stored version; otherwise 409 with the
+        current row, so the sheet can rebase instead of overwriting newer
+        edits. The check claims the row with a conditional UPDATE inside the
+        same transaction as the save, so two saves sent with the same version
+        can't both pass. Writes without ``version`` (one-field PATCHes, old
+        tabs) are accepted as before.
+        """
+        data = request.data
+        raw_version = data.get("version") if hasattr(data, "get") else None
+        if raw_version is None or raw_version == "":
+            if "true_name" in data:
+                # A full-sheet save from a tab that predates the version check.
+                # Once these stop, version can become required here.
+                logger.info(
+                    "sheet save without version character=%s user=%s",
+                    kwargs.get("pk"),
+                    request.user.pk,
+                )
+            return super().update(request, *args, **kwargs)
+        try:
+            expected = int(raw_version)
+        except (TypeError, ValueError):
+            return Response(
+                {"version": ["Must be an integer."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        instance = self.get_object()
+        self._assert_can_edit(instance)
+        with transaction.atomic():
+            claimed = Character.objects.filter(
+                pk=instance.pk, version=expected
+            ).update()
+            if not claimed:
+                current = self.get_queryset().get(pk=instance.pk)
+                return Response(
+                    {
+                        "detail": "This character changed since you loaded it.",
+                        "code": "version_conflict",
+                        "current": self.get_serializer(current).data,
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+            return super().update(request, *args, **kwargs)
+
+    def perform_update(self, serializer):
+        instance = serializer.instance
+        user = self.request.user
+        self._assert_can_edit(instance)
 
         # The CharacterSerializer marks `user` as read_only=True, so it will
         # never be present in validated_data and ownership cannot change through
@@ -210,6 +266,10 @@ class CharacterViewSet(viewsets.ModelViewSet):
                         and getattr(inst, "campaign_id", None)
                     ):
                         award_struggle_for_new_traumas(inst, act, gained)
+                # Related rows (Stand, abilities, clocks) bump version through
+                # signals after the character's own save; reply with the final
+                # number so the sheet's next save doesn't 409 against itself.
+                inst.refresh_from_db(fields=["version"])
         finally:
             reset_character_history_editor(token)
 
