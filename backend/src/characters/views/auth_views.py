@@ -5,8 +5,8 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.decorators import action
-from rest_framework.authtoken.models import Token
 from rest_framework.authtoken.views import ObtainAuthToken
+from knox.models import AuthToken
 from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 
 from ..models import UserProfile
@@ -31,28 +31,47 @@ def _signup_user_message(errors: dict) -> str:
     return 'Could not create this account. Check username and password, then try again.'
 
 
+def _login_response_body(user):
+    """New login token for this device, plus the user.
+
+    Each sign-in gets its own token (knox), so signing out on one device
+    leaves the others signed in. The token expires 30 days after its last use
+    (see REST_KNOX in settings).
+    """
+    instance, token = AuthToken.objects.create(user)
+    return {
+        'token': token,
+        'expiry': instance.expiry.isoformat() if instance.expiry else None,
+        'user': {
+            'id': user.pk,
+            'username': user.username,
+            'email': getattr(user, 'email', '') or '',
+        },
+    }
+
+
 class RegisterView(APIView):
     permission_classes = [AllowAny]
+    # A stale token sent along must not block signing up.
+    authentication_classes = []
 
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
         if serializer.is_valid():
             user = serializer.save()
-            token, created = Token.objects.get_or_create(user=user)
-            return Response({
-                'token': token.key,
-                'user': {
-                    'id': user.pk,
-                    'username': user.username,
-                    'email': getattr(user, 'email', '') or '',
-                },
-            }, status=status.HTTP_201_CREATED)
+            return Response(
+                _login_response_body(user), status=status.HTTP_201_CREATED
+            )
         body = dict(serializer.errors)
         body['message'] = _signup_user_message(body)
         return Response(body, status=status.HTTP_400_BAD_REQUEST)
 
 
 class LoginView(ObtainAuthToken):
+    # The browser may still send an expired token; it must not block a new
+    # sign-in with a password.
+    authentication_classes = []
+
     def post(self, request, *args, **kwargs):
         serializer = self.serializer_class(
             data=request.data,
@@ -60,17 +79,9 @@ class LoginView(ObtainAuthToken):
         )
         if serializer.is_valid():
             user = serializer.validated_data['user']
-            token, created = Token.objects.get_or_create(user=user)
             ip = request.META.get('REMOTE_ADDR', '?')
             logger.info("Login successful: user=%s ip=%s", user.username, ip)
-            return Response({
-                'token': token.key,
-                'user': {
-                    'id': user.pk,
-                    'username': user.username,
-                    'email': getattr(user, 'email', '') or '',
-                },
-            })
+            return Response(_login_response_body(user))
         body = dict(serializer.errors)
         body['message'] = (
             'Invalid username or password. Check your credentials and try again.'

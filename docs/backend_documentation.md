@@ -251,10 +251,14 @@ The Jojo TTRPG Platform backend exposes a comprehensive set of RESTful API endpo
 
 ### 6.1. Authentication
 
-All API endpoints (except for user registration and login) require authentication. The system uses **Token Authentication**.
+All API endpoints (except for user registration and login) require authentication. The system uses **Token Authentication** (`Authorization: Token <key>`).
 
 *   **`/api/accounts/signup/` (POST)**: Register a new user.
 *   **`/api/accounts/login/` (POST)**: Authenticate a user and obtain an authentication token.
+*   **`/api/accounts/logout/` (POST)**: Revoke the calling device's token (204).
+*   **`/api/accounts/logoutall/` (POST)**: Revoke all of the user's tokens (204).
+
+Tokens come from django-rest-knox (`REST_KNOX` in `app/settings.py`): one per login, stored hashed, valid until 30 days after last use. Without valid credentials the API answers 401.
 
 ### 6.2. Core Game Data Endpoints
 

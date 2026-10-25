@@ -1,5 +1,9 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { authAPI } from "../services/authService";
+import {
+  AUTH_EXPIRED_EVENT,
+  SESSION_ENDED_MESSAGE,
+} from "../../../utils/authSession";
 
 const AuthContext = createContext();
 
@@ -16,6 +20,8 @@ export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(localStorage.getItem("authToken"));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  /** Shown on the sign-in page after the server ended the session. */
+  const [sessionNote, setSessionNote] = useState(null);
 
   // Check if user is authenticated on mount
   useEffect(() => {
@@ -35,6 +41,20 @@ export const AuthProvider = ({ children }) => {
 
     checkAuth();
   }, [token]);
+
+  // The server rejected the stored token (expired, or revoked from another
+  // device): sign out here and say why on the sign-in page.
+  useEffect(() => {
+    const onExpired = () => {
+      localStorage.removeItem("authToken");
+      setToken(null);
+      setUser(null);
+      setError(null);
+      setSessionNote(SESSION_ENDED_MESSAGE);
+    };
+    window.addEventListener(AUTH_EXPIRED_EVENT, onExpired);
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, onExpired);
+  }, []);
 
   const login = async (credentials) => {
     setLoading(true);
@@ -110,7 +130,7 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const logout = () => {
+  const clearLocalSession = () => {
     setToken(null);
     setUser(null);
     setError(null);
@@ -120,6 +140,20 @@ export const AuthProvider = ({ children }) => {
     if (typeof window !== "undefined") {
       window.location.hash = "";
     }
+  };
+
+  // Sign out this device: revoke its token on the server, then clear it here.
+  const logout = () => {
+    const current = localStorage.getItem("authToken");
+    clearLocalSession();
+    void authAPI.revokeToken(current);
+  };
+
+  // Revoke every token this user has, then sign out here. Throws if the
+  // server could not do it, so the caller can show the error.
+  const logoutAllDevices = async () => {
+    await authAPI.logoutAllDevices();
+    clearLocalSession();
   };
 
   const isAuthenticated = !!token && !!user;
@@ -133,7 +167,12 @@ export const AuthProvider = ({ children }) => {
     login,
     signup,
     logout,
-    clearError: () => setError(null),
+    logoutAllDevices,
+    sessionNote,
+    clearError: () => {
+      setError(null);
+      setSessionNote(null);
+    },
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

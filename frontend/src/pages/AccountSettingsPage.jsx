@@ -112,7 +112,9 @@ function themeChipStyle(active) {
 }
 
 export default function AccountSettingsPage() {
-  const { user } = useAuth();
+  const { user, logoutAllDevices } = useAuth();
+  const [loggingOutAll, setLoggingOutAll] = useState(false);
+  const [logoutAllMessage, setLogoutAllMessage] = useState(null);
   const { theme: appTheme, setTheme } = useTheme();
   const [avatarUrl, setAvatarUrl] = useState("");
   const [avatarPath, setAvatarPath] = useState("");
@@ -240,6 +242,25 @@ export default function AccountSettingsPage() {
       setPasswordMessage(err.message || "Failed to change password");
     } finally {
       setChangingPassword(false);
+    }
+  };
+
+  const handleLogoutAllDevices = async () => {
+    if (
+      !window.confirm(
+        "Sign out on every device, including this one? You will need to sign in again everywhere.",
+      )
+    ) {
+      return;
+    }
+    setLogoutAllMessage(null);
+    setLoggingOutAll(true);
+    try {
+      // On success this signs out here too, so the page goes away.
+      await logoutAllDevices();
+    } catch (err) {
+      setLogoutAllMessage(err.message || "Could not sign out other devices");
+      setLoggingOutAll(false);
     }
   };
 
@@ -710,6 +731,33 @@ export default function AccountSettingsPage() {
                 }}
               >
                 {passwordMessage}
+              </span>
+            )}
+          </div>
+        </section>
+
+        <section style={S.section}>
+          <h2 style={S.sectionTitle}>Sessions</h2>
+          <div style={S.card}>
+            <p style={S.mutedSmall}>
+              Each device you sign in on stays signed in for 30 days after
+              you last use it. Sign out everywhere if you lost a device or
+              think someone else has access to your account.
+            </p>
+            <button
+              type="button"
+              style={S.btn}
+              onClick={handleLogoutAllDevices}
+              disabled={loggingOutAll}
+            >
+              {loggingOutAll ? "Signing out..." : "Log out of all devices"}
+            </button>
+            {logoutAllMessage && (
+              <span
+                role="alert"
+                style={{ marginLeft: "12px", fontSize: "12px", color: "#f87171" }}
+              >
+                {logoutAllMessage}
               </span>
             )}
           </div>

@@ -3,7 +3,7 @@
 from django.contrib.auth.models import User
 from django.test import TestCase
 from rest_framework import status
-from rest_framework.authtoken.models import Token
+from knox.models import AuthToken
 from rest_framework.test import APIClient
 
 from characters.models import Campaign, Character, Crew, Heritage, Roll, Session
@@ -45,8 +45,8 @@ class CharacterLifecycleIntegrationTests(TestCase):
             username="char_other", password="pass1234"
         )
         self.heritage = Heritage.objects.create(name="Human", base_hp=0, description="")
-        token, _ = Token.objects.get_or_create(user=self.user)
-        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+        _, token = AuthToken.objects.create(self.user)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
 
     def test_create_patch_delete_happy_path(self):
         created = self.client.post(
@@ -88,8 +88,8 @@ class CharacterLifecycleIntegrationTests(TestCase):
         owned = Character.objects.create(
             user=self.user, true_name="Owned Character", heritage=self.heritage
         )
-        other_token, _ = Token.objects.get_or_create(user=self.other_user)
-        self.client.credentials(HTTP_AUTHORIZATION=f"Token {other_token.key}")
+        _, other_token = AuthToken.objects.create(self.other_user)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {other_token}")
         denied = self.client.delete(f"/api/characters/{owned.id}/")
         self.assertEqual(denied.status_code, status.HTTP_404_NOT_FOUND)
 
@@ -132,8 +132,8 @@ class SessionRollLoopIntegrationTests(TestCase):
             default_position="risky",
             default_effect="standard",
         )
-        player_token, _ = Token.objects.get_or_create(user=self.player_user)
-        self.client.credentials(HTTP_AUTHORIZATION=f"Token {player_token.key}")
+        _, player_token = AuthToken.objects.create(self.player_user)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {player_token}")
 
     def test_roll_action_creates_session_roll_happy_path(self):
         rolled = self.client.post(

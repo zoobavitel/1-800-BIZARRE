@@ -7,6 +7,7 @@ from rest_framework_nested import routers as nested_routers
 from django.conf import settings
 from django.conf.urls.static import static
 from django.views.static import serve
+from knox import views as knox_views
 from characters.views_sse import campaign_events_stream, campaign_events_ticket
 from characters.views import (
     UserProfileViewSet, HeritageViewSet, ViceViewSet, AbilityViewSet,
@@ -86,6 +87,10 @@ urlpatterns = [
     path('api/accounts/login/', LoginView.as_view(), name='login'),
     path('api/accounts/signup/', RegisterView.as_view(), name='signup'),
     path('api/accounts/me/', CurrentUserView.as_view(), name='current_user'),
+    # Logout deletes this device's token; logout-all deletes every token the
+    # user has. Both answer 204.
+    path('api/accounts/logout/', knox_views.LogoutView.as_view(), name='logout'),
+    path('api/accounts/logoutall/', knox_views.LogoutAllView.as_view(), name='logout_all'),
 ]
 
 # django.conf.urls.static.static() only mounts when DEBUG=True. Prod often hits

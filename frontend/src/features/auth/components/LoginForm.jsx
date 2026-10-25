@@ -39,7 +39,7 @@ const LoginForm = ({ onSwitchToSignup }) => {
     if (!getApiBaseUrl()) setShowServerUrl(true);
   }, []);
 
-  const { login, error, clearError } = useAuth();
+  const { login, error, clearError, sessionNote } = useAuth();
 
   const handleServerUrlChange = (e) => {
     const value = e.target.value.trim();
@@ -135,6 +135,24 @@ const LoginForm = ({ onSwitchToSignup }) => {
             >
               Set the Game server URL below. This build has no baked-in API
               host.
+            </div>
+          )}
+
+          {/* The server ended the last session (expired or revoked). */}
+          {sessionNote && !error && (
+            <div
+              role="status"
+              style={{
+                padding: "10px 14px",
+                background: token.warnDim,
+                border: `1px solid rgba(245,158,11,0.4)`,
+                borderRadius: 8,
+                fontSize: 13,
+                color: "#fcd34d",
+                lineHeight: 1.6,
+              }}
+            >
+              {sessionNote}
             </div>
           )}
 

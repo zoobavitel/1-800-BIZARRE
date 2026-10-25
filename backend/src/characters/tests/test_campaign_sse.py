@@ -2,7 +2,7 @@
 
 from django.test import Client, TestCase, override_settings
 from django.contrib.auth.models import User
-from rest_framework.authtoken.models import Token
+from knox.models import AuthToken
 
 from characters.models import Campaign
 
@@ -11,7 +11,7 @@ def stream_path(client, token, campaign_id):
     """Stream URL with a fresh one-use ticket, the way the frontend opens it."""
     r = client.post(
         f"/api/campaigns/{campaign_id}/events/ticket/",
-        HTTP_AUTHORIZATION=f"Token {token.key}",
+        HTTP_AUTHORIZATION=f"Token {token}",
     )
     assert r.status_code == 200, r.status_code
     return f"/api/campaigns/{campaign_id}/events/?ticket={r.json()['ticket']}"
@@ -25,8 +25,8 @@ class CampaignSSEViewTests(TestCase):
         self.stranger = User.objects.create_user("st", "st@example.com", "pw")
         self.campaign = Campaign.objects.create(name="Test", gm=self.gm)
         self.campaign.players.add(self.player)
-        self.player_token = Token.objects.create(user=self.player)
-        self.stranger_token = Token.objects.create(user=self.stranger)
+        self.player_token = AuthToken.objects.create(self.player)[1]
+        self.stranger_token = AuthToken.objects.create(self.stranger)[1]
 
     def test_events_401_without_ticket(self):
         r = self.client.get(f"/api/campaigns/{self.campaign.id}/events/")
@@ -35,14 +35,14 @@ class CampaignSSEViewTests(TestCase):
     def test_login_token_in_url_is_rejected(self):
         """The login token never opens a stream: access logs record URLs."""
         r = self.client.get(
-            f"/api/campaigns/{self.campaign.id}/events/?token={self.player_token.key}"
+            f"/api/campaigns/{self.campaign.id}/events/?token={self.player_token}"
         )
         self.assertEqual(r.status_code, 401)
 
     def test_non_member_cannot_get_ticket(self):
         r = self.client.post(
             f"/api/campaigns/{self.campaign.id}/events/ticket/",
-            HTTP_AUTHORIZATION=f"Token {self.stranger_token.key}",
+            HTTP_AUTHORIZATION=f"Token {self.stranger_token}",
         )
         self.assertEqual(r.status_code, 403)
 
@@ -81,7 +81,7 @@ class SSEStreamCapTests(TestCase):
         self.player = User.objects.create_user("pl2", "pl2@example.com", "pw")
         self.campaign = Campaign.objects.create(name="Cap", gm=self.gm)
         self.campaign.players.add(self.player)
-        self.token = Token.objects.create(user=self.player)
+        self.token = AuthToken.objects.create(self.player)[1]
 
     def test_newest_streams_keep_slots_oldest_evicted(self):
         from characters.sse_slots import claim_slot, holds_slot, release_slot
@@ -154,14 +154,14 @@ class SSETicketTests(TestCase):
         self.campaign = Campaign.objects.create(name="Ticket", gm=self.gm)
         self.campaign.players.add(self.player)
         self.other = Campaign.objects.create(name="Other", gm=self.player)
-        self.player_token = Token.objects.create(user=self.player)
-        self.stranger_token = Token.objects.create(user=self.stranger)
+        self.player_token = AuthToken.objects.create(self.player)[1]
+        self.stranger_token = AuthToken.objects.create(self.stranger)[1]
 
     def _ticket(self, token, campaign_id=None):
         cid = campaign_id or self.campaign.id
         return self.client.post(
             f"/api/campaigns/{cid}/events/ticket/",
-            HTTP_AUTHORIZATION=f"Token {token.key}",
+            HTTP_AUTHORIZATION=f"Token {token}",
         )
 
     def _stream(self, ticket, campaign_id=None):
@@ -177,7 +177,7 @@ class SSETicketTests(TestCase):
         self.assertIn('"type": "connected"', b"".join(s.streaming_content).decode())
 
     def test_gm_gets_ticket(self):
-        gm_token = Token.objects.create(user=self.gm)
+        gm_token = AuthToken.objects.create(self.gm)[1]
         self.assertEqual(self._ticket(gm_token).status_code, 200)
 
     def test_reused_ticket_401(self):
@@ -209,7 +209,7 @@ class SSETicketTests(TestCase):
     def test_bad_ticket_does_not_fall_back_to_token(self):
         r = self.client.get(
             f"/api/campaigns/{self.campaign.id}/events/"
-            f"?ticket=nope&token={self.player_token.key}"
+            f"?ticket=nope&token={self.player_token}"
         )
         self.assertEqual(r.status_code, 401)
 
@@ -226,7 +226,7 @@ class SSETicketTests(TestCase):
     def test_ticket_rejects_get(self):
         r = self.client.get(
             f"/api/campaigns/{self.campaign.id}/events/ticket/",
-            HTTP_AUTHORIZATION=f"Token {self.player_token.key}",
+            HTTP_AUTHORIZATION=f"Token {self.player_token}",
         )
         self.assertEqual(r.status_code, 405)
 
