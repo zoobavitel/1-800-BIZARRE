@@ -88,7 +88,9 @@ describe("AccountSettingsPage avatar upload validation", () => {
       }),
     );
     await waitFor(() =>
-      expect(screen.getByText("Password updated")).toBeInTheDocument(),
+      expect(
+        screen.getByText("Password updated. Other devices were signed out."),
+      ).toBeInTheDocument(),
     );
   });
 

@@ -257,6 +257,7 @@ All API endpoints (except for user registration and login) require authenticatio
 *   **`/api/accounts/login/` (POST)**: Authenticate a user and obtain an authentication token.
 *   **`/api/accounts/logout/` (POST)**: Revoke the calling device's token (204).
 *   **`/api/accounts/logoutall/` (POST)**: Revoke all of the user's tokens (204).
+*   **`/api/user-profiles/change-password/` (POST)**: Change the password and revoke the user's other tokens; the calling token keeps working. Any other password change (admin, `changepassword`, `set_user_password`) revokes all tokens (`characters/signals_auth.py`).
 
 Tokens come from django-rest-knox (`REST_KNOX` in `app/settings.py`): one per login, stored hashed, valid until 30 days after last use. Without valid credentials the API answers 401.
 

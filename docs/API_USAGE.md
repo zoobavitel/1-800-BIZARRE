@@ -59,6 +59,8 @@ Each login issues a new token for that device (django-rest-knox). A token expire
 
 **Logout:** `POST /api/accounts/logout/` revokes the token the request carries. `POST /api/accounts/logoutall/` revokes every token the user has. Both answer `204`.
 
+**Password change:** `POST /api/user-profiles/change-password/` with `old_password`, `new_password` and `confirm_password`. It revokes every other token the user has; the token that made the request keeps working. A password set any other way (Django admin, `manage.py changepassword`, `set_user_password`) revokes every token.
+
 ```bash
 curl -X POST \
   -H "Authorization: Token your_auth_token_here" \

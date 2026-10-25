@@ -412,6 +412,7 @@ def api_documentation(request):
                 'login': 'POST /api/accounts/login/',
                 'logout': 'POST /api/accounts/logout/',
                 'logout_all': 'POST /api/accounts/logoutall/',
+                'change_password': 'POST /api/user-profiles/change-password/ (signs out other devices)',
             },
             'characters': {
                 'list': 'GET /api/characters/',
