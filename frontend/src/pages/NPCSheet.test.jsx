@@ -1,7 +1,9 @@
 import {
   getNpcPortraitReplacementFailureState,
   getNpcPortraitSavedState,
+  npcFactionValuesFromApi,
 } from "./NPCSheet";
+import { changedKeys, pickKeys } from "../utils/factionAutosave";
 
 describe("NPCSheet portrait state helpers", () => {
   test("failed replacement restores the last persisted preview and clears pending state", () => {
@@ -126,5 +128,48 @@ describe("NPCSheet standing helpers", () => {
     );
     expect(changed).toBe(false);
     expect(next).toEqual({ Allies: 1, Rivals: 0 });
+  });
+});
+
+describe("NPCSheet faction autosave values", () => {
+  const apiFaction = {
+    id: 4,
+    name: "Passione",
+    level: 3,
+    hold: "strong",
+    contacts: [{ name: "Polpo" }],
+    inventory: [],
+    faction_status: { Gang: -2 },
+    players_see_tier: false,
+    players_see_faction_status: false,
+  };
+
+  test("a freshly loaded faction has nothing to save", () => {
+    const baseline = npcFactionValuesFromApi(apiFaction);
+    const loaded = npcFactionValuesFromApi(apiFaction);
+    expect(changedKeys(loaded, baseline)).toEqual([]);
+  });
+
+  test("one edit sends only that field and keeps hidden flags out of the PATCH", () => {
+    const baseline = npcFactionValuesFromApi(apiFaction);
+    const edited = { ...baseline, name: "Passione Family" };
+    const keys = changedKeys(edited, baseline);
+    expect(pickKeys(edited, keys)).toEqual({ name: "Passione Family" });
+    expect(baseline.players_see_tier).toBe(false);
+    expect(baseline.players_see_faction_status).toBe(false);
+  });
+
+  test("missing fields get the sheet's defaults", () => {
+    const v = npcFactionValuesFromApi({ id: 1 });
+    expect(v).toMatchObject({
+      name: "",
+      level: 0,
+      hold: "weak",
+      reputation: 0,
+      contacts: [],
+      faction_status: {},
+      visible_to_players: false,
+      players_see_npcs: true,
+    });
   });
 });
