@@ -56,19 +56,19 @@ export function schedulePcPendingResaveDrain({
 
 /**
  * Whether a finished save's reply should be dropped because a newer local edit
- * aborted it.
+ * superseded it.
  *
- * Only an update (PATCH) reply is dropped: it is stale data the next save
- * replaces. A create (POST) reply is kept even when aborted. The server already
- * made the row, and the reply holds its only copy of the new id; dropping it
- * left the tab without an id, so every later autosave created another
- * character.
+ * Only an update (PATCH) reply is dropped from the screen: it is stale data
+ * the next save replaces (its version is still kept). A create (POST) reply
+ * is always kept. The server already made the row, and the reply holds its
+ * only copy of the new id; dropping it left the tab without an id, so every
+ * later autosave created another character.
  *
  * @param {number | string | null | undefined} payloadId id the save was sent with
- * @param {AbortSignal | null | undefined} signal
+ * @param {(() => boolean) | null | undefined} isSuperseded
  * @returns {boolean}
  */
-export function shouldDropAbortedSaveResult(payloadId, signal) {
-  if (!signal?.aborted) return false;
-  return payloadId != null && payloadId !== "";
+export function shouldDropSupersededSaveResult(payloadId, isSuperseded) {
+  if (payloadId == null || payloadId === "") return false;
+  return Boolean(isSuperseded?.());
 }

@@ -136,29 +136,24 @@ describe("pcAutosaveQueue", () => {
   });
 });
 
-describe("shouldDropAbortedSaveResult", () => {
-  const { shouldDropAbortedSaveResult } = require("./pcAutosaveQueue");
-  const aborted = () => {
-    const c = new AbortController();
-    c.abort();
-    return c.signal;
-  };
+describe("shouldDropSupersededSaveResult", () => {
+  const { shouldDropSupersededSaveResult } = require("./pcAutosaveQueue");
+  const yes = () => true;
+  const no = () => false;
 
-  test("keeps a create reply even when aborted, so the new id is not lost", () => {
-    expect(shouldDropAbortedSaveResult(null, aborted())).toBe(false);
-    expect(shouldDropAbortedSaveResult(undefined, aborted())).toBe(false);
-    expect(shouldDropAbortedSaveResult("", aborted())).toBe(false);
+  test("keeps a create reply even when superseded, so the new id is not lost", () => {
+    expect(shouldDropSupersededSaveResult(null, yes)).toBe(false);
+    expect(shouldDropSupersededSaveResult(undefined, yes)).toBe(false);
+    expect(shouldDropSupersededSaveResult("", yes)).toBe(false);
   });
 
-  test("drops an aborted update reply", () => {
-    expect(shouldDropAbortedSaveResult(35, aborted())).toBe(true);
+  test("drops a superseded update reply", () => {
+    expect(shouldDropSupersededSaveResult(35, yes)).toBe(true);
   });
 
-  test("keeps any reply that was not aborted", () => {
-    expect(shouldDropAbortedSaveResult(35, new AbortController().signal)).toBe(
-      false,
-    );
-    expect(shouldDropAbortedSaveResult(35, undefined)).toBe(false);
-    expect(shouldDropAbortedSaveResult(null, undefined)).toBe(false);
+  test("keeps any reply that was not superseded", () => {
+    expect(shouldDropSupersededSaveResult(35, no)).toBe(false);
+    expect(shouldDropSupersededSaveResult(35, undefined)).toBe(false);
+    expect(shouldDropSupersededSaveResult(null, undefined)).toBe(false);
   });
 });

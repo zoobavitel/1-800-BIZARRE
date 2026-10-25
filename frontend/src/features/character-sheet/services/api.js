@@ -270,6 +270,17 @@ export async function fetchWithGetRetry(
   }
 }
 
+/**
+ * Error for a non-2xx reply. `status` and `data` (the parsed JSON body) let
+ * callers act on specific replies, e.g. a 409 version conflict's `current` row.
+ */
+export function apiHttpError(message, status, data) {
+  const err = new Error(message);
+  err.status = status;
+  err.data = data;
+  return err;
+}
+
 // Helper function for API requests
 const apiRequest = async (endpoint, options = {}) => {
   const token = localStorage.getItem("authToken");
@@ -303,7 +314,7 @@ const apiRequest = async (endpoint, options = {}) => {
         response.status,
         response.statusText,
       );
-      throw new Error(message);
+      throw apiHttpError(message, response.status, errorData);
     }
 
     if (invalidJson) {
@@ -928,7 +939,7 @@ const apiRequestMultipart = async (
       response.status,
       response.statusText,
     );
-    throw new Error(message);
+    throw apiHttpError(message, response.status, errorData);
   }
   if (invalidJson) {
     throw new Error(
@@ -1283,6 +1294,9 @@ function normalizeProgressClocksFromBackend(raw) {
 export const transformBackendToFrontend = (backendCharacter) => {
   return {
     id: backendCharacter.id,
+    // Bumped by the server on every write; sheet saves send it back (PR 7b).
+    version:
+      typeof backendCharacter.version === "number" ? backendCharacter.version : null,
     user_id: backendCharacter.user ?? null,
     creator_username: backendCharacter.creator_username || "",
     name: backendCharacter.true_name || "",
