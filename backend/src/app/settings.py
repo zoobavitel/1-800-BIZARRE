@@ -78,6 +78,22 @@ DATABASES = {
     }
 }
 
+# CI runs the tests on Postgres, the same engine as prod (settings_prod.py),
+# so row locks and transaction behaviour are tested for real. Set
+# DB_ENGINE=postgresql (plus DB_NAME/DB_USER/DB_PASSWORD/DB_HOST/DB_PORT) to
+# do the same locally. Needs psycopg2 (backend/requirements-prod.txt).
+if os.environ.get('DB_ENGINE') == 'postgresql':
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': os.environ.get('DB_NAME', 'bizarre'),
+            'USER': os.environ.get('DB_USER', 'postgres'),
+            'PASSWORD': os.environ.get('DB_PASSWORD', ''),
+            'HOST': os.environ.get('DB_HOST', 'localhost'),
+            'PORT': os.environ.get('DB_PORT', '5432'),
+        }
+    }
+
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
