@@ -10274,6 +10274,15 @@ const CharacterSheetWrapper = ({
             });
           } catch (err) {
             if (err?.name === "AbortError") {
+              // Superseded: the server took this payload and its reply is
+              // now the held server copy, so this payload is both the dedupe
+              // key and the clean copy. Otherwise a change undone during the
+              // save (Mistake, then back to Original) matches the old key and
+              // clean copy, counts as already saved, and is never sent.
+              lastSavedPayloadRef.current = sheetPayloadDedupeKey(payload, {
+                ignorePendingImageFile: true,
+              });
+              cleanPayloadRef.current = payload;
               setSaveStatus(null);
               return;
             }
