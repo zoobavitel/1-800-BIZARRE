@@ -37,11 +37,50 @@ import {
   seedFactionStatusFromCampaign,
   syncReverseFactionStatuses,
 } from "../utils/factionStatus";
+import {
+  changedKeys,
+  createSerialSaveQueue,
+  pickKeys,
+} from "../utils/factionAutosave";
 import "./NPCSheet.css";
 import {
   normalizeNpcPlayersSee,
   npcSectionVisible,
 } from "../utils/npcSectionVisibility";
+
+/**
+ * The faction fields the NPC sheet edits, in the shape it PATCHes. Used for
+ * both the loaded state and the save baseline, so the two compare cleanly.
+ */
+export function npcFactionValuesFromApi(f) {
+  return {
+    name: f.name || "",
+    faction_type: f.faction_type || "",
+    level: typeof f.level === "number" ? f.level : 0,
+    hold: f.hold || "weak",
+    reputation: typeof f.reputation === "number" ? f.reputation : 0,
+    contacts: Array.isArray(f.contacts) ? f.contacts : [],
+    inventory: normalizeCharacterInventory(
+      Array.isArray(f.inventory) ? f.inventory : [],
+    ),
+    faction_status: normalizeFactionStatusMap(
+      f.faction_status && typeof f.faction_status === "object"
+        ? f.faction_status
+        : {},
+    ),
+    crew_notes: f.crew_notes || "",
+    visible_to_players: !!f.visible_to_players,
+    players_see_tier: f.players_see_tier !== false,
+    players_see_hold: f.players_see_hold !== false,
+    players_see_reputation: f.players_see_reputation !== false,
+    players_see_notes: f.players_see_notes !== false,
+    players_see_npcs: f.players_see_npcs !== false,
+    players_see_identity: f.players_see_identity !== false,
+    players_see_inventory: f.players_see_inventory !== false,
+    players_see_contacts: f.players_see_contacts !== false,
+    players_see_faction_status: f.players_see_faction_status !== false,
+  };
+}
 
 const STAND_FORM_PRESETS = ["Humanoid", "Non-Humanoid", "Phenomenon"];
 const STAND_CONSCIOUSNESS_GRADES = ["A", "B", "C", "D", "E", "F"];
@@ -1683,6 +1722,12 @@ const NPCSheet = ({
     useState(true);
   /** Last persisted/loaded faction_status — used to reverse-sync only changed keys. */
   const prevFactionStatusRef = useRef(null);
+  /** Last faction copy the server agreed to: { id, values }. Saves send only fields that differ. */
+  const factionBaselineRef = useRef(null);
+  /** Latest edited faction fields: { id, values }. Read when a save runs. */
+  const factionSnapshotRef = useRef(null);
+  // Debounce ref for faction auto-save
+  const factionDebounceRef = useRef(null);
 
   // Load faction detail only when selected faction id changes (not on campaigns churn).
   useEffect(() => {
@@ -1702,39 +1747,40 @@ const NPCSheet = ({
       .then((f) => {
         if (cancelled) return;
         loadedFactionIdRef.current = Number(faction);
-        setFactionName(f.name || "");
-        setFactionType(f.faction_type || "");
-        setFactionLevel(typeof f.level === "number" ? f.level : 0);
-        setFactionHold(f.hold || "weak");
-        setFactionReputation(typeof f.reputation === "number" ? f.reputation : 0);
-        setFactionContacts(Array.isArray(f.contacts) ? f.contacts : []);
-        setFactionInventory(
-          normalizeCharacterInventory(
-            Array.isArray(f.inventory) ? f.inventory : [],
-          ),
-        );
+        // Drop any pending save of the previous faction's fields.
+        if (factionDebounceRef.current) clearTimeout(factionDebounceRef.current);
+        factionSnapshotRef.current = null;
+        const v = npcFactionValuesFromApi(f);
+        // Saves send only fields that differ from this copy. faction_status
+        // is the server's map, so standings seeded below get saved once.
+        factionBaselineRef.current = { id: Number(faction), values: v };
+        setFactionName(v.name);
+        setFactionType(v.faction_type);
+        setFactionLevel(v.level);
+        setFactionHold(v.hold);
+        setFactionReputation(v.reputation);
+        setFactionContacts(v.contacts);
+        setFactionInventory(v.inventory);
         setFactionStatusData(() => {
           const { next } = seedFactionStatusFromCampaign(
-            f.faction_status && typeof f.faction_status === "object"
-              ? f.faction_status
-              : {},
+            v.faction_status,
             campaignFactionsRef.current,
             faction,
           );
           prevFactionStatusRef.current = next;
           return next;
         });
-        setFactionCrewNotes(f.crew_notes || "");
-        setFactionVisibleToPlayers(!!f.visible_to_players);
-        setFactionPlayersSeeTier(f.players_see_tier !== false);
-        setFactionPlayersSeeHold(f.players_see_hold !== false);
-        setFactionPlayersSeeReputation(f.players_see_reputation !== false);
-        setFactionPlayersSeeNotes(f.players_see_notes !== false);
-        setFactionPlayersSeeNpcs(f.players_see_npcs !== false);
-        setFactionPlayersSeeIdentity(f.players_see_identity !== false);
-        setFactionPlayersSeeInventory(f.players_see_inventory !== false);
-        setFactionPlayersSeeContacts(f.players_see_contacts !== false);
-        setFactionPlayersSeeFactionStatus(f.players_see_faction_status !== false);
+        setFactionCrewNotes(v.crew_notes);
+        setFactionVisibleToPlayers(v.visible_to_players);
+        setFactionPlayersSeeTier(v.players_see_tier);
+        setFactionPlayersSeeHold(v.players_see_hold);
+        setFactionPlayersSeeReputation(v.players_see_reputation);
+        setFactionPlayersSeeNotes(v.players_see_notes);
+        setFactionPlayersSeeNpcs(v.players_see_npcs);
+        setFactionPlayersSeeIdentity(v.players_see_identity);
+        setFactionPlayersSeeInventory(v.players_see_inventory);
+        setFactionPlayersSeeContacts(v.players_see_contacts);
+        setFactionPlayersSeeFactionStatus(v.players_see_faction_status);
       })
       .catch(() => {})
       .finally(() => {
@@ -1771,96 +1817,126 @@ const NPCSheet = ({
     });
   }, [faction, campaignFactionIdsKey]);
 
-  // Debounce ref for faction auto-save
-  const factionDebounceRef = useRef(null);
-  const factionSavingRef = useRef(false);
-  const factionMountedRef = useRef(false);
+  const [factionSaveError, setFactionSaveError] = useState(null);
+
+  // Save the fields that differ from the baseline. Skips until the selected
+  // faction has loaded, so one faction's fields never land on another.
+  const saveFactionNowRef = useRef(null);
+  saveFactionNowRef.current = async () => {
+    const snap = factionSnapshotRef.current;
+    const base = factionBaselineRef.current;
+    if (!snap || !base || snap.id !== base.id) return;
+    if (Number(loadedFactionIdRef.current) !== snap.id) return;
+    const keys = changedKeys(snap.values, base.values);
+    if (keys.length === 0) return;
+    const body = pickKeys(snap.values, keys);
+    let updated;
+    try {
+      updated = await factionAPI.patchFaction(snap.id, body);
+    } catch {
+      setFactionSaveError("Faction save failed. Edit again to retry.");
+      return;
+    }
+    if (factionBaselineRef.current?.id === snap.id) {
+      factionBaselineRef.current = {
+        id: snap.id,
+        values: { ...factionBaselineRef.current.values, ...body },
+      };
+    }
+    setFactionSaveError(null);
+    setLocalExtraFactions((prev) => {
+      const idx = prev.findIndex((f) => Number(f.id) === snap.id);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = { ...next[idx], ...updated };
+        return next;
+      }
+      return updated?.id != null ? [...prev, updated] : prev;
+    });
+    if (!keys.includes("faction_status")) return;
+    const statusSnapshot = body.faction_status;
+    const selfName = String(snap.values.name || "").trim();
+    if (selfName) {
+      try {
+        const reverseUpdated = await syncReverseFactionStatuses({
+          selfId: snap.id,
+          selfName,
+          statusMap: statusSnapshot,
+          previousStatusMap: prevFactionStatusRef.current,
+          campaignFactions: campaignFactionsRef.current,
+          getFaction: factionAPI.getFaction,
+          patchFaction: factionAPI.patchFaction,
+        });
+        if (reverseUpdated.length > 0) {
+          setLocalExtraFactions((prev) => {
+            let next = [...prev];
+            for (const patched of reverseUpdated) {
+              if (patched?.id == null) continue;
+              const id = Number(patched.id);
+              const idx = next.findIndex((f) => Number(f.id) === id);
+              if (idx >= 0) {
+                next[idx] = { ...next[idx], ...patched };
+              } else {
+                next = [...next, patched];
+              }
+            }
+            return next;
+          });
+        }
+      } catch {
+        setFactionSaveError(
+          "Faction saved, but other factions' standing didn't update.",
+        );
+        return;
+      }
+    }
+    prevFactionStatusRef.current = statusSnapshot;
+  };
+  // One save in flight; edits during a save queue one follow-up.
+  const factionSaveQueueRef = useRef(null);
+  if (!factionSaveQueueRef.current) {
+    factionSaveQueueRef.current = createSerialSaveQueue(() =>
+      saveFactionNowRef.current(),
+    );
+  }
 
   // Debounced faction auto-save (do not refreshCampaigns — that retriggered Loading)
   useEffect(() => {
-    if (!factionMountedRef.current) {
-      factionMountedRef.current = true;
-      return;
-    }
     if (!faction || !isGM) return;
+    factionSnapshotRef.current = {
+      id: Number(faction),
+      values: {
+        name: factionName,
+        faction_type: factionType,
+        level: factionLevel,
+        hold: factionHold,
+        reputation: factionReputation,
+        contacts: factionContacts,
+        inventory: factionInventory,
+        faction_status: normalizeFactionStatusMap(factionStatusData),
+        crew_notes: factionCrewNotes,
+        visible_to_players: factionVisibleToPlayers,
+        players_see_tier: factionPlayersSeeTier,
+        players_see_hold: factionPlayersSeeHold,
+        players_see_reputation: factionPlayersSeeReputation,
+        players_see_notes: factionPlayersSeeNotes,
+        players_see_npcs: factionPlayersSeeNpcs,
+        players_see_identity: factionPlayersSeeIdentity,
+        players_see_inventory: factionPlayersSeeInventory,
+        players_see_contacts: factionPlayersSeeContacts,
+        players_see_faction_status: factionPlayersSeeFactionStatus,
+      },
+    };
     if (factionDebounceRef.current) clearTimeout(factionDebounceRef.current);
-    factionDebounceRef.current = setTimeout(async () => {
-      if (factionSavingRef.current) return;
-      factionSavingRef.current = true;
-      try {
-        const statusSnapshot = normalizeFactionStatusMap(factionStatusData);
-        const updated = await factionAPI.patchFaction(faction, {
-          name: factionName,
-          faction_type: factionType,
-          level: factionLevel,
-          hold: factionHold,
-          reputation: factionReputation,
-          contacts: factionContacts,
-          inventory: factionInventory,
-          faction_status: statusSnapshot,
-          crew_notes: factionCrewNotes,
-          visible_to_players: factionVisibleToPlayers,
-          players_see_tier: factionPlayersSeeTier,
-          players_see_hold: factionPlayersSeeHold,
-          players_see_reputation: factionPlayersSeeReputation,
-          players_see_notes: factionPlayersSeeNotes,
-          players_see_npcs: factionPlayersSeeNpcs,
-          players_see_identity: factionPlayersSeeIdentity,
-          players_see_inventory: factionPlayersSeeInventory,
-          players_see_contacts: factionPlayersSeeContacts,
-          players_see_faction_status: factionPlayersSeeFactionStatus,
-        });
-        setLocalExtraFactions((prev) => {
-          const id = Number(faction);
-          const idx = prev.findIndex((f) => Number(f.id) === id);
-          if (idx >= 0) {
-            const next = [...prev];
-            next[idx] = { ...next[idx], ...updated };
-            return next;
-          }
-          return updated?.id != null ? [...prev, updated] : prev;
-        });
-        const selfName = String(factionName || "").trim();
-        if (selfName) {
-          const reverseUpdated = await syncReverseFactionStatuses({
-            selfId: faction,
-            selfName,
-            statusMap: statusSnapshot,
-            previousStatusMap: prevFactionStatusRef.current,
-            campaignFactions: campaignFactionsRef.current,
-            getFaction: factionAPI.getFaction,
-            patchFaction: factionAPI.patchFaction,
-          });
-          if (reverseUpdated.length > 0) {
-            setLocalExtraFactions((prev) => {
-              let next = [...prev];
-              for (const patched of reverseUpdated) {
-                if (patched?.id == null) continue;
-                const id = Number(patched.id);
-                const idx = next.findIndex((f) => Number(f.id) === id);
-                if (idx >= 0) {
-                  next[idx] = { ...next[idx], ...patched };
-                } else {
-                  next = [...next, patched];
-                }
-              }
-              return next;
-            });
-          }
-        }
-        prevFactionStatusRef.current = statusSnapshot;
-      } catch {
-        // silently ignore faction save errors
-      } finally {
-        factionSavingRef.current = false;
-      }
+    factionDebounceRef.current = setTimeout(() => {
+      factionSaveQueueRef.current.request("faction");
     }, 1500);
     return () => {
       if (factionDebounceRef.current) clearTimeout(factionDebounceRef.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     faction,
+    isGM,
     factionName,
     factionType,
     factionLevel,
@@ -1882,10 +1958,10 @@ const NPCSheet = ({
     factionPlayersSeeFactionStatus,
   ]);
 
-  // Reset faction-mounted flag when faction changes so first load doesn't trigger a spurious save
+  // A newly selected faction starts with no reverse-sync history or error.
   useEffect(() => {
-    factionMountedRef.current = false;
     prevFactionStatusRef.current = null;
+    setFactionSaveError(null);
   }, [faction]);
 
   const handleCreateFaction = useCallback(async () => {
@@ -7200,6 +7276,11 @@ const NPCSheet = ({
                   <span style={{ ...S.lbl, margin: 0 }}>FACTION IDENTITY</span>
                   {factionDetailLoading && (
                     <span style={{ fontSize: "10px", color: "#6b7280" }}>Loading…</span>
+                  )}
+                  {factionSaveError && (
+                    <span role="alert" style={{ fontSize: "10px", color: "#f87171" }}>
+                      {factionSaveError}
+                    </span>
                   )}
                   {isGM && (
                     <span style={{ fontSize: "10px", color: "#a78bfa", marginLeft: "auto" }}>
