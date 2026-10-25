@@ -71,7 +71,8 @@ class SiteStatsTests(TestCase):
 
     def test_site_stats_requires_auth(self):
         r = self.client.get('/api/site-stats/')
-        self.assertEqual(r.status_code, status.HTTP_403_FORBIDDEN)
+        # Token auth is listed first, so no credentials means 401, not 403.
+        self.assertEqual(r.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_site_stats_payload(self):
         self.client.force_authenticate(user=self.user)

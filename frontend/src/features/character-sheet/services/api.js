@@ -2,6 +2,7 @@
 
 import { getApiBaseUrl, requireApiBaseUrl } from "../../../config/apiConfig";
 import { getApiErrorMessage } from "../../../utils/apiErrorMessage";
+import { reportUnauthorized } from "../../../utils/authSession";
 import {
   gradeToIndex,
   indexToGrade,
@@ -222,6 +223,7 @@ async function downloadBinaryExport(endpoint, filename) {
 
   const response = await fetch(url, { headers });
   if (!response.ok) {
+    reportUnauthorized(response.status, token);
     const { parsed } = await readFetchResponseBody(response);
     const errorData =
       parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
@@ -291,6 +293,7 @@ const apiRequest = async (endpoint, options = {}) => {
       await readFetchResponseBody(response);
 
     if (!response.ok) {
+      reportUnauthorized(response.status, token);
       const errorData =
         parsed && typeof parsed === "object" && !Array.isArray(parsed)
           ? parsed
@@ -915,6 +918,7 @@ const apiRequestMultipart = async (
   const { parsed, invalidJson, textPreview } =
     await readFetchResponseBody(response);
   if (!response.ok) {
+    reportUnauthorized(response.status, token);
     const errorData =
       parsed && typeof parsed === "object" && !Array.isArray(parsed)
         ? parsed

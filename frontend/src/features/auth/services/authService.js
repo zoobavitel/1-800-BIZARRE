@@ -2,6 +2,7 @@
 
 import { requireApiBaseUrl } from "../../../config/apiConfig";
 import { getApiErrorMessage } from "../../../utils/apiErrorMessage";
+import { reportUnauthorized } from "../../../utils/authSession";
 
 function portraitFilenameForUpload(fileOrBlob) {
   if (
@@ -46,6 +47,7 @@ const apiRequest = async (endpoint, options = {}) => {
     const response = await fetch(fullUrl, config);
 
     if (!response.ok) {
+      reportUnauthorized(response.status, token);
       const errorData = await response.json().catch(() => ({}));
       const message = getApiErrorMessage(
         errorData,
@@ -81,6 +83,7 @@ const apiRequestMultipart = async (endpoint, formData, method = "PUT") => {
       body: formData,
     });
     if (!response.ok) {
+      reportUnauthorized(response.status, token);
       const errorData = await response.json().catch(() => ({}));
       const message = getApiErrorMessage(
         errorData,
@@ -181,6 +184,41 @@ export const authAPI = {
   // Logout (clear token)
   logout: () => {
     localStorage.removeItem("authToken");
+  },
+
+  /**
+   * Revoke one login token on the server (this device only). Best effort:
+   * the local sign-out happens even if this fails, e.g. offline or the token
+   * already expired.
+   */
+  revokeToken: async (token) => {
+    if (!token) return;
+    try {
+      const base = requireApiBaseUrl();
+      await fetch(`${base}/accounts/logout/`, {
+        method: "POST",
+        headers: { Authorization: `Token ${token}` },
+      });
+    } catch {
+      /* signed out locally anyway */
+    }
+  },
+
+  /** Revoke every login token this user has, on all devices. Answers 204. */
+  logoutAllDevices: async () => {
+    const token = localStorage.getItem("authToken");
+    const base = requireApiBaseUrl();
+    const response = await fetch(`${base}/accounts/logoutall/`, {
+      method: "POST",
+      headers: token ? { Authorization: `Token ${token}` } : {},
+    });
+    // 401: this token was already revoked, so the user is signed out anyway.
+    if (!response.ok && response.status !== 401) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(
+        getApiErrorMessage(errorData, response.status, response.statusText),
+      );
+    }
   },
 
   // Check if user is authenticated
