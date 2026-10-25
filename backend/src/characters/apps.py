@@ -6,4 +6,5 @@ class CharactersConfig(AppConfig):
     name = 'characters'
 
     def ready(self):
+        import characters.signals_auth  # noqa: F401
         import characters.signals_realtime  # noqa: F401
