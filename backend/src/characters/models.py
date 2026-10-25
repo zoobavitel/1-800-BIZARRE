@@ -764,7 +764,44 @@ class Ability(models.Model):
     )
 
 
+class CharacterQuerySet(models.QuerySet):
+    """Every queryset write to Character bumps ``version``.
+
+    ``version`` lets the sheet detect a stale save (PATCH with an old version
+    gets 409). Writes that skip both this and ``Character.save()`` don't bump:
+    raw SQL, and ``on_delete=SET_NULL`` cascades (e.g. deleting a Crew), which
+    Django runs below the QuerySet API. That is the accepted residual risk.
+    """
+
+    def update(self, **kwargs):
+        kwargs.setdefault("version", models.F("version") + 1)
+        return super().update(**kwargs)
+
+    def bulk_update(self, objs, fields, batch_size=None):
+        raise NotImplementedError(
+            "Character.bulk_update would skip the version bump; save each row "
+            "or use update()."
+        )
+
+
+def bump_character_version(character_id, instance=None):
+    """Bump a character's version after a write to a related row.
+
+    Stand, Hamon/Spin ability rows, ability and heritage M2Ms and the
+    character's progress clocks are part of the sheet, so changing them counts
+    as changing the character. Pass ``instance`` (an in-memory Character) to
+    refresh its ``version`` so a response built from it is current.
+    """
+    if not character_id:
+        return
+    Character.objects.filter(pk=character_id).update()
+    if instance is not None and getattr(instance, "pk", None) == character_id:
+        instance.refresh_from_db(fields=["version"])
+
+
 class Character(models.Model):
+    objects = CharacterQuerySet.as_manager()
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Only store non-relation fields to avoid DB hits during cascade deletes.
@@ -789,7 +826,21 @@ class Character(models.Model):
                     raise ValidationError(
                         f"Field '{field_name}' is locked by the GM and cannot be changed."
                     )
+        # Every update bumps version in the database (F() so concurrent
+        # writers can't lose a bump). Creates keep the default of 1.
+        adding = self._state.adding
+        update_fields = kwargs.get("update_fields")
+        # save(update_fields=[]) is a no-op in Django; keep it one.
+        bump = not adding and (update_fields is None or len(update_fields) > 0)
+        if bump:
+            self.version = models.F("version") + 1
+            if update_fields is not None:
+                kwargs["update_fields"] = {*update_fields, "version"}
         super().save(*args, **kwargs)
+        if bump:
+            # Replace the F() expression with the stored number, so responses
+            # and later comparisons see an int.
+            self.refresh_from_db(fields=["version"])
 
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     campaign = models.ForeignKey(
@@ -1003,6 +1054,13 @@ class Character(models.Model):
         blank=True,
         default="",
         help_text="Idempotency token for the most recent successful respec-commit.",
+    )
+    version = models.PositiveIntegerField(
+        default=1,
+        help_text=(
+            "Bumped on every write (save(), queryset update(), related sheet "
+            "rows). A sheet PATCH that sends an older version gets 409."
+        ),
     )
     inventory = models.JSONField(
         default=list, blank=True, help_text="List of items the character possesses"

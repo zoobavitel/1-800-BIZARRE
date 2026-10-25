@@ -278,7 +278,7 @@ These endpoints provide access to static or reference game data, often populated
 These endpoints are used for creating, retrieving, updating, and managing player characters.
 
 *   **`/api/characters/` (GET, POST)**: List all characters accessible to the authenticated user (their own characters, or all characters in campaigns they GM), or create a new character.
-*   **`/api/characters/{id}/` (GET, PUT, PATCH, DELETE)**: Retrieve, update, or delete a specific character by its ID.
+*   **`/api/characters/{id}/` (GET, PUT, PATCH, DELETE)**: Retrieve, update, or delete a specific character by its ID. A PUT/PATCH body with `version` only saves if it matches the stored version; otherwise 409 with `current` (the row as it is now). `version` is bumped by `Character.save()`, `CharacterQuerySet.update()` and `characters/signals_version.py` (Stand, Hamon/Spin rows, ability and heritage M2Ms, character clocks).
 *   **`/api/characters/creation-guide/` (GET)**: Provides a comprehensive guide to character creation, including available options (heritages, abilities, vices) and rules (action dots, coin stats).
 
 ### 6.4. Game Mechanics Endpoints
