@@ -236,3 +236,103 @@ describe("subscribeCampaignEvents eviction (PR 5a)", () => {
     expect(FakeEventSource.instances).toHaveLength(1);
   });
 });
+
+describe("subscribeCampaignEvents replay (PR 6)", () => {
+  let unsub;
+
+  const send = (es, data) => es.onmessage({ data: JSON.stringify(data) });
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    FakeEventSource.instances = [];
+    global.EventSource = FakeEventSource;
+    localStorage.setItem("authToken", "secret-login-token");
+    let n = 0;
+    global.fetch = jest.fn(async () => {
+      n += 1;
+      return ticketResponse(`t${n}`);
+    });
+  });
+
+  afterEach(() => {
+    unsub?.();
+    unsub = null;
+    jest.useRealTimers();
+    localStorage.clear();
+    delete global.fetch;
+    delete global.EventSource;
+  });
+
+  async function reconnectAfter(ms, onUpdate) {
+    unsub = subscribeCampaignEvents(7, { onUpdate });
+    await flush();
+    const first = FakeEventSource.instances[0];
+    send(first, { type: "connected", replay: true });
+    send(first, { type: "heartbeat" });
+    send(first, {
+      type: "campaign_update",
+      reason: "roll",
+      id: "1700000000123-0",
+    });
+    jest.advanceTimersByTime(ms);
+    first.onerror();
+    jest.advanceTimersByTime(60_000);
+    await flush();
+    return FakeEventSource.instances[1];
+  }
+
+  test("a reconnect asks for events after the last id it saw", async () => {
+    const second = await reconnectAfter(1000, () => {});
+    expect(second.url).toBe(
+      "https://api.example.test/api/campaigns/7/events/?ticket=t2&last_event_id=1700000000123-0",
+    );
+  });
+
+  test("the first connect sends no last_event_id", async () => {
+    unsub = subscribeCampaignEvents(7, { onUpdate: () => {} });
+    await flush();
+    expect(FakeEventSource.instances[0].url).not.toContain("last_event_id");
+  });
+
+  test("with replay a long gap does not trigger a full refetch", async () => {
+    const onUpdate = jest.fn();
+    const second = await reconnectAfter(30_000, onUpdate);
+    onUpdate.mockClear();
+    send(second, { type: "connected", replay: true });
+    send(second, { type: "campaign_update", reason: "character", id: "1700000000200-0", character_id: 4 });
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    expect(onUpdate).toHaveBeenCalledWith(
+      "character",
+      expect.objectContaining({ character_id: 4 }),
+    );
+  });
+
+  test("a server without replay keeps the gap refetch", async () => {
+    const onUpdate = jest.fn();
+    const second = await reconnectAfter(30_000, onUpdate);
+    onUpdate.mockClear();
+    send(second, { type: "connected" });
+    expect(onUpdate).toHaveBeenCalledWith("update", { reason: "update" });
+  });
+
+  test("resync triggers a full refetch", async () => {
+    const onUpdate = jest.fn();
+    const second = await reconnectAfter(1000, onUpdate);
+    send(second, { type: "connected", replay: true });
+    onUpdate.mockClear();
+    send(second, { type: "resync" });
+    expect(onUpdate).toHaveBeenCalledWith("update", { reason: "update" });
+  });
+
+  test("replayed ids move the cursor for the next reconnect", async () => {
+    const second = await reconnectAfter(1000, () => {});
+    send(second, { type: "connected", replay: true });
+    send(second, { type: "campaign_update", reason: "roll", id: "1700000000300-0" });
+    second.onerror();
+    jest.advanceTimersByTime(60_000);
+    await flush();
+    expect(FakeEventSource.instances[2].url).toContain(
+      "last_event_id=1700000000300-0",
+    );
+  });
+});
