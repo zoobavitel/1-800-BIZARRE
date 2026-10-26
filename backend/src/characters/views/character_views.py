@@ -1253,9 +1253,10 @@ class CharacterViewSet(viewsets.ModelViewSet):
                         return Response(
                             {
                                 "error": (
-                                    f"This assist would fill {helper_name}'s stress "
-                                    "track. Only their player or the GM can mark "
-                                    "that box: ask them to use Assist on their own sheet."
+                                    f"{helper_name}'s stress track is full, or this "
+                                    "assist would fill it. Only their player or the GM "
+                                    "can mark that box: ask them to use Assist on their "
+                                    "own sheet."
                                 )
                             },
                             status=status.HTTP_403_FORBIDDEN,
