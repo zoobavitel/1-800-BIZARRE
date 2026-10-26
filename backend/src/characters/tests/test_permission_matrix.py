@@ -284,10 +284,12 @@ class PermissionMatrixTests(TestCase):
         privileged = APIClient()
         actors = {"stranger": self.stranger, "member": self.member}
         results = {}
+        self.skipped = []
         for method, template, prefix in write_endpoints():
             needs_id = "{id}" in template
             obj_id = self.target_id(prefix) if needs_id else None
             if needs_id and obj_id is None:
+                self.skipped.append(f"{method} {template}")
                 continue
             url = template.replace("{id}", str(obj_id)).replace("{item_id}", str(self.plan_item.pk))
             body = self.body_for(method, template)
@@ -315,7 +317,8 @@ class PermissionMatrixTests(TestCase):
             for key, (cls, code) in sorted(results.items()):
                 marker = "" if cls == CLOSED else "   <=="
                 print(f"{code}  {cls:8} {key}{marker}")
-        problems = []
+        # A route with no target object would never be tested; fail instead.
+        problems = [f"{route}: no object to target (add it to target_id)" for route in self.skipped]
         for key, (cls, code) in sorted(results.items()):
             expected_cls = EXPECTED.get(key, (CLOSED, ""))[0]
             if cls != expected_cls:
