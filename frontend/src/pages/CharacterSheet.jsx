@@ -141,7 +141,10 @@ import {
   markPcAutosaveBusyCollision,
   schedulePcPendingResaveDrain,
 } from "../features/character-sheet/utils/pcAutosaveQueue";
-import { silentRetryDelayMs } from "../features/character-sheet/utils/sheetVersion";
+import {
+  isSupersededSaveError,
+  silentRetryDelayMs,
+} from "../features/character-sheet/utils/sheetVersion";
 import {
   canDirectStandUpgrade,
   canDirectActionDotUpgrade,
@@ -10273,7 +10276,7 @@ const CharacterSheetWrapper = ({
               isSuperseded: () => myGen !== draftGenRef.current,
             });
           } catch (err) {
-            if (err?.name === "AbortError") {
+            if (isSupersededSaveError(err)) {
               // Superseded: the server took this payload and its reply is
               // now the held server copy, so this payload is both the dedupe
               // key and the clean copy. Otherwise a change undone during the

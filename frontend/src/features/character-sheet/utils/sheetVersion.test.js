@@ -2,9 +2,11 @@ import {
   MAX_SILENT_RETRIES,
   SheetConflictError,
   SheetSaveRetryError,
+  SupersededSaveError,
   conflictingUnits,
   editedUnits,
   isSameOrNewerVersion,
+  isSupersededSaveError,
   pickUnits,
   runVersionedSheetPatch,
   silentRetryDelayMs,
@@ -120,6 +122,16 @@ describe("isSameOrNewerVersion", () => {
     expect(isSameOrNewerVersion(5, 5)).toBe(true);
     expect(isSameOrNewerVersion(undefined, 1)).toBe(true);
     expect(isSameOrNewerVersion(5, undefined)).toBe(false);
+  });
+});
+
+describe("isSupersededSaveError", () => {
+  test("matches a superseded save, never a real abort", () => {
+    expect(isSupersededSaveError(new SupersededSaveError())).toBe(true);
+    const abort = new Error("The user aborted a request.");
+    abort.name = "AbortError";
+    expect(isSupersededSaveError(abort)).toBe(false);
+    expect(isSupersededSaveError(undefined)).toBe(false);
   });
 });
 

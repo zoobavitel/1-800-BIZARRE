@@ -43,6 +43,7 @@ import {
 import { routeSheetEvents } from "../features/character-sheet/services/sheetSseRouting.mjs";
 import { shouldDropSupersededSaveResult } from "../features/character-sheet/utils/pcAutosaveQueue";
 import {
+  SupersededSaveError,
   isSameOrNewerVersion,
   runVersionedSheetPatch,
 } from "../features/character-sheet/utils/sheetVersion";
@@ -1168,9 +1169,7 @@ export default function CharacterPage({
         // echo). The reply's version is already held above. A create is never
         // dropped: its reply carries the new id.
         if (shouldDropSupersededSaveResult(payload.id, options?.isSuperseded)) {
-          const abortErr = new Error("Save aborted");
-          abortErr.name = "AbortError";
-          throw abortErr;
+          throw new SupersededSaveError();
         }
         if (!payload.id && saved.id && typeof window !== "undefined")
           window.location.hash = characterHashFromIdAndName(
@@ -1384,9 +1383,7 @@ export default function CharacterPage({
               ),
         };
         if (shouldDropSupersededSaveResult(payload.id, options?.isSuperseded)) {
-          const abortErr = new Error("Save aborted");
-          abortErr.name = "AbortError";
-          throw abortErr;
+          throw new SupersededSaveError();
         }
         if (options.reloadAfter) {
           // Conflict "Reload": show the server copy, which now holds this
