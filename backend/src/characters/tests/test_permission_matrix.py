@@ -83,6 +83,7 @@ REFUSAL_MESSAGES = (
     "Only this character's player or the GM",
     "Not a GM award you made",
     "You are not a member of this crew",
+    "You can only add a character to a campaign you're in",
 )
 
 
@@ -106,7 +107,6 @@ def _both(method, template, cls, reason):
 EXPECTED = {
     # KNOWN HOLES. Each fix PR deletes its own entries.
     "DELETE /api/crews/{id}/ as member": (OPEN, "KNOWN HOLE, S5: any campaign member can delete the crew"),
-    "POST /api/characters/ as stranger": (OPEN, "KNOWN HOLE, S3: a PC can be attached to a campaign you're not in"),
     "POST /api/npcs/ as stranger": (OPEN, "KNOWN HOLE, S5: an NPC can be created inside a campaign you're not in"),
     "POST /api/progress-clocks/ as member": (OPEN, "KNOWN HOLE, S6: a member can bind a clock to another player's PC"),
     **_both("POST", "/api/sessions/", OPEN, "KNOWN HOLE, S4: anyone can create a session in any campaign"),
