@@ -95,7 +95,7 @@ This will create an NPC named "The Shadow Broker" in campaign 1, created by user
 ## 5. Harm and Clocks: GM-Only
 
 **Harm direction:**
-- **NPCs can deal harm to players.** The GM applies harm to player characters using the character **take-harm** API when an NPC inflicts harm in the fiction (e.g. after a consequence or NPC attack).
+- **NPCs can deal harm to players.** The GM records harm in the player character's harm boxes on the sheet when an NPC inflicts harm in the fiction (e.g. after a consequence or NPC attack).
 - **Players cannot deal harm to NPCs.** There is no player-facing API to deal harm to NPCs. Player success is represented by the **effect** of their roll filling an NPC’s clock; only the GM ticks NPC clocks.
 
 **Effect → clock ticks (GM applies after a roll):**  

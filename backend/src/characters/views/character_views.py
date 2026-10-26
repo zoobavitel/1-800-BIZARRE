@@ -90,7 +90,7 @@ def _character_queryset_for_user(user):
 _character_queryset_detail = _character_queryset_for_user
 
 def _max_stress_for_character(character):
-    """Stress track length. Durability does not change box count (always 9)."""
+    """Stress track length: 9, or 8 to 12 from the Stand's Durability grade."""
     return max_stress_slots_for_character(character)
 
 def _user_may_edit_character(user, character):
@@ -397,6 +397,13 @@ class CharacterViewSet(viewsets.ModelViewSet):
     def roll_action(self, request, pk=None):
         """Roll dice for a character action. Supports position, effect, push (stress), and persists to Roll when session_id provided."""
         character = self.get_object()
+        # get_object() only proves the caller can see this PC (any campaign
+        # member can). Rolling writes its stress, XP and roll log, so it
+        # needs edit rights: the owner, the campaign GM, or staff.
+        if not _user_may_edit_character(request.user, character):
+            raise PermissionDenied(
+                "Only this character's player or the GM can roll for it."
+            )
         action_name = request.data.get("action")
         session_id = request.data.get("session_id")
 
@@ -1230,6 +1237,30 @@ class CharacterViewSet(viewsets.ModelViewSet):
                         ),
                     )
                     helper_max_stress = _max_stress_for_character(assist_helper)
+                    # Table trust, on purpose: the roller may charge a crewmate
+                    # 1 stress without that player clicking anything (they said
+                    # "I help" out loud). The helper-initiated assist-help flow
+                    # checks rights instead. The exception is the box that
+                    # fills the track (trauma): only the helper's player or
+                    # the GM may mark it. Don't "fix" this asymmetry without
+                    # asking the table.
+                    if (
+                        not prepaid
+                        and hs + 1 >= helper_max_stress
+                        and not _user_may_edit_character(request.user, assist_helper)
+                    ):
+                        helper_name = (assist_helper.true_name or "").strip() or "the helper"
+                        return Response(
+                            {
+                                "error": (
+                                    f"{helper_name}'s stress track is full, or this "
+                                    "assist would fill it. Only their player or the GM "
+                                    "can mark that box: ask them to use Assist on their "
+                                    "own sheet."
+                                )
+                            },
+                            status=status.HTTP_403_FORBIDDEN,
+                        )
                     if not prepaid:
                         if hs >= helper_max_stress:
                             return Response(
@@ -1241,7 +1272,13 @@ class CharacterViewSet(viewsets.ModelViewSet):
                                 status=status.HTTP_400_BAD_REQUEST,
                             )
                         assist_helper.stress = min(helper_max_stress, hs + 1)
-                        assist_helper.save(update_fields=["stress"])
+                        # Record the roller as the editor, so the helper's
+                        # history says who marked the box.
+                        history_token = bind_character_history_editor(request.user)
+                        try:
+                            assist_helper.save(update_fields=["stress"])
+                        finally:
+                            reset_character_history_editor(history_token)
                     elif prepaid:
                         AssistHelpPending.objects.filter(pk=pending_row.pk).delete()
 
@@ -1249,7 +1286,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
                     modifier_sources.append(
                         {
                             "kind": "assist",
-                            "name": f"Assist ({assist_helper.true_name})",
+                            "name": f"Assist ({assist_helper.true_name}, +1 stress)",
                             "delta": "+1d",
                             "category": "system",
                         }
@@ -1667,98 +1704,6 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 "helper_id": helper.id,
                 "helper_name": helper.true_name,
                 "helper_stress": helper.stress,
-            }
-        )
-
-    @action(detail=True, methods=["post"], url_path="indulge-vice")
-    def indulge_vice(self, request, pk=None):
-        """Indulge in vice to recover stress."""
-        character = self.get_object()
-
-        # Check if character has stress to recover
-        if character.stress == 0:
-            return Response(
-                {"error": "No stress to recover"}, status=status.HTTP_400_BAD_REQUEST
-            )
-
-        # Recover stress (simplified - you'd implement actual vice mechanics)
-        stress_recovered = min(2, character.stress)  # Recover up to 2 stress
-        character.stress -= stress_recovered
-        character.save()
-
-        return Response(
-            {
-                "message": f"Recovered {stress_recovered} stress",
-                "stress_recovered": stress_recovered,
-                "current_stress": character.stress,
-            }
-        )
-
-    @action(detail=True, methods=["post"], url_path="take-harm")
-    def take_harm(self, request, pk=None):
-        """Take harm and apply consequences."""
-        character = self.get_object()
-        harm_level = request.data.get("level")  # 'lesser', 'moderate', 'severe'
-        harm_type = request.data.get("type", "physical")
-        description = request.data.get("description", "")
-
-        if not harm_level:
-            return Response(
-                {"error": "Harm level is required"}, status=status.HTTP_400_BAD_REQUEST
-            )
-
-        # Apply harm (simplified - you'd implement actual harm mechanics)
-        harm_mapping = {"lesser": 1, "moderate": 2, "severe": 3}
-
-        harm_value = harm_mapping.get(harm_level, 1)
-
-        # Update character harm (you'd need to add harm fields to your model)
-        # This is a simplified example
-        return Response(
-            {
-                "message": f"Took {harm_level} {harm_type} harm",
-                "harm_level": harm_level,
-                "harm_type": harm_type,
-                "description": description,
-            }
-        )
-
-    @action(detail=True, methods=["post"], url_path="heal-harm")
-    def heal_harm(self, request, pk=None):
-        """Heal harm through recovery actions."""
-        character = self.get_object()
-        harm_level = request.data.get("level")
-        harm_type = request.data.get("type", "physical")
-
-        if not harm_level:
-            return Response(
-                {"error": "Harm level is required"}, status=status.HTTP_400_BAD_REQUEST
-            )
-
-        # Heal harm (simplified - you'd implement actual healing mechanics)
-        return Response(
-            {
-                "message": f"Healed {harm_level} {harm_type} harm",
-                "harm_level": harm_level,
-                "harm_type": harm_type,
-            }
-        )
-
-    @action(detail=True, methods=["post"], url_path="log-armor-expenditure")
-    def log_armor_expenditure(self, request, pk=None):
-        """Log armor expenditure to reduce harm."""
-        character = self.get_object()
-        armor_type = request.data.get(
-            "type", "regular"
-        )  # 'regular', 'special', 'resistance'
-        harm_reduced = request.data.get("harm_reduced", 1)
-
-        # Log armor expenditure (simplified - you'd implement actual armor mechanics)
-        return Response(
-            {
-                "message": f"Used {armor_type} armor to reduce harm by {harm_reduced}",
-                "armor_type": armor_type,
-                "harm_reduced": harm_reduced,
             }
         )
 
@@ -3131,91 +3076,6 @@ class CharacterViewSet(viewsets.ModelViewSet):
                     f"+{result['pool_refund']} Available XP, "
                     f"+{result['track_refund']} on track"
                 ),
-            }
-        )
-
-    @action(detail=True, methods=["post"], url_path="add-progress-clock")
-    def add_progress_clock(self, request, pk=None):
-        """Add a progress clock to a character."""
-        character = self.get_object()
-        name = (request.data.get("name") or "").strip()
-        segments = request.data.get("max_segments", request.data.get("segments", 4))
-        description = request.data.get("description", "")
-
-        if not name:
-            return Response(
-                {"error": "Clock name is required"}, status=status.HTTP_400_BAD_REQUEST
-            )
-        try:
-            max_segments = int(segments)
-        except (TypeError, ValueError):
-            max_segments = 4
-        max_segments = max(1, min(12, max_segments))
-        clock = ProgressClock.objects.create(
-            name=name[:100],
-            clock_type=request.data.get("clock_type") or "COUNTDOWN",
-            max_segments=max_segments,
-            filled_segments=0,
-            description=description or "",
-            character=character,
-            campaign_id=character.campaign_id,
-            visible_to_party=bool(request.data.get("visible_to_party")),
-            created_by=request.user if request.user.is_authenticated else None,
-        )
-        return Response(
-            {
-                "id": clock.id,
-                "name": clock.name,
-                "max_segments": clock.max_segments,
-                "segments": clock.max_segments,
-                "filled_segments": clock.filled_segments,
-                "filled": clock.filled_segments,
-                "visible_to_party": clock.visible_to_party,
-                "description": clock.description,
-            },
-            status=status.HTTP_201_CREATED,
-        )
-
-    @action(detail=True, methods=["post"], url_path="update-progress-clock")
-    def update_progress_clock(self, request, pk=None):
-        """Update a progress clock on a character."""
-        character = self.get_object()
-        clock_name = request.data.get("name")
-        ticks = request.data.get("ticks", 1)
-
-        if not clock_name:
-            return Response(
-                {"error": "Clock name is required"}, status=status.HTTP_400_BAD_REQUEST
-            )
-
-        # Update progress clock (simplified - you'd implement actual clock mechanics)
-        return Response(
-            {
-                "message": f"Updated progress clock: {clock_name}",
-                "name": clock_name,
-                "ticks_added": ticks,
-            }
-        )
-
-    @action(detail=False, methods=["post"], url_path="create-template")
-    def create_template(self, request):
-        """Create a character template for quick character creation."""
-        template_data = request.data
-
-        # Validate template data
-        required_fields = ["name", "heritage", "vice"]
-        for field in required_fields:
-            if field not in template_data:
-                return Response(
-                    {"error": f"Field {field} is required"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-        # Create template (simplified - you'd implement actual template mechanics)
-        return Response(
-            {
-                "message": "Character template created successfully",
-                "template": template_data,
             }
         )
 

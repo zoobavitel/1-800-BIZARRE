@@ -1510,6 +1510,19 @@ class CharacterHistorySerializer(serializers.ModelSerializer):
             "undo_block_reason",
         ]
 
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        changed = data.get("changed_fields")
+        if isinstance(changed, dict):
+            # Rows saved before the version counter was left out of history
+            # hold "version" with an F() expression as text. Not sheet data.
+            from .models import CHARACTER_HISTORY_IGNORED_FIELDS
+
+            data["changed_fields"] = {
+                k: v for k, v in changed.items() if k not in CHARACTER_HISTORY_IGNORED_FIELDS
+            }
+        return data
+
     def get_character_portrait_url(self, obj):
         ch = getattr(obj, "character", None)
         if ch is None:

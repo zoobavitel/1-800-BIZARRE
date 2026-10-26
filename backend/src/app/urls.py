@@ -11,16 +11,16 @@ from knox import views as knox_views
 from characters.views_sse import campaign_events_stream, campaign_events_ticket
 from characters.views import (
     UserProfileViewSet, HeritageViewSet, ViceViewSet, AbilityViewSet,
-    StandViewSet, CharacterViewSet,
+    CharacterViewSet,
     CampaignViewSet, CampaignInvitationViewSet, ShowcasedNPCViewSet,
     FactionViewSet, NPCViewSet, CrewViewSet,
     EquipmentItemViewSet,
-    TraumaViewSet, CharacterHistoryViewSet, CrewHistoryViewSet, ExperienceTrackerViewSet, SessionViewSet, SessionEventViewSet,
+    TraumaViewSet, CharacterHistoryViewSet, CrewHistoryViewSet, ExperienceTrackerViewSet, SessionViewSet,
     RollViewSet, GroupActionViewSet,
-    home, RegisterView, StandAbilityViewSet, LoginView, CurrentUserView,
+    home, RegisterView, LoginView, CurrentUserView,
     HamonAbilityViewSet, SpinAbilityViewSet, global_search,
     get_available_playbook_abilities, api_documentation, site_stats,
-    XPHistoryViewSet, StressHistoryViewSet, ChatMessageViewSet,
+    XPHistoryViewSet,
     ClaimViewSet, CrewPlaybookViewSet, CrewSpecialAbilityViewSet, CrewUpgradeViewSet,
     ProgressClockViewSet
 )
@@ -31,8 +31,6 @@ router.register(r'user-profiles', UserProfileViewSet, basename='user-profiles')
 router.register(r'heritages', HeritageViewSet)
 router.register(r'vices', ViceViewSet)
 router.register(r'abilities', AbilityViewSet)
-router.register(r'stands', StandViewSet)
-router.register(r'stand-abilities', StandAbilityViewSet)
 router.register(r'hamon-abilities', HamonAbilityViewSet)
 router.register(r'spin-abilities', SpinAbilityViewSet)
 router.register(r'characters', CharacterViewSet, basename='characters')
@@ -40,7 +38,6 @@ router.register(r'character-history', CharacterHistoryViewSet, basename='charact
 router.register(r'crew-history', CrewHistoryViewSet, basename='crew-history')
 router.register(r'experience-tracker', ExperienceTrackerViewSet, basename='experience-tracker')
 router.register(r'sessions', SessionViewSet, basename='sessions')
-router.register(r'session-events', SessionEventViewSet)
 router.register(r'rolls', RollViewSet, basename='rolls')
 router.register(r'group-actions', GroupActionViewSet, basename='group-actions')
 router.register(r'campaigns', CampaignViewSet)
@@ -53,8 +50,6 @@ router.register(r'npcs', NPCViewSet)
 router.register(r'crews', CrewViewSet)
 router.register(r'traumas', TraumaViewSet)
 router.register(r'xp-history', XPHistoryViewSet)
-router.register(r'stress-history', StressHistoryViewSet)
-router.register(r'chat-messages', ChatMessageViewSet)
 router.register(r'claims', ClaimViewSet)
 router.register(r'crew-playbooks', CrewPlaybookViewSet)
 router.register(r'crew-special-abilities', CrewSpecialAbilityViewSet)

@@ -9,7 +9,13 @@ from django.db import transaction
 from django.utils import timezone
 
 from ..history_context import bind_character_history_editor, suppress_character_history_logging
-from ..models import Character, CharacterHistory, CharacterXPAllocation, ExperienceTracker
+from ..models import (
+    CHARACTER_HISTORY_IGNORED_FIELDS,
+    Character,
+    CharacterHistory,
+    CharacterXPAllocation,
+    ExperienceTracker,
+)
 from .xp_allocation import STAND_STAT_FIELDS, redo_allocation, undo_allocation
 
 ALLOCATION_HISTORY_FIELDS = frozenset(
@@ -150,7 +156,10 @@ def _deserialize_field_value(character: Character, field_name: str, stored):
             return None
         if field.get_internal_type() == "JSONField":
             return field.get_default() if field.has_default() else {}
-        return field.get_default() if field.has_default() else None
+        if field.has_default():
+            return field.get_default()
+        # A NOT NULL text column (rival, close friend) that was blank.
+        return "" if field.empty_strings_allowed else None
 
     field = character._meta.get_field(field_name)
     internal = field.get_internal_type()
@@ -231,6 +240,8 @@ def redo_character_history_entry(
                 for field_name, chunk in changed.items():
                     if not isinstance(chunk, dict):
                         continue
+                    if field_name in CHARACTER_HISTORY_IGNORED_FIELDS:
+                        continue
                     new_value = chunk.get("new")
                     _apply_field_value(character, field_name, new_value)
                 character.save()
@@ -265,6 +276,8 @@ def undo_character_history_entry(entry: CharacterHistory, *, user) -> CharacterH
                 changed = entry.changed_fields or {}
                 for field_name, chunk in changed.items():
                     if not isinstance(chunk, dict):
+                        continue
+                    if field_name in CHARACTER_HISTORY_IGNORED_FIELDS:
                         continue
                     old_value = chunk.get("old")
                     _apply_field_revert(character, field_name, old_value)
@@ -342,7 +355,11 @@ def _find_mirror_history_for_tracker(
 
 
 def _summarize_history_fields(entry: CharacterHistory, *, prefix: str) -> str:
-    changed = entry.changed_fields or {}
+    changed = {
+        k: v
+        for k, v in (entry.changed_fields or {}).items()
+        if k not in CHARACTER_HISTORY_IGNORED_FIELDS
+    }
     keys = list(changed.keys())[:3]
     labels = ", ".join(k.replace("_", " ") for k in keys) or "fields"
     extra = f" (+{len(changed) - 3} more)" if len(changed) > 3 else ""
@@ -386,6 +403,10 @@ def latest_sheet_undo_target(character: Character, user):
         .order_by("-timestamp", "-id")[:80]
     )
     for entry in qs:
+        if not (set(entry.changed_fields or {}) - CHARACTER_HISTORY_IGNORED_FIELDS):
+            # Rows written before the version counter was left out of history
+            # can hold only "version"; undoing them would change nothing.
+            continue
         if not _is_pure_sheet_field_edit(entry):
             continue
         allowed, _reason = can_undo_character_history(entry, user)
