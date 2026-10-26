@@ -21,7 +21,7 @@ from rest_framework.response import Response
 
 from .models import Campaign
 from .realtime import subscribe_campaign, unsubscribe_campaign
-from .campaign_event_log import parse_event_id, events_since
+from .campaign_event_log import events_since, newest_id, parse_event_id
 from .sse_slots import claim_slot, holds_slot, release_slot
 from .sse_tickets import issue_ticket, redeem_ticket
 
@@ -101,13 +101,17 @@ def campaign_events_stream(request, campaign_id):
             yield f"retry: {retry_ms}\n\n"
             # "replay": this server replays from last_event_id, so the client
             # can skip its gap refetch.
-            yield f"data: {json.dumps({'type': 'connected', 'replay': True})}\n\n"
+            # "cursor": the newest event id, so a tab that has seen none (or
+            # whose id is gone) still resumes from a valid id next time.
+            connected = {"type": "connected", "replay": True, "cursor": newest_id(cid)}
+            yield f"data: {json.dumps(connected)}\n\n"
             replayed_up_to = None
             if last_event_id is not None:
                 missed = events_since(cid, last_event_id)
                 if missed is None:
                     # Trimmed, expired or unknown id: refetch everything.
-                    yield f"data: {json.dumps({'type': 'resync'})}\n\n"
+                    resync = {"type": "resync", "cursor": newest_id(cid)}
+                    yield f"data: {json.dumps(resync)}\n\n"
                 else:
                     for event in missed:
                         yield format_event(event)
