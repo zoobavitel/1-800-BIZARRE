@@ -2054,7 +2054,36 @@ class CharacterSerializer(serializers.ModelSerializer):
                 )
         return value
 
+    def _validate_campaign_membership(self, data):
+        """A PC may only join a campaign its user is in (GM or player).
+
+        Only a change is checked: an unchanged campaign always passes.
+        The sheet autosave sends `campaign` on every save, and some older PCs
+        may already point at a campaign or crew they couldn't join today.
+        Staff are exempt. The crew rule (crew must be in the PC's campaign)
+        lives further down in validate().
+        """
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if user is None or not user.is_authenticated or user.is_staff:
+            return
+        instance = self.instance
+        if "campaign" in data:
+            new_campaign = data["campaign"]
+            old_id = getattr(instance, "campaign_id", None) if instance else None
+            new_id = getattr(new_campaign, "pk", None)
+            if new_campaign is not None and new_id != old_id:
+                is_member = (
+                    new_campaign.gm_id == user.id
+                    or new_campaign.players.filter(pk=user.pk).exists()
+                )
+                if not is_member:
+                    raise serializers.ValidationError(
+                        {"campaign": "You can only add a character to a campaign you're in."}
+                    )
+
     def validate(self, data):
+        self._validate_campaign_membership(data)
         # Validate stress/trauma system
         if "stress" in data:
             stress = data.get("stress")
