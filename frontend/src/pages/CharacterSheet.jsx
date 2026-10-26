@@ -142,6 +142,10 @@ import {
   schedulePcPendingResaveDrain,
 } from "../features/character-sheet/utils/pcAutosaveQueue";
 import {
+  isSupersededSaveError,
+  silentRetryDelayMs,
+} from "../features/character-sheet/utils/sheetVersion";
+import {
   canDirectStandUpgrade,
   canDirectActionDotUpgrade,
   canAffordActionDotSteps,
@@ -1028,13 +1032,20 @@ const CharacterSheetWrapper = ({
    * to sessionDataPollTick (old behavior).
    */
   sheetSync = null,
-  /** SSE reason that should abort in-flight sheet PATCH (character / experience_tracker / pending_advance). */
+  /** SSE reason that marks an in-flight sheet PATCH's reply stale (character / experience_tracker / pending_advance). */
   sheetRealtimeReason = "",
   onSheetRealtimeReasonHandled,
   /** When true, skip merging server character snapshots into XP / stand / action state (avoids poll overwriting local spends before autosave). */
   sheetDraftIsDirty = false,
   /** After reset-sheet: parent replaces tab character and remounts this wrapper. */
   onCharacterReloaded,
+  /**
+   * Conflict banner "Reload": (payload, { cleanPayload, units }) saves the
+   * non-conflicting edits, then reloads the sheet from the server copy.
+   */
+  onReloadSheetConflict,
+  /** A character row returned by a sheet write (level-up, allocation). */
+  onServerCharacter,
 }) => {
   const { user } = useAuth();
   const tickFull = sheetSync ? sheetSync.full : sessionDataPollTick;
@@ -1051,8 +1062,6 @@ const CharacterSheetWrapper = ({
   const stressTraumaTruthRef = useRef(null);
   /** Bumped when draft deps change; stale in-flight autosaves must not win lastSaved. */
   const draftGenRef = useRef(0);
-  /** Abort in-flight autosave PATCH when allocation APIs return fresher state. */
-  const autosaveAbortRef = useRef(null);
   /** Sync guard so Confirm cannot double-fire before levelUpBusy re-renders. */
   const levelUpInFlightRef = useRef(false);
   /** Block poll/hydrate snap-back after XP allocation APIs (coin). */
@@ -1415,9 +1424,30 @@ const CharacterSheetWrapper = ({
   const mountedRef = useRef(false);
   const savingRef = useRef(false);
   const lastSavedPayloadRef = useRef(null);
+  /**
+   * The payload lastSavedPayloadRef was keyed from: what the sheet showed when
+   * it last matched the server. A versioned save sends only fields that differ
+   * from both this and the server copy (PR 7b).
+   */
+  const cleanPayloadRef = useRef(null);
+  /** Set while the conflict banner is up; autosave pauses until it is resolved. */
+  const sheetConflictRef = useRef(null);
+  const [sheetConflict, setSheetConflict] = useState(null);
+  const [sheetConflictBusy, setSheetConflictBusy] = useState(false);
+  /** Bumped by "Keep mine" to rerun the autosave effect. */
+  const [conflictResumeTick, setConflictResumeTick] = useState(0);
+  const saveRetryTimerRef = useRef(null);
+
+  useEffect(
+    () => () => {
+      if (saveRetryTimerRef.current) clearTimeout(saveRetryTimerRef.current);
+    },
+    [],
+  );
 
   useEffect(() => {
     lastSavedPayloadRef.current = null;
+    cleanPayloadRef.current = null;
   }, [character?.id]);
 
   useEffect(() => {
@@ -1434,6 +1464,7 @@ const CharacterSheetWrapper = ({
 
   useEffect(() => {
     lastSavedPayloadRef.current = null;
+    cleanPayloadRef.current = null;
   }, [tickFull, tickCharacter]);
 
   const openPortraitUrlModal = useCallback(() => {
@@ -2045,7 +2076,9 @@ const CharacterSheetWrapper = ({
     };
   }, [xpHelpOpen]);
 
-  // Abort in-flight autosave when SSE says character / XP / pending advanced.
+  // SSE says character / XP / pending advanced: an in-flight autosave's reply
+  // is stale for the screen. The save itself still finishes (PR 7b); its
+  // version is kept, and draftGen only stops its body being applied.
   useEffect(() => {
     const reason = String(sheetRealtimeReason || "");
     if (
@@ -2055,10 +2088,6 @@ const CharacterSheetWrapper = ({
       reason !== "advancement_plan"
     ) {
       return;
-    }
-    if (autosaveAbortRef.current) {
-      autosaveAbortRef.current.abort();
-      autosaveAbortRef.current = null;
     }
     draftGenRef.current += 1;
     onSheetRealtimeReasonHandled?.();
@@ -4266,6 +4295,7 @@ const CharacterSheetWrapper = ({
 
   const applyBackendCharacter = useCallback((backendChar) => {
     if (!backendChar) return;
+    onServerCharacter?.(backendChar);
     const fe = transformBackendToFrontend(backendChar);
     if (fe.xp) setXp(fe.xp);
     if (typeof fe.unallocatedXp === "number") {
@@ -4356,16 +4386,12 @@ const CharacterSheetWrapper = ({
       pendingAdvanceCounts: fe.pendingAdvanceCounts || prev.pendingAdvanceCounts,
       pendingAdvances: fe.pendingAdvances || prev.pendingAdvances,
     }));
-  }, [onCharacterXpSync]);
+  }, [onCharacterXpSync, onServerCharacter]);
 
   /** After server-owned XP/stand allocation APIs — invalidate stale autosaves. */
   const applyAllocationBackendCharacter = useCallback(
     (backendChar) => {
       if (!backendChar) return;
-      if (autosaveAbortRef.current) {
-        autosaveAbortRef.current.abort();
-        autosaveAbortRef.current = null;
-      }
       draftGenRef.current += 1;
       allocationHydrateGuardUntilRef.current = Date.now() + 2500;
       applyBackendCharacter(backendChar);
@@ -5407,11 +5433,8 @@ const CharacterSheetWrapper = ({
     levelUpInFlightRef.current = true;
     setLevelUpBusy(true);
     setLevelUpError(null);
-    // Pause dirty-sheet PATCH so SQLite is not held while we redeem pending.
-    if (autosaveAbortRef.current) {
-      autosaveAbortRef.current.abort();
-      autosaveAbortRef.current = null;
-    }
+    // An in-flight sheet PATCH finishes on its own; bumping draftGen stops its
+    // reply overwriting what the level-up returns.
     draftGenRef.current += 1;
     const body = {
       xp_track: track,
@@ -5581,10 +5604,6 @@ const CharacterSheetWrapper = ({
 
       levelUpInFlightRef.current = true;
       setDirectAdvanceBusy(true);
-      if (autosaveAbortRef.current) {
-        autosaveAbortRef.current.abort();
-        autosaveAbortRef.current = null;
-      }
       draftGenRef.current += 1;
       try {
         let fundedTotal = 0;
@@ -5706,10 +5725,6 @@ const CharacterSheetWrapper = ({
 
       levelUpInFlightRef.current = true;
       setDirectAdvanceBusy(true);
-      if (autosaveAbortRef.current) {
-        autosaveAbortRef.current.abort();
-        autosaveAbortRef.current = null;
-      }
       draftGenRef.current += 1;
       try {
         const fund = await ensureTrackPendingForDirectAdvance("playbook");
@@ -10107,6 +10122,45 @@ const CharacterSheetWrapper = ({
   const buildPayloadRef = useRef(buildPayload);
   buildPayloadRef.current = buildPayload;
 
+  // Conflict banner. "Keep mine" saves again against the server copy the 409
+  // returned; if the server changed those fields again since, it re-checks.
+  const keepMineAfterConflict = useCallback(() => {
+    sheetConflictRef.current = null;
+    setSheetConflict(null);
+    setSaveStatus(null);
+    setSaveErrorMessage(null);
+    setConflictResumeTick((n) => n + 1);
+  }, []);
+
+  // "Reload" drops only the conflicting fields: the other edits are saved,
+  // then the sheet reloads from the server copy.
+  const reloadAfterConflict = useCallback(async () => {
+    const conflict = sheetConflictRef.current;
+    if (!conflict || !onReloadSheetConflict) return;
+    setSheetConflictBusy(true);
+    try {
+      await onReloadSheetConflict(buildPayloadRef.current(), {
+        cleanPayload: cleanPayloadRef.current,
+        units: conflict.units,
+      });
+      sheetConflictRef.current = null;
+      setSheetConflict(null);
+      setSaveStatus(null);
+      setSaveErrorMessage(null);
+    } catch (err) {
+      if (err?.code === "sheet_conflict") {
+        const next = { units: err.units || [], labels: err.labels || [] };
+        sheetConflictRef.current = next;
+        setSheetConflict(next);
+        setSaveErrorMessage(err.message);
+      } else {
+        setSaveErrorMessage(err?.message || "Reload failed");
+      }
+    } finally {
+      setSheetConflictBusy(false);
+    }
+  }, [onReloadSheetConflict]);
+
   useEffect(() => {
     if (!onDraftMetaChange) return;
     const payload = buildPayload();
@@ -10116,6 +10170,7 @@ const CharacterSheetWrapper = ({
       lastSavedPayloadRef.current = sheetPayloadDedupeKey(payload, {
         ignorePendingImageFile: true,
       });
+      cleanPayloadRef.current = payload;
     }
     const isDirty = !payload.id
       ? hasMeaningfulDraftChanges(payload)
@@ -10146,12 +10201,8 @@ const CharacterSheetWrapper = ({
     }
     draftGenRef.current += 1;
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    // Abort in-flight sheet PATCH immediately on newer local edits so a late
-    // STUDY:2 echo cannot overwrite STUDY:0 via updateActiveCharTab→hydrate.
-    if (autosaveAbortRef.current) {
-      autosaveAbortRef.current.abort();
-      autosaveAbortRef.current = null;
-    }
+    // The draftGen bump above marks an in-flight sheet PATCH superseded, so a
+    // late STUDY:2 echo cannot overwrite STUDY:0 via updateActiveCharTab→hydrate.
     debounceRef.current = setTimeout(async () => {
       if (!onSave || !canEditSheet) return;
       if (respecDroppedIdsRef.current.length > 0) {
@@ -10169,6 +10220,8 @@ const CharacterSheetWrapper = ({
         return;
 
       const runSave = async (payloadOverride) => {
+        // Conflict banner up: edits stay local until Reload or Keep mine.
+        if (sheetConflictRef.current) return;
         const myGen = draftGenRef.current;
         // Always prefer live builder (drain must not reuse busy-time snapshot).
         const payload =
@@ -10199,6 +10252,7 @@ const CharacterSheetWrapper = ({
         }
         savingRef.current = true;
         setSaveStatus("saving");
+        let retryLater = false;
         try {
           // Re-check after debounce/busy gaps: another edit may have landed.
           if (myGen !== draftGenRef.current) {
@@ -10213,23 +10267,29 @@ const CharacterSheetWrapper = ({
             savingRef.current = false;
             return;
           }
-          if (autosaveAbortRef.current) {
-            autosaveAbortRef.current.abort();
-          }
-          const abortController = new AbortController();
-          autosaveAbortRef.current = abortController;
+          // Never abort an update: the server finishes it anyway, and a lost
+          // reply would lose its version, so the next save would conflict
+          // with this tab's own write. A superseded reply is not applied.
           try {
-            await onSave(payload, { signal: abortController.signal });
+            await onSave(payload, {
+              cleanPayload: cleanPayloadRef.current,
+              isSuperseded: () => myGen !== draftGenRef.current,
+            });
           } catch (err) {
-            if (err?.name === "AbortError") {
+            if (isSupersededSaveError(err)) {
+              // Superseded: the server took this payload and its reply is
+              // now the held server copy, so this payload is both the dedupe
+              // key and the clean copy. Otherwise a change undone during the
+              // save (Mistake, then back to Original) matches the old key and
+              // clean copy, counts as already saved, and is never sent.
+              lastSavedPayloadRef.current = sheetPayloadDedupeKey(payload, {
+                ignorePendingImageFile: true,
+              });
+              cleanPayloadRef.current = payload;
               setSaveStatus(null);
               return;
             }
             throw err;
-          } finally {
-            if (autosaveAbortRef.current === abortController) {
-              autosaveAbortRef.current = null;
-            }
           }
           // Clear touch flags only for fields this save included.
           // Inventory touch stays until character.inventory catches up (see
@@ -10264,6 +10324,7 @@ const CharacterSheetWrapper = ({
             lastSavedPayloadRef.current = sheetPayloadDedupeKey(payload, {
               ignorePendingImageFile: true,
             });
+            cleanPayloadRef.current = payload;
           } else {
             pendingResaveRef.current = true;
           }
@@ -10277,10 +10338,30 @@ const CharacterSheetWrapper = ({
             2000,
           );
         } catch (err) {
-          setSaveStatus("error");
-          setSaveErrorMessage(err?.message || "Save failed");
+          if (err?.code === "sheet_conflict") {
+            // Someone else changed a field this tab edited. Keep the edits
+            // and pause autosave until the user picks Reload or Keep mine.
+            const conflict = {
+              units: err.units || [],
+              labels: err.labels || [],
+            };
+            sheetConflictRef.current = conflict;
+            setSheetConflict(conflict);
+            setSaveStatus("conflict");
+            setSaveErrorMessage(err.message);
+          } else if (err?.code === "sheet_save_retry") {
+            // Silent retries ran out with no overlap: keep the edits dirty
+            // and try again after the next debounce.
+            retryLater = true;
+            setSaveStatus("retrying");
+            setSaveErrorMessage(err.message);
+          } else {
+            setSaveStatus("error");
+            setSaveErrorMessage(err?.message || "Save failed");
+          }
         } finally {
           savingRef.current = false;
+          if (retryLater) pendingResaveRef.current = true;
           schedulePcPendingResaveDrain({
             pendingResaveRef,
             savingRef,
@@ -10291,6 +10372,19 @@ const CharacterSheetWrapper = ({
             onPendingTaken: () => {
               draftGenRef.current += 1;
             },
+            ...(retryLater
+              ? {
+                  schedule: (fn) => {
+                    if (saveRetryTimerRef.current) {
+                      clearTimeout(saveRetryTimerRef.current);
+                    }
+                    saveRetryTimerRef.current = window.setTimeout(
+                      fn,
+                      1500 + silentRetryDelayMs(2),
+                    );
+                  },
+                }
+              : {}),
           });
         }
       };
@@ -10341,6 +10435,7 @@ const CharacterSheetWrapper = ({
     canEditSheet,
     heritages,
     heritagesLoading,
+    conflictResumeTick,
   ]);
 
   // ─── Styles ──────────────────────────────────────────────────────────────────
@@ -10593,6 +10688,14 @@ const CharacterSheetWrapper = ({
           {saveStatus === "saved" && (
             <span style={{ fontSize: "11px", color: "#34d399" }}>Saved</span>
           )}
+          {saveStatus === "retrying" && (
+            <span
+              style={{ fontSize: "11px", color: "#fbbf24" }}
+              data-testid="sheet-save-retrying"
+            >
+              Having trouble saving, retrying…
+            </span>
+          )}
           {saveStatus === "error" && (
             <span
               style={{ fontSize: "11px", color: "#f87171" }}
@@ -10620,6 +10723,47 @@ const CharacterSheetWrapper = ({
           )}
         </div>
       </div>
+
+      {sheetConflict && (
+        <div
+          role="alert"
+          data-testid="sheet-conflict-banner"
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "center",
+            gap: "8px",
+            padding: "8px 16px",
+            background: "var(--hftf-panel, #1f2937)",
+            borderBottom: "2px solid #f59e0b",
+            color: "var(--text-primary)",
+            fontSize: "12px",
+          }}
+        >
+          <span style={{ flex: "1 1 240px", minWidth: 0 }}>
+            Someone else changed{" "}
+            <strong>{sheetConflict.labels.join(", ")}</strong> while you were
+            editing. Saving is paused. Reload takes their version of these
+            fields and keeps your other edits. Keep mine saves yours over theirs.
+          </span>
+          <button
+            type="button"
+            style={S.btnGhost}
+            disabled={sheetConflictBusy}
+            onClick={() => void reloadAfterConflict()}
+          >
+            {sheetConflictBusy ? "Reloading…" : "Reload"}
+          </button>
+          <button
+            type="button"
+            style={S.btnGhost}
+            disabled={sheetConflictBusy}
+            onClick={keepMineAfterConflict}
+          >
+            Keep mine
+          </button>
+        </div>
+      )}
 
       {/* ── Mode toggle (player sheet: CHARACTER vs CREW) ── */}
       <div
