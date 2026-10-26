@@ -5,18 +5,17 @@ from .faction_views import FactionViewSet
 from .equipment_views import EquipmentItemViewSet
 from .npc_views import NPCViewSet
 from .crew_views import CrewViewSet
-from .session_views import SessionViewSet, SessionEventViewSet
+from .session_views import SessionViewSet
 from .roll_views import RollViewSet
 from .group_action_views import GroupActionViewSet
 from .auth_views import RegisterView, LoginView, CurrentUserView, UserProfileViewSet
 from .gameplay_views import (
     ClaimViewSet, CrewSpecialAbilityViewSet, CrewPlaybookViewSet,
-    CrewUpgradeViewSet, XPHistoryViewSet, StressHistoryViewSet,
-    ChatMessageViewSet, ProgressClockViewSet
+    CrewUpgradeViewSet, XPHistoryViewSet, ProgressClockViewSet
 )
 from .reference_views import (
-    HeritageViewSet, ViceViewSet, AbilityViewSet, StandViewSet,
-    StandAbilityViewSet, HamonAbilityViewSet, SpinAbilityViewSet,
+    HeritageViewSet, ViceViewSet, AbilityViewSet,
+    HamonAbilityViewSet, SpinAbilityViewSet,
     TraumaViewSet, CharacterHistoryViewSet, CrewHistoryViewSet,
     ExperienceTrackerViewSet,
 )
@@ -28,11 +27,11 @@ from .utility_views import (
 __all__ = [
     'CharacterViewSet', 'CampaignViewSet', 'CampaignInvitationViewSet', 'ShowcasedNPCViewSet',
     'FactionViewSet', 'EquipmentItemViewSet', 'NPCViewSet', 'CrewViewSet',
-    'SessionViewSet', 'SessionEventViewSet', 'RollViewSet', 'GroupActionViewSet', 'RegisterView', 'LoginView', 'CurrentUserView',
+    'SessionViewSet', 'RollViewSet', 'GroupActionViewSet', 'RegisterView', 'LoginView', 'CurrentUserView',
     'UserProfileViewSet', 'ClaimViewSet', 'CrewSpecialAbilityViewSet',
     'CrewPlaybookViewSet', 'CrewUpgradeViewSet', 'XPHistoryViewSet',
-    'StressHistoryViewSet', 'ChatMessageViewSet', 'ProgressClockViewSet', 'HeritageViewSet',
-    'ViceViewSet', 'AbilityViewSet', 'StandViewSet', 'StandAbilityViewSet',
+    'ProgressClockViewSet', 'HeritageViewSet',
+    'ViceViewSet', 'AbilityViewSet',
     'HamonAbilityViewSet', 'SpinAbilityViewSet', 'TraumaViewSet',
     'CharacterHistoryViewSet', 'CrewHistoryViewSet', 'ExperienceTrackerViewSet',
     'global_search', 'get_available_playbook_abilities', 'api_documentation',
