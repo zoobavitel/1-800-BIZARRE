@@ -8,12 +8,20 @@ non-GET @action) is sent as two actors:
 - member: a player in the campaign, with their own PC in the crew, who does
   not own the object being written.
 
+Every request gets a brand-new stranger or member, made inside that request's
+savepoint, so one write can't change what the next actor sees.
+
+Each route also gets a positive control: an actor who should be allowed
+(usually the GM) must not get 404 or 405. That proves the URL and the target
+are real, so "closed" can't come from a typo.
+
 Each response is sorted into a class:
 
 - closed: 401, 403, 404 or 405 (refused);
 - open: 2xx or 3xx (the write went through);
 - invalid: another 4xx, usually a 400 from validation that ran before any
-  permission check, so the result says nothing either way;
+  permission check, so the result says nothing either way. A 400 whose body
+  holds a known refusal (REFUSAL_MESSAGES) counts as closed;
 - error: 5xx.
 
 Every write must come out "closed" unless EXPECTED says otherwise, with a
@@ -68,8 +76,20 @@ ACTORS = ("stranger", "member")
 READ_METHODS = {"GET", "HEAD", "OPTIONS"}
 
 
-def classify(code):
+# A 400 carrying one of these is a refusal, not a validation error.
+REFUSAL_MESSAGES = (
+    "You cannot edit this character",
+    "Only the campaign GM can",
+    "Only this character's player or the GM",
+    "Not a GM award you made",
+    "You are not a member of this crew",
+)
+
+
+def classify(code, body=""):
     if code in (401, 403, 404, 405):
+        return CLOSED
+    if code == 400 and any(msg in body for msg in REFUSAL_MESSAGES):
         return CLOSED
     if 200 <= code < 400:
         return OPEN
@@ -91,30 +111,21 @@ EXPECTED = {
     "POST /api/progress-clocks/ as member": (OPEN, "KNOWN HOLE, S6: a member can bind a clock to another player's PC"),
     **_both("POST", "/api/sessions/", OPEN, "KNOWN HOLE, S4: anyone can create a session in any campaign"),
     **_both("POST", "/api/equipment-items/", OPEN, "KNOWN HOLE, S7: anyone can create a global TEMPLATE item"),
-    "POST /api/characters/{id}/log-armor-expenditure/ as member": (OPEN, "KNOWN HOLE, F: dead stub (writes nothing), removed in F"),
-    **{f"POST /api/characters/{{id}}/{a}/ as member": (INVALID, "KNOWN HOLE, F: dead action, removed in F")
-       for a in ("add-progress-clock", "heal-harm", "indulge-vice", "take-harm", "update-progress-clock")},
-    **_both("POST", "/api/characters/create-template/", INVALID, "KNOWN HOLE, F: dead stub (writes nothing), removed in F"),
+    "POST /api/npcs/ as member": (OPEN, "KNOWN HOLE, S5: players may not create NPCs in a campaign; only its GM (user, 2026-10-26)"),
     **_both("POST", "/api/user-profiles/", ERROR, "KNOWN BUG, D: a second profile hits the unique constraint (500)"),
 
     # BY DESIGN.
     **_both("POST", "/api/campaigns/", OPEN, "BY DESIGN: anyone may create their own campaign and becomes its GM"),
     "POST /api/characters/ as member": (OPEN, "BY DESIGN: a player may add a PC to a campaign they play in"),
-    "POST /api/npcs/ as member": (OPEN, "BY DESIGN: a player may create an NPC in a campaign they play in"),
     "POST /api/crews/ as member": (OPEN, "BY DESIGN: a player may create a crew in their campaign"),
-    "PATCH /api/crews/{id}/ as member": (OPEN, "BY DESIGN: crew members share the crew sheet (only _CREW_MEMBER_ALLOWED_PATCH_FIELDS)"),
+    "PATCH /api/crews/{id}/ as member": (OPEN, "BY DESIGN: crew members edit name, stash, description, notes and upgrade progress; level, xp, coin, rep, hold, turf and wanted_level become GM only in S5 (see test_member_crew_stat_patch)"),
     "POST /api/crews/{id}/propose-name/ as member": (OPEN, "BY DESIGN: crew members propose crew names"),
-    "POST /api/crews/{id}/approve-name/ as member": (INVALID, "BY DESIGN: crew members approve names; 400 because nothing is proposed"),
+    "POST /api/crews/{id}/approve-name/ as member": (OPEN, "BY DESIGN: crew members approve a proposed crew name"),
     "POST /api/campaigns/{id}/increment-wanted/ as member": (OPEN, "BY DESIGN (U4): any member may bump the wanted level"),
-    "POST /api/characters/{id}/assist-help/ as member": (INVALID, "BY DESIGN: the helper-initiated assist on a crewmate; 400 without a live session (test_assist_help_pending)"),
+    "POST /api/characters/{id}/assist-help/ as member": (OPEN, "BY DESIGN: a crewmate assists with their own PC and pays the stress (test_assist_help_pending)"),
     **_both("PUT", "/api/user-profiles/update/", OPEN, "BY DESIGN: updates the caller's own profile"),
     **_both("POST", "/api/user-profiles/change-password/", INVALID, "BY DESIGN: changes the caller's own password; 400 for a wrong current password"),
 
-    # INCONCLUSIVE: the refusal comes back as 400, not 403.
-    "POST /api/character-history/{id}/undo/ as member": (INVALID, "INCONCLUSIVE: can_undo_character_history refuses with a 400 message"),
-    "POST /api/characters/{id}/undo-latest-gm-change/ as member": (INVALID, "INCONCLUSIVE: _gm_may_undo_pc refuses with a 400 message"),
-    "POST /api/characters/{id}/redo-latest-gm-change/ as member": (INVALID, "INCONCLUSIVE: _gm_may_undo_pc refuses with a 400 message"),
-    "PUT /api/progress-clocks/{id}/ as member": (INVALID, "INCONCLUSIVE: the GM's full body fails validation for a member; the PATCH row covers the permission"),
 }
 
 
@@ -144,12 +155,17 @@ class PermissionMatrixTests(TestCase):
         self.member = User.objects.create_user(username="pm_member", password="pw-pm-member-1")
         self.stranger = User.objects.create_user(username="pm_stranger", password="pw-pm-stranger-1")
         self.invitee = User.objects.create_user(username="pm_invitee", password="pw-pm-invitee-1")
-        for u in (self.gm, self.owner, self.member, self.stranger, self.invitee):
+        self.staff = User.objects.create_user(username="pm_staff", password="pw-pm-staff-1", is_staff=True)
+        for u in (self.gm, self.owner, self.member, self.stranger, self.invitee, self.staff):
             UserProfile.objects.get_or_create(user=u)
 
         self.campaign = Campaign.objects.create(name="PM Camp", gm=self.gm)
         self.campaign.players.add(self.owner, self.member)
-        self.crew = Crew.objects.create(name="PM Crew", campaign=self.campaign)
+        # A live name proposal, so approve-name runs its member check.
+        self.crew = Crew.objects.create(
+            name="PM Crew", campaign=self.campaign,
+            proposed_name="PM Proposed", proposed_by=self.owner,
+        )
         self.heritage, _ = Heritage.objects.get_or_create(
             name="Human", defaults={"base_hp": 0, "description": ""}
         )
@@ -171,7 +187,7 @@ class PermissionMatrixTests(TestCase):
             name="PM NPC", creator=self.gm, campaign=self.campaign, visible_to_players=True
         )
         self.clock = ProgressClock.objects.create(
-            name="PM Clock", max_segments=4, campaign=self.campaign,
+            name="PM Clock", clock_type="DANGER", max_segments=4, campaign=self.campaign,
             character=self.pc, created_by=self.owner,
         )
         self.item = EquipmentItem.objects.create(
@@ -198,7 +214,7 @@ class PermissionMatrixTests(TestCase):
         from characters import models as m
 
         explicit = {
-            "user-profiles": self.owner.profile.pk if hasattr(self.owner, "profile") else None,
+            "user-profiles": UserProfile.objects.filter(user=self.owner).values_list("pk", flat=True).first(),
             "characters": self.pc.pk,
             "character-history": self.history.pk,
             "crew-history": self.crew_history.pk,
@@ -274,17 +290,69 @@ class PermissionMatrixTests(TestCase):
             "/api/crews/{id}/propose-name/": {"name": "Intruder crew name"},
             "/api/equipment-items/{id}/set-campaign-access/": {"campaign": c, "enabled": True},
             "/api/equipment-items/from-kit-item/": {"campaign": c, "name": "Intruder kit item"},
-            "/api/characters/{id}/assist-help/": {"helper_character_id": self.member_pc.pk},
+            "/api/characters/{id}/assist-help/": {"helper_character_id": self.member_pc.pk, "session_id": s},
         }
         return bodies.get(template, {})
 
     # The walk
 
+    # Actors
+
+    _fresh = 0
+
+    def fresh_actor(self, kind):
+        """A new user for one request. Called inside that request's savepoint."""
+        PermissionMatrixTests._fresh += 1
+        n = PermissionMatrixTests._fresh
+        user = User.objects.create_user(username=f"pm_{kind}_{n}", password=f"pw-pm-{kind}-{n}")
+        UserProfile.objects.get_or_create(user=user)
+        if kind == "member":
+            self.campaign.players.add(user)
+            self.actor_pc = Character.objects.create(
+                user=user, campaign=self.campaign, crew=self.crew,
+                true_name=f"PM Member PC {n}", heritage=self.heritage,
+            )
+        else:
+            self.actor_pc = None
+        return user
+
+    # Who should be allowed, per route prefix (default: the campaign GM).
+    ALLOWED_ACTOR = {
+        "user-profiles": "owner",
+        "campaign-invitations": "invitee",
+        "heritages": "staff", "vices": "staff", "abilities": "staff",
+        "hamon-abilities": "staff", "spin-abilities": "staff",
+        "claims": "staff", "crew-playbooks": "staff",
+        "crew-special-abilities": "staff", "crew-upgrades": "staff",
+    }
+
+    # Per-route overrides of ALLOWED_ACTOR.
+    ROUTE_ALLOWED_ACTOR = {
+        # A player assigns or unassigns their own PC.
+        "POST /api/campaigns/{id}/assign-character/": "owner",
+        "POST /api/campaigns/{id}/unassign-character/": "owner",
+    }
+
+    # Routes where no actor can reach a 2xx/4xx other than 404/405, with why.
+    NO_POSITIVE_CONTROL = {}
+
+    def allowed_user(self, prefix, key=""):
+        who = self.ROUTE_ALLOWED_ACTOR.get(key) or self.ALLOWED_ACTOR.get(prefix, "gm")
+        return {"owner": self.owner, "invitee": self.invitee, "staff": self.staff, "gm": self.gm}[who]
+
+    def send(self, user, method, url, body):
+        client = APIClient()
+        client.raise_request_exception = False
+        client.force_authenticate(user)
+        return client.generic(method, url, data=json.dumps(body), content_type="application/json")
+
+    # The walk
+
     def observe(self):
         privileged = APIClient()
-        actors = {"stranger": self.stranger, "member": self.member}
         results = {}
         self.skipped = []
+        self.control_failures = []
         for method, template, prefix in write_endpoints():
             needs_id = "{id}" in template
             obj_id = self.target_id(prefix) if needs_id else None
@@ -300,15 +368,28 @@ class PermissionMatrixTests(TestCase):
                 if current.status_code == 200 and isinstance(current.data, dict):
                     body = json.loads(json.dumps(current.data, default=str))
             for actor in ACTORS:
-                client = APIClient()
-                client.raise_request_exception = False
-                client.force_authenticate(actors[actor])
                 with transaction.atomic():
-                    response = client.generic(
-                        method, url, data=json.dumps(body), content_type="application/json"
-                    )
+                    user = self.fresh_actor(actor)
+                    actor_body = dict(body) if isinstance(body, dict) else body
+                    if template == "/api/characters/{id}/assist-help/" and self.actor_pc:
+                        # The member helps with their own PC, the by-design path.
+                        actor_body["helper_character_id"] = self.actor_pc.pk
+                    response = self.send(user, method, url, actor_body)
                     transaction.set_rollback(True)
-                results[f"{method} {template} as {actor}"] = (classify(response.status_code), response.status_code)
+                text = response.content.decode("utf-8", "replace")
+                results[f"{method} {template} as {actor}"] = (
+                    classify(response.status_code, text), response.status_code
+                )
+            key = f"{method} {template}"
+            if key not in self.NO_POSITIVE_CONTROL:
+                with transaction.atomic():
+                    control = self.send(self.allowed_user(prefix, key), method, url, body)
+                    transaction.set_rollback(True)
+                if control.status_code in (404, 405):
+                    self.control_failures.append(
+                        f"{key}: positive control ({self.allowed_user(prefix, key).username}) got "
+                        f"{control.status_code}; the URL or target is wrong, or add it to NO_POSITIVE_CONTROL"
+                    )
         return results
 
     def test_every_write_is_closed_unless_listed(self):
@@ -319,6 +400,7 @@ class PermissionMatrixTests(TestCase):
                 print(f"{code}  {cls:8} {key}{marker}")
         # A route with no target object would never be tested; fail instead.
         problems = [f"{route}: no object to target (add it to target_id)" for route in self.skipped]
+        problems += self.control_failures
         for key, (cls, code) in sorted(results.items()):
             expected_cls = EXPECTED.get(key, (CLOSED, ""))[0]
             if cls != expected_cls:
@@ -326,3 +408,19 @@ class PermissionMatrixTests(TestCase):
         for key in sorted(set(EXPECTED) - set(results)):
             problems.append(f"{key}: listed in EXPECTED but the route no longer exists")
         self.assertEqual(problems, [], "\n" + "\n".join(problems))
+
+    def test_member_crew_stat_patch(self):
+        """KNOWN HOLE, S5: a crew member can PATCH crew stats.
+
+        The user decided (2026-10-26) that level, xp, coin, rep, hold, turf and
+        wanted_level are GM only. Today a member's PATCH of coin goes through.
+        S5 flips this test to expect 403 and the coin unchanged.
+        """
+        with transaction.atomic():
+            member = self.fresh_actor("member")
+            response = self.send(member, "PATCH", f"/api/crews/{self.crew.pk}/", {"coin": 3})
+            self.crew.refresh_from_db()
+            coin_after = self.crew.coin
+            transaction.set_rollback(True)
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(coin_after, 3)
