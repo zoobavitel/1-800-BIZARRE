@@ -24,6 +24,12 @@
  * Until then the stream reads unhealthy after SSE_HEALTH_SKIP_POLL_MS and the
  * caller's interval poll takes over, which also covers an evicted tab that is
  * already in front and gets no wake event.
+ *
+ * Events carry an id (PR 6). A reconnect sends the last id seen as
+ * `?last_event_id=` and a server that says `"replay": true` in its connected
+ * frame first replays what was missed, so no gap refetch is needed. When it
+ * can't (the id is too old), it sends `{"type": "resync"}` and the caller
+ * refetches everything. A server without replay keeps the old gap refetch.
  */
 import { getApiBaseUrl } from "../../../config/apiConfig";
 import { nextReconnectDelay } from "./campaignEventsReconnect.mjs";
@@ -87,6 +93,9 @@ export function subscribeCampaignEvents(campaignId, { onUpdate } = {}) {
   let evicted = false;
   // The first stream after an evict always refetches: its gap is unknown.
   let catchUpOnConnect = false;
+  // Last numbered event seen, and the one this connection asked to resume from.
+  let lastEventId = null;
+  let resumedFrom = null;
 
   const touchTraffic = () => {
     lastEventAt = Date.now();
@@ -136,9 +145,13 @@ export function subscribeCampaignEvents(campaignId, { onUpdate } = {}) {
       return;
     }
     let next;
+    resumedFrom = lastEventId;
+    const resume = resumedFrom
+      ? `&last_event_id=${encodeURIComponent(resumedFrom)}`
+      : "";
     try {
       next = new EventSource(
-        `${campaignUrl}/?ticket=${encodeURIComponent(ticket)}`,
+        `${campaignUrl}/?ticket=${encodeURIComponent(ticket)}${resume}`,
       );
     } catch {
       scheduleReconnect();
@@ -162,10 +175,14 @@ export function subscribeCampaignEvents(campaignId, { onUpdate } = {}) {
           // A routine rollover (server closes every ~45s, we reopen in ~3s) leaves
           // a short gap. Refetching on each one made every client pull all sheets
           // every 45s, so only refetch when the gap was long enough to miss a lot.
+          // The server replays from resumedFrom, or says resync: no
+          // refetch needed here.
+          const replays = data.replay === true && resumedFrom != null;
           if (
-            catchUpOnConnect ||
-            (sawConnected &&
-              Date.now() - prevEventAt > RECONNECT_REFETCH_GAP_MS)
+            !replays &&
+            (catchUpOnConnect ||
+              (sawConnected &&
+                Date.now() - prevEventAt > RECONNECT_REFETCH_GAP_MS))
           ) {
             onUpdate?.("update", { reason: "update" });
           }
@@ -184,7 +201,12 @@ export function subscribeCampaignEvents(campaignId, { onUpdate } = {}) {
           return;
         }
         if (data && data.type === "campaign_update") {
+          if (typeof data.id === "string" && data.id) lastEventId = data.id;
           onUpdate?.(data.reason || "update", data);
+        }
+        if (data && data.type === "resync") {
+          // Missed events are gone from the server's buffer.
+          onUpdate?.("update", { reason: "update" });
         }
         // Opening frame is not proof the stream lived. Reset only after a heartbeat.
         if (data && data.type === "heartbeat") {

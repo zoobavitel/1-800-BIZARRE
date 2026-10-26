@@ -73,7 +73,19 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      # Same major as prod (Redis 7.0 on CT 103). Only the tests that ask for
+      # TEST_REDIS_URL use it; the app under test keeps in-process realtime.
+      redis:
+        image: redis:7.0
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     env:
+      TEST_REDIS_URL: redis://localhost:6379/15
       DB_ENGINE: postgresql
       DB_NAME: bizarre
       DB_USER: postgres
@@ -96,6 +108,8 @@ jobs:
           pip install -r backend/requirements.txt
           # Postgres driver, same pin as prod.
           pip install "$(grep -i '^psycopg2-binary==' backend/requirements-prod.txt)"
+          # Redis client, same pin as prod, for the TEST_REDIS_URL tests.
+          pip install "$(grep -i '^redis==' backend/requirements-prod.txt)"
 
       - name: Run Django tests
         env:
