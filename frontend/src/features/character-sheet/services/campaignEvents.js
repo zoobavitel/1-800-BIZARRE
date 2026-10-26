@@ -188,6 +188,11 @@ export function subscribeCampaignEvents(campaignId, { onUpdate } = {}) {
           }
           catchUpOnConnect = false;
           sawConnected = true;
+          // A fresh stream starts from the server's newest id, so the next
+          // reconnect can replay even if no event arrives on this one.
+          if (resumedFrom == null && typeof data.cursor === "string" && data.cursor) {
+            lastEventId = data.cursor;
+          }
         }
         if (data && data.type === "evicted") {
           evicted = true;
@@ -205,7 +210,11 @@ export function subscribeCampaignEvents(campaignId, { onUpdate } = {}) {
           onUpdate?.(data.reason || "update", data);
         }
         if (data && data.type === "resync") {
-          // Missed events are gone from the server's buffer.
+          // Missed events are gone from the server's buffer. Drop the old id
+          // (or take the server's newest), or every later reconnect would
+          // resync and refetch again.
+          lastEventId =
+            typeof data.cursor === "string" && data.cursor ? data.cursor : null;
           onUpdate?.("update", { reason: "update" });
         }
         // Opening frame is not proof the stream lived. Reset only after a heartbeat.
