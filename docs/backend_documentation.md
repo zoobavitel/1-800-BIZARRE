@@ -21,13 +21,8 @@ The API follows RESTful principles, exposing resources (e.g., characters, stands
 
 The `urls.py` defines the API endpoints. A `DefaultRouter` from DRF automatically generates URL patterns for the registered `ViewSet`s. Key API endpoints include:
 
-*   `/api/heritages/`: Manage character heritages.
-*   `/api/vices/`: Manage character vices.
-*   `/api/abilities/`: Manage general abilities.
-*   `/api/stands/`: Manage Stands.
-*   `/api/stand-abilities/`: Manage Stand-specific abilities.
-*   `/api/hamon-abilities/`: Manage Hamon-specific abilities.
-*   `/api/spin-abilities/`: Manage Spin-specific abilities.
+*   `/api/heritages/`, `/api/vices/`, `/api/abilities/`, `/api/hamon-abilities/`, `/api/spin-abilities/`, `/api/claims/`, `/api/crew-playbooks/`, `/api/crew-special-abilities/`, `/api/crew-upgrades/`: the SRD catalogs. Anyone signed in can read them; only staff can create, edit or delete (`app/permissions.py` `IsStaffOrReadOnly`).
+*   A character's Stand and stand abilities are edited through the character body, not a route of their own.
 *   `/api/characters/`: Manage player characters.
 *   `/api/campaigns/`: Manage game campaigns.
 *   `/api/npcs/`: Manage Non-Player Characters.
@@ -268,7 +263,6 @@ These endpoints provide access to static or reference game data, often populated
 *   **`/api/heritages/` (GET)**: Retrieve a list of all available Heritages, including their associated Benefits and Detriments.
 *   **`/api/vices/` (GET)**: Retrieve a list of all available Vices.
 *   **`/api/abilities/` (GET)**: Retrieve a list of standard Abilities.
-*   **`/api/stand-abilities/` (GET)**: Retrieve a list of Stand-specific Abilities.
 *   **`/api/hamon-abilities/` (GET)**: Retrieve a list of Hamon-specific Abilities.
 *   **`/api/spin-abilities/` (GET)**: Retrieve a list of Spin-specific Abilities.
 *   **`/api/traumas/` (GET)**: Retrieve a list of Trauma types.

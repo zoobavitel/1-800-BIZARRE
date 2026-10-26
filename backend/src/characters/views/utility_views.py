@@ -463,7 +463,6 @@ def api_documentation(request):
                 'heritages': 'GET /api/heritages/',
                 'vices': 'GET /api/vices/',
                 'abilities': 'GET /api/abilities/',
-                'stand_abilities': 'GET /api/stand-abilities/',
                 'hamon_abilities': 'GET /api/hamon-abilities/',
                 'spin_abilities': 'GET /api/spin-abilities/',
                 'traumas': 'GET /api/traumas/',
