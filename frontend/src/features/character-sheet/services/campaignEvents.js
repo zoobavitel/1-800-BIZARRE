@@ -15,6 +15,15 @@
  * redundant poll sync while the stream is healthy (server sends heartbeat data events ~15s
  * and closes the stream after ~30–55s). We reconnect ourselves: a completed HTTP
  * response does not always trigger native EventSource retry.
+ *
+ * The server caps live streams per user and campaign. A stream a newer one
+ * replaced gets `{"type": "evicted"}` and ends. Reconnecting then would evict
+ * another of this user's streams, which would reconnect too, round and round.
+ * So an evicted stream stays closed until this tab is looked at again (it
+ * becomes visible or the window gets focus), then reconnects and catches up.
+ * Until then the stream reads unhealthy after SSE_HEALTH_SKIP_POLL_MS and the
+ * caller's interval poll takes over, which also covers an evicted tab that is
+ * already in front and gets no wake event.
  */
 import { getApiBaseUrl } from "../../../config/apiConfig";
 import { nextReconnectDelay } from "./campaignEventsReconnect.mjs";
@@ -74,6 +83,10 @@ export function subscribeCampaignEvents(campaignId, { onUpdate } = {}) {
   // Bumped by each connect and by unsubscribe, so a ticket that arrives late
   // for an older connect is dropped instead of opening a second stream.
   let connectGen = 0;
+  // A newer stream replaced this one; wait for the tab to be looked at.
+  let evicted = false;
+  // The first stream after an evict always refetches: its gap is unknown.
+  let catchUpOnConnect = false;
 
   const touchTraffic = () => {
     lastEventAt = Date.now();
@@ -150,12 +163,25 @@ export function subscribeCampaignEvents(campaignId, { onUpdate } = {}) {
           // a short gap. Refetching on each one made every client pull all sheets
           // every 45s, so only refetch when the gap was long enough to miss a lot.
           if (
-            sawConnected &&
-            Date.now() - prevEventAt > RECONNECT_REFETCH_GAP_MS
+            catchUpOnConnect ||
+            (sawConnected &&
+              Date.now() - prevEventAt > RECONNECT_REFETCH_GAP_MS)
           ) {
             onUpdate?.("update", { reason: "update" });
           }
+          catchUpOnConnect = false;
           sawConnected = true;
+        }
+        if (data && data.type === "evicted") {
+          evicted = true;
+          clearReconnect();
+          try {
+            next.close();
+          } catch {
+            /* ignore */
+          }
+          if (es === next) es = null;
+          return;
         }
         if (data && data.type === "campaign_update") {
           onUpdate?.(data.reason || "update", data);
@@ -178,9 +204,33 @@ export function subscribeCampaignEvents(campaignId, { onUpdate } = {}) {
         /* ignore */
       }
       if (es === next) es = null;
+      // The server closes an evicted stream right after the frame.
+      if (evicted) return;
       scheduleReconnect();
     };
   };
+
+  const wakeAfterEvict = () => {
+    if (closed || !evicted) return;
+    if (
+      typeof document !== "undefined" &&
+      document.visibilityState === "hidden"
+    ) {
+      return;
+    }
+    evicted = false;
+    catchUpOnConnect = true;
+    attempt = 0;
+    connect();
+  };
+  const onVisibilityChange = () => wakeAfterEvict();
+  const onFocus = () => wakeAfterEvict();
+  if (typeof document !== "undefined") {
+    document.addEventListener("visibilitychange", onVisibilityChange);
+  }
+  if (typeof window !== "undefined") {
+    window.addEventListener("focus", onFocus);
+  }
 
   connect();
 
@@ -188,6 +238,12 @@ export function subscribeCampaignEvents(campaignId, { onUpdate } = {}) {
     closed = true;
     connectGen += 1;
     clearReconnect();
+    if (typeof document !== "undefined") {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    }
+    if (typeof window !== "undefined") {
+      window.removeEventListener("focus", onFocus);
+    }
     if (es) {
       try {
         es.close();
