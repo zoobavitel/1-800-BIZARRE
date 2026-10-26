@@ -73,14 +73,6 @@ class CharacterProgressClockSegmentsTests(TestCase):
         self.assertEqual(clock.max_segments, 7)
         self.assertEqual(clock.filled_segments, 0)
 
-    def test_add_progress_clock_action_persists_seven(self):
-        url = f"/api/characters/{self.char.id}/add-progress-clock/"
-        res = self.client.post(url, {"name": "Wannabe", "segments": 7}, format="json")
-        self.assertEqual(res.status_code, status.HTTP_201_CREATED, res.content)
-        self.assertEqual(res.data["max_segments"], 7)
-        clock = ProgressClock.objects.get(id=res.data["id"])
-        self.assertEqual(clock.max_segments, 7)
-
     def test_patch_progress_clock_resizes_and_clamps_fill(self):
         clock = ProgressClock.objects.create(
             name="Heat",

@@ -69,9 +69,9 @@ curl -X POST \
 
 ## 3. Adding a Test Character
 
-You can create a new character template with default values using the `/api/characters/create-template/` endpoint.
+Create a character with `POST /api/characters/`. The new character belongs to the signed-in user.
 
-**Endpoint:** `/api/characters/create-template/`
+**Endpoint:** `/api/characters/`
 **Method:** `POST`
 **Content-Type:** `application/json`
 **Authorization:** `Token <your_auth_token>`
@@ -81,22 +81,13 @@ You can create a new character template with default values using the `/api/char
 curl -X POST \
   -H "Content-Type: application/json" \
   -H "Authorization: Token your_auth_token_here" \
-  -d '{"character_data": {"true_name": "Jotaro Kujo", "playbook": "STAND"}}' \
-  http://127.0.0.1:8000/api/characters/create-template/
+  -d '{"true_name": "Jotaro Kujo", "heritage": 1}' \
+  http://127.0.0.1:8000/api/characters/
 ```
 
-**Expected Response (on success):**
-```json
-{
-  "success": true,
-  "character_id": 1,
-  "character": {
-    // ... full character object details ...
-  },
-  "message": "Character template created successfully"
-}
-```
-**Note:** The `character_id` from the response is important for modifying the character later.
+**Expected Response (on success):** `201 Created` with the full character, including its `id`.
+
+**Note:** The `id` from the response is what you use to modify the character later.
 
 ## 4. Modifying a Test Character
 

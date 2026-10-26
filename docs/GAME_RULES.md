@@ -131,7 +131,7 @@ Full grade tables (movement, range, stress/armor by grade, Precision effects, De
 
 **Harm:** Record by level. **Lesser (1)** bottom row, **Moderate (2)** middle, **Severe (3)** top. If a row is full, harm moves up. Top row full + more harm → catastrophic (e.g. death).  
 **Examples:** Fatal (4): Electrocuted, Drowned. Severe (3): Impaled, Broken Leg. Moderate (2): Deep Cut, Concussion. Lesser (1): Battered, Drained.  
-**Direction:** NPCs can deal harm to players (GM applies via take-harm). Players do not deal harm to NPCs; their success fills NPC clocks by effect (see Position & Effect).
+**Direction:** NPCs can deal harm to players (the GM records it in the harm boxes on the player's sheet). Players do not deal harm to NPCs; their success fills NPC clocks by effect (see Position & Effect).
 
 ---
 

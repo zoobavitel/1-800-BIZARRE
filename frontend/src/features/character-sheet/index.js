@@ -1,5 +1,4 @@
 // Character Sheet Feature - Public API
-export { useCharacterSheet } from "./hooks/useCharacterSheet";
 export { useReferenceData } from "./hooks/useReferenceData";
 export {
   getAttributeDice,
