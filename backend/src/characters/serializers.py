@@ -1002,9 +1002,13 @@ class SessionSerializer(serializers.ModelSerializer):
                         char_id = int(char_key)
                     except (TypeError, ValueError):
                         continue
-                    try:
-                        character = Character.objects.get(pk=char_id)
-                    except Character.DoesNotExist:
+                    # Only PCs in this session's campaign; any other id is dropped,
+                    # so a loadout PATCH can't reset another campaign's PC.
+                    character = Character.objects.filter(
+                        pk=char_id, campaign_id=instance.campaign_id
+                    ).first()
+                    if character is None:
+                        merged.pop(str(char_key), None)
                         continue
                     old_entry = normalize_loadout_entry(
                         (instance.loadout_by_character or {}).get(str(char_key))
@@ -1017,9 +1021,15 @@ class SessionSerializer(serializers.ModelSerializer):
                     merged[str(char_key)] = new_entry
             validated_data["loadout_by_character"] = merged
 
+        # A many-to-many can't be assigned with setattr; set it after saving.
+        characters_involved = validated_data.pop("characters_involved", None)
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
+        if characters_involved is not None:
+            instance.characters_involved.set(
+                [c for c in characters_involved if c.campaign_id == instance.campaign_id]
+            )
 
         if npc_involvements_data is not None:
             involvement_rows = []
