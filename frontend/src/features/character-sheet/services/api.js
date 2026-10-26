@@ -588,34 +588,6 @@ export const characterAPI = {
       body: JSON.stringify({ allocation_id: allocationId }),
     }),
 
-  // Take harm
-  takeHarm: (id, harmData) =>
-    apiRequest(`/characters/${id}/take-harm/`, {
-      method: "POST",
-      body: JSON.stringify(harmData),
-    }),
-
-  // Heal harm
-  healHarm: (id, healData) =>
-    apiRequest(`/characters/${id}/heal-harm/`, {
-      method: "POST",
-      body: JSON.stringify(healData),
-    }),
-
-  // Indulge vice
-  indulgeVice: (id, viceData) =>
-    apiRequest(`/characters/${id}/indulge-vice/`, {
-      method: "POST",
-      body: JSON.stringify(viceData),
-    }),
-
-  // Log armor expenditure
-  logArmorExpenditure: (id, armorData) =>
-    apiRequest(`/characters/${id}/log-armor-expenditure/`, {
-      method: "POST",
-      body: JSON.stringify(armorData),
-    }),
-
   exportPdf: async (id, filename) => {
     const safeName =
       filename ||
@@ -623,19 +595,6 @@ export const characterAPI = {
     await downloadBinaryExport(`/characters/${id}/export-pdf/`, safeName);
   },
 
-  // Add progress clock
-  addProgressClock: (id, clockData) =>
-    apiRequest(`/characters/${id}/add-progress-clock/`, {
-      method: "POST",
-      body: JSON.stringify(clockData),
-    }),
-
-  // Update progress clock
-  updateProgressClock: (id, clockData) =>
-    apiRequest(`/characters/${id}/update-progress-clock/`, {
-      method: "POST",
-      body: JSON.stringify(clockData),
-    }),
 };
 
 /** Unwrap list responses: plain array or paginated `{ results: [...] }`. */

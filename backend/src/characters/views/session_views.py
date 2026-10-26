@@ -8,8 +8,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.decorators import action
 
-from ..models import ExperienceTracker, Session, SessionEvent, Roll, Character
-from ..serializers import SessionSerializer, SessionEventSerializer, SessionRecordsSerializer
+from ..models import ExperienceTracker, Session, Roll, Character
+from ..serializers import SessionSerializer, SessionRecordsSerializer
 
 logger = logging.getLogger(__name__)
 
@@ -233,23 +233,3 @@ class SessionViewSet(viewsets.ModelViewSet):
             'score_id': score_id,
             'vote': vote
         })
-
-
-class SessionEventViewSet(viewsets.ModelViewSet):
-    queryset = SessionEvent.objects.all()
-    permission_classes = [IsAuthenticated]
-    serializer_class = SessionEventSerializer
-
-    def get_queryset(self):
-        # Filter events based on user permissions
-        user = self.request.user
-        if user.is_staff:
-            return SessionEvent.objects.all()
-        # Return events from sessions where user is GM or a member
-        return SessionEvent.objects.filter(
-            models.Q(session__campaign__gm=user) | 
-            models.Q(session__campaign__characters__user=user)
-        ).distinct()
-
-    def perform_create(self, serializer):
-        serializer.save()

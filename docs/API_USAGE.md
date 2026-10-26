@@ -69,9 +69,9 @@ curl -X POST \
 
 ## 3. Adding a Test Character
 
-You can create a new character template with default values using the `/api/characters/create-template/` endpoint.
+Create a character with `POST /api/characters/`. The new character belongs to the signed-in user.
 
-**Endpoint:** `/api/characters/create-template/`
+**Endpoint:** `/api/characters/`
 **Method:** `POST`
 **Content-Type:** `application/json`
 **Authorization:** `Token <your_auth_token>`
@@ -81,22 +81,13 @@ You can create a new character template with default values using the `/api/char
 curl -X POST \
   -H "Content-Type: application/json" \
   -H "Authorization: Token your_auth_token_here" \
-  -d '{"character_data": {"true_name": "Jotaro Kujo", "playbook": "STAND"}}' \
-  http://127.0.0.1:8000/api/characters/create-template/
+  -d '{"true_name": "Jotaro Kujo", "heritage": 1}' \
+  http://127.0.0.1:8000/api/characters/
 ```
 
-**Expected Response (on success):**
-```json
-{
-  "success": true,
-  "character_id": 1,
-  "character": {
-    // ... full character object details ...
-  },
-  "message": "Character template created successfully"
-}
-```
-**Note:** The `character_id` from the response is important for modifying the character later.
+**Expected Response (on success):** `201 Created` with the full character, including its `id`.
+
+**Note:** The `id` from the response is what you use to modify the character later.
 
 ## 4. Modifying a Test Character
 
@@ -139,3 +130,9 @@ For more detailed information on available endpoints and their parameters, refer
 ```bash
 curl -X GET http://127.0.0.1:8000/api/docs/
 ```
+
+## 6. Rolling and assists
+
+`POST /api/characters/{id}/roll-action/` needs edit rights on that character: its player, the campaign GM, or staff. Any other campaign member gets 403, even though they can see the character.
+
+An inline assist (`assist_helper_id` on the roller's request) charges the helper 1 stress without the helper's player confirming. This is table trust, on purpose: the helper said "I help" out loud, and the roller records it. The same-campaign and same-crew checks still apply (400). The one exception is a +1 that would fill the helper's stress track (trauma). Only the helper's player, the GM or staff may charge that box; anyone else gets 403 and the helper uses Assist on their own sheet (`POST /api/characters/{id}/assist-help/`, which checks the helper's rights itself). The roll lists the assist as "Assist (name, +1 stress)", and the helper's history records who marked the box.

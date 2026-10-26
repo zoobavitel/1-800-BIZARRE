@@ -21,13 +21,8 @@ The API follows RESTful principles, exposing resources (e.g., characters, stands
 
 The `urls.py` defines the API endpoints. A `DefaultRouter` from DRF automatically generates URL patterns for the registered `ViewSet`s. Key API endpoints include:
 
-*   `/api/heritages/`: Manage character heritages.
-*   `/api/vices/`: Manage character vices.
-*   `/api/abilities/`: Manage general abilities.
-*   `/api/stands/`: Manage Stands.
-*   `/api/stand-abilities/`: Manage Stand-specific abilities.
-*   `/api/hamon-abilities/`: Manage Hamon-specific abilities.
-*   `/api/spin-abilities/`: Manage Spin-specific abilities.
+*   `/api/heritages/`, `/api/vices/`, `/api/abilities/`, `/api/hamon-abilities/`, `/api/spin-abilities/`, `/api/claims/`, `/api/crew-playbooks/`, `/api/crew-special-abilities/`, `/api/crew-upgrades/`: the SRD catalogs. Anyone signed in can read them; only staff can create, edit or delete (`app/permissions.py` `IsStaffOrReadOnly`).
+*   A character's Stand and stand abilities are edited through the character body, not a route of their own.
 *   `/api/characters/`: Manage player characters.
 *   `/api/campaigns/`: Manage game campaigns.
 *   `/api/npcs/`: Manage Non-Player Characters.
@@ -268,7 +263,6 @@ These endpoints provide access to static or reference game data, often populated
 *   **`/api/heritages/` (GET)**: Retrieve a list of all available Heritages, including their associated Benefits and Detriments.
 *   **`/api/vices/` (GET)**: Retrieve a list of all available Vices.
 *   **`/api/abilities/` (GET)**: Retrieve a list of standard Abilities.
-*   **`/api/stand-abilities/` (GET)**: Retrieve a list of Stand-specific Abilities.
 *   **`/api/hamon-abilities/` (GET)**: Retrieve a list of Hamon-specific Abilities.
 *   **`/api/spin-abilities/` (GET)**: Retrieve a list of Spin-specific Abilities.
 *   **`/api/traumas/` (GET)**: Retrieve a list of Trauma types.
@@ -286,17 +280,14 @@ These endpoints are used for creating, retrieving, updating, and managing player
 These endpoints facilitate interactive game mechanics and character actions.
 
 *   **`/api/characters/{id}/roll-action/` (POST)**: Simulate a dice roll for a character action, considering action dots, attribute dice, position (controlled, risky, desperate), and effect (limited, standard, great).
-*   **`/api/characters/{id}/indulge-vice/` (POST)**: Allows a character to indulge their vice to reduce stress, recording the activity as a Downtime Activity.
-*   **`/api/characters/{id}/take-harm/` (POST)**: Records harm taken by a character at a specific level (1-4).
-*   **`/api/characters/{id}/heal-harm/` (POST)**: Heals a specific level of harm and advances the character's healing clock.
+*   Stress, harm and vice relief are saved on the sheet through `PATCH /api/characters/{id}/`; there are no separate harm or vice endpoints.
 
 ### 6.5. Progression and Tracking Endpoints
 
 These endpoints manage character advancement and various in-game tracking mechanisms.
 
 *   **`/api/characters/{id}/add-xp/` (POST)**: Adds experience points to a character's specific XP tracks (insight, prowess, resolve, heritage, playbook).
-*   **`/api/characters/{id}/add-progress-clock/` (POST)**: Creates a new progress clock associated with a character (e.g., for long-term projects, healing, or custom tracking).
-*   **`/api/characters/{id}/update-progress-clock/` (POST)**: Updates the filled segments of an existing progress clock.
+*   **`/api/progress-clocks/` (POST) and `/api/progress-clocks/{id}/` (PATCH)**: Create a progress clock (for a character, crew, faction or campaign) and change its segments.
 
 ### 6.6. Campaign and Crew Management Endpoints
 

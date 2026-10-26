@@ -429,9 +429,6 @@ def api_documentation(request):
                 'update': 'PUT /api/characters/{id}/',
                 'delete': 'DELETE /api/characters/{id}/',
                 'roll_action': 'POST /api/characters/{id}/roll-action/',
-                'indulge_vice': 'POST /api/characters/{id}/indulge-vice/',
-                'take_harm': 'POST /api/characters/{id}/take-harm/',
-                'heal_harm': 'POST /api/characters/{id}/heal-harm/',
                 'add_xp': 'POST /api/characters/{id}/add-xp/',
             },
             'campaigns': {
@@ -463,7 +460,6 @@ def api_documentation(request):
                 'heritages': 'GET /api/heritages/',
                 'vices': 'GET /api/vices/',
                 'abilities': 'GET /api/abilities/',
-                'stand_abilities': 'GET /api/stand-abilities/',
                 'hamon_abilities': 'GET /api/hamon-abilities/',
                 'spin_abilities': 'GET /api/spin-abilities/',
                 'traumas': 'GET /api/traumas/',
