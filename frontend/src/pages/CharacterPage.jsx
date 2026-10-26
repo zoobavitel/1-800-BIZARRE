@@ -36,10 +36,9 @@ import {
   mergeAbilitiesPreferRicherCustoms,
   mergeServerOwnedCharacterFields,
 } from "../features/character-sheet";
-import {
-  isCampaignSseHealthy,
-  subscribeCampaignEvents,
-} from "../features/character-sheet/services/campaignEvents";
+import { isCampaignSseHealthy } from "../features/character-sheet/services/campaignEvents";
+// One stream per browser, shared by its tabs (PR 5b).
+import { subscribeCampaignEventsShared } from "../features/character-sheet/services/campaignEventsShared";
 import { routeSheetEvents } from "../features/character-sheet/services/sheetSseRouting.mjs";
 import { shouldDropSupersededSaveResult } from "../features/character-sheet/utils/pcAutosaveQueue";
 import {
@@ -1783,7 +1782,7 @@ export default function CharacterPage({
         }
       }
     };
-    const unsub = subscribeCampaignEvents(campaignIdForRealtime, {
+    const unsub = subscribeCampaignEventsShared(campaignIdForRealtime, {
       onUpdate: (reason, event) => {
         const r = String(reason || "update");
         if (SHEET_ABORT_SSE_REASONS.has(r)) {
