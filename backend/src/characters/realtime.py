@@ -321,6 +321,12 @@ def broadcast_campaign_update(
         payload["character_id"] = character_id
     if session_id:
         payload["session_id"] = session_id
+    # Number the event so a reconnecting stream can replay it (PR 6).
+    from .campaign_event_log import append_event
+
+    event_id = append_event(campaign_id, payload)
+    if event_id:
+        payload["id"] = event_id
     client = get_redis_client()
     if client is not None:
         channel = channel_name(campaign_id)
