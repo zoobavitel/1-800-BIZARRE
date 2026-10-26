@@ -109,7 +109,6 @@ EXPECTED = {
     "DELETE /api/crews/{id}/ as member": (OPEN, "KNOWN HOLE, S5: any campaign member can delete the crew"),
     "POST /api/npcs/ as stranger": (OPEN, "KNOWN HOLE, S5: an NPC can be created inside a campaign you're not in"),
     "POST /api/progress-clocks/ as member": (OPEN, "KNOWN HOLE, S6: a member can bind a clock to another player's PC"),
-    **_both("POST", "/api/sessions/", OPEN, "KNOWN HOLE, S4: anyone can create a session in any campaign"),
     **_both("POST", "/api/equipment-items/", OPEN, "KNOWN HOLE, S7: anyone can create a global TEMPLATE item"),
     "POST /api/npcs/ as member": (OPEN, "KNOWN HOLE, S5: players may not create NPCs in a campaign; only its GM (user, 2026-10-26)"),
     **_both("POST", "/api/user-profiles/", ERROR, "KNOWN BUG, D: a second profile hits the unique constraint (500)"),
@@ -336,7 +335,6 @@ class PermissionMatrixTests(TestCase):
     # Positive controls known to 5xx today. The fix PR deletes its entry; a
     # stale entry fails like EXPECTED.
     KNOWN_CONTROL_ERRORS = {
-        "PUT /api/sessions/{id}/": "KNOWN BUG, S4: SessionSerializer.update assigns characters_involved directly (500)",
         "POST /api/user-profiles/": "KNOWN BUG, D: a second profile hits the unique constraint (500)",
     }
 
