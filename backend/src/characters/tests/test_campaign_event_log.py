@@ -44,6 +44,10 @@ class FakeStreamRedis:
     def expire(self, key, seconds):
         self.ttls[key] = seconds
 
+    def xrevrange(self, key, max="+", min="-", count=None):
+        entries = list(reversed(self.streams.get(key, [])))
+        return entries[:count] if count is not None else entries
+
     def xrange(self, key, min="-", max="+", count=None):
         entries = self.streams.get(key, [])
         out = []
@@ -102,6 +106,13 @@ class EventLogRedisTests(TestCase):
 
     def test_expired_log_needs_resync(self):
         self.assertIsNone(campaign_event_log.events_since(7, "1700000000001-0"))
+
+    def test_newest_id_is_the_last_event(self):
+        self.assertIsNone(campaign_event_log.newest_id(7))
+        broadcast_campaign_update(7, "a")
+        broadcast_campaign_update(7, "b")
+        newest = json.loads(self.fake.published[-1][1])["id"]
+        self.assertEqual(campaign_event_log.newest_id(7), newest)
 
     def test_bad_id_needs_resync(self):
         broadcast_campaign_update(7, "a")
@@ -208,7 +219,30 @@ class StreamReplayTests(TestCase):
             first = campaign_event_log.append_event(cid, {"type": "campaign_update"})
             campaign_event_log.append_event(cid, {"type": "campaign_update"})
         body = self._stream(last_event_id=first)
-        self.assertIn('data: {"type": "resync"}', body)
+        self.assertIn('data: {"type": "resync"', body)
+
+    def test_connected_frame_carries_the_newest_id(self):
+        cid = self.campaign.id
+        campaign_event_log.append_event(cid, {"type": "campaign_update"})
+        newest = campaign_event_log.append_event(cid, {"type": "campaign_update"})
+        body = self._stream()
+        self.assertIn(f'"cursor": "{newest}"', body)
+
+    def test_connected_frame_cursor_is_null_on_an_empty_log(self):
+        body = self._stream()
+        self.assertIn('"cursor": null', body)
+
+    def test_resync_frame_carries_the_newest_id(self):
+        cid = self.campaign.id
+        with patch.object(campaign_event_log, "MAX_EVENTS", 1):
+            first = campaign_event_log.append_event(cid, {"type": "campaign_update"})
+            newest = campaign_event_log.append_event(cid, {"type": "campaign_update"})
+        body = self._stream(last_event_id=first)
+        self.assertIn(f'data: {{"type": "resync", "cursor": "{newest}"}}', body)
+
+    def test_resync_on_an_expired_log_has_no_cursor(self):
+        body = self._stream(last_event_id="1700000000001-0")
+        self.assertIn('data: {"type": "resync", "cursor": null}', body)
 
     def test_no_last_event_id_means_no_replay(self):
         campaign_event_log.append_event(
@@ -277,6 +311,12 @@ class EventLogRealRedisTests(TestCase):
         self.assertEqual(campaign_event_log.events_since(3, ids[-1]), [])
         ttl = self.redis.ttl(campaign_event_log.stream_key(3))
         self.assertTrue(3500 < ttl <= 3600, ttl)
+
+    def test_newest_id_against_real_redis(self):
+        self.assertIsNone(campaign_event_log.newest_id(3))
+        campaign_event_log.append_event(3, {"type": "campaign_update"})
+        newest = campaign_event_log.append_event(3, {"type": "campaign_update"})
+        self.assertEqual(campaign_event_log.newest_id(3), newest)
 
     def test_trimmed_id_needs_resync(self):
         with patch.object(campaign_event_log, "MAX_EVENTS", 5):

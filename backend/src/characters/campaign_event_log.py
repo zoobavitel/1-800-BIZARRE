@@ -101,6 +101,32 @@ def append_event(campaign_id: int, payload: Dict[str, Any]) -> Optional[str]:
     return event_id
 
 
+def newest_id(campaign_id: int) -> Optional[str]:
+    """The id of the newest kept event, or None when the log is empty or unreadable.
+
+    Sent to the client as its cursor on connect and on resync, so a tab that
+    has seen no events, or whose id fell out of the log, resumes from a valid
+    id instead of resyncing on every reconnect.
+    """
+    client = _redis()
+    if client is not None:
+        try:
+            newest = client.xrevrange(stream_key(campaign_id), max="+", min="-", count=1)
+            return _decode(newest[0][0]) if newest else None
+        except Exception as exc:
+            logger.warning("campaign event log newest failed campaign=%s: %s", campaign_id, exc)
+            return None
+    now = time.monotonic()
+    with _lock:
+        entry = _local.get(campaign_id)
+        if entry is None:
+            return None
+        events, last_at, _seq = entry
+        if now - last_at > IDLE_SECONDS or not events:
+            return None
+        return events[-1]["id"]
+
+
 def events_since(campaign_id: int, last_id: Any) -> Optional[List[Dict[str, Any]]]:
     """Events after ``last_id``, oldest first; None when a replay can't be trusted."""
     last = parse_event_id(last_id)
