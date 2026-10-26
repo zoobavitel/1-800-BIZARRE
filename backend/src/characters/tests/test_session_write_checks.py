@@ -95,3 +95,35 @@ class SessionWriteCheckTests(TestCase):
         )
         self.assertEqual(response.status_code, 200, response.content)
         self.assertEqual(list(self.session.characters_involved.values_list("pk", flat=True)), [self.pc.pk])
+
+    # Players and their own loadout entry
+
+    def _player_loadout(self, user, pc):
+        self.client.force_authenticate(user)
+        return self.client.patch(
+            f"/api/sessions/{self.session.pk}/",
+            {"loadout_by_character": {str(pc.pk): {"band": "light"}}},
+            format="json",
+        )
+
+    def test_player_cannot_patch_another_players_loadout(self):
+        player2 = User.objects.create_user(username="sw_player2", password="pw-sw-player2-1")
+        self.campaign.players.add(player2)
+        Character.objects.create(
+            user=player2, campaign=self.campaign, true_name="SW PC2", heritage=self.pc.heritage
+        )
+        Character.objects.filter(pk=self.pc.pk).update(physical_armor_used=1)
+        response = self._player_loadout(player2, self.pc)
+        self.assertEqual(response.status_code, 403, response.content)
+        self.pc.refresh_from_db()
+        self.assertEqual(self.pc.physical_armor_used, 1)
+        self.session.refresh_from_db()
+        self.assertNotIn(str(self.pc.pk), self.session.loadout_by_character or {})
+
+    def test_player_with_two_pcs_can_save_loadout_for_either(self):
+        second = Character.objects.create(
+            user=self.player, campaign=self.campaign, true_name="SW PC B", heritage=self.pc.heritage
+        )
+        self.assertEqual(self._player_loadout(self.player, self.pc).status_code, 200)
+        self.assertEqual(self._player_loadout(self.player, second).status_code, 200)
+
