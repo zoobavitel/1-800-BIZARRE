@@ -109,7 +109,7 @@ Backend enforcement and `srd_*.json` fixtures: [backend-characters-core.md](back
 |------|------|
 | [`services/api.js`](../../frontend/src/features/character-sheet/services/api.js) | `characterAPI`, `campaignAPI`, `npcAPI`, `crewAPI`, `referenceAPI`; CRUD, rolls, reference data, transforms, `resolveMediaUrl` |
 | [`services/campaignEvents.js`](../../frontend/src/features/character-sheet/services/campaignEvents.js) | Campaign SSE subscription |
-| [`hooks/useCharacterSheet.js`](../../frontend/src/features/character-sheet/hooks/useCharacterSheet.js), [`useReferenceData.js`](../../frontend/src/features/character-sheet/hooks/useReferenceData.js) | Sheet state |
+| [`hooks/useReferenceData.js`](../../frontend/src/features/character-sheet/hooks/useReferenceData.js) | Reference data for the sheet |
 | [`constants/srd.js`](../../frontend/src/features/character-sheet/constants/srd.js) | SRD-aligned UI constants |
 | [`utils/`](../../frontend/src/features/character-sheet/utils/) | Roll outcome, dice pool, XP, position/effect defaults, ability/heritage bonus metadata |
 | [`index.js`](../../frontend/src/features/character-sheet/index.js) | Re-exports `characterAPI`, transforms, hooks |
