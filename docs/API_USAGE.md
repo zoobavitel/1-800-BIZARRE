@@ -120,6 +120,8 @@ The response is the updated character. Fields the server owns are not changed th
 
 **Stale-save check:** every character has a `version` that the server bumps on every write, including writes to its Stand, abilities and progress clocks. Send the `version` you last saw in the PATCH body to make the save conditional. If someone else saved since, the reply is `409` with `{"code": "version_conflict", "current": <the character as it is now>}` and nothing is written. A PATCH without `version` is applied as before. `version` itself can't be set.
 
+The character sheet's autosave sends `version` with only the fields the player edited. On a `409` it compares the reply's `current` with the copy it last saved against. If none of the edited fields changed on the server, it retries quietly with the new version, up to 3 times with backoff. If someone else changed a field the player also edited, the sheet pauses autosave and asks: **Reload** takes the server's value for those fields and keeps the other edits, and **Keep mine** saves the player's value against the new version.
+
 ## 5. Testing Endpoints (General)
 
 You can test any GET endpoint by providing your authentication token in the `Authorization` header.

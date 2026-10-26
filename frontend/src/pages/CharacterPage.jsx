@@ -41,7 +41,12 @@ import {
   subscribeCampaignEvents,
 } from "../features/character-sheet/services/campaignEvents";
 import { routeSheetEvents } from "../features/character-sheet/services/sheetSseRouting.mjs";
-import { shouldDropAbortedSaveResult } from "../features/character-sheet/utils/pcAutosaveQueue";
+import { shouldDropSupersededSaveResult } from "../features/character-sheet/utils/pcAutosaveQueue";
+import {
+  SupersededSaveError,
+  isSameOrNewerVersion,
+  runVersionedSheetPatch,
+} from "../features/character-sheet/utils/sheetVersion";
 import { useAuth } from "../features/auth";
 import { CharacterSheetWrapper } from "./CharacterSheet";
 import { characterHashFromIdAndName } from "../utils/spaNavigation";
@@ -595,6 +600,45 @@ export default function CharacterPage({
     charTabUnsavedMetaRef.current = charTabUnsavedMeta;
   }, [charTabUnsavedMeta]);
 
+  // Versioned sheet saves (PR 7b). The base is the server row a sheet's next
+  // save is checked against, keyed by character id. Silent conflict retries in
+  // a row are counted per character and reset on a successful save.
+  const serverBaseRef = useRef({});
+  const saveRetryCountRef = useRef({});
+
+  /** True while an open tab for this character has unsaved edits or a save. */
+  const characterHasUnsavedSheet = useCallback((characterId) => {
+    const metas = Object.values(charTabUnsavedMetaRef.current || {});
+    return metas.some(
+      (meta) =>
+        meta?.payload?.id != null &&
+        Number(meta.payload.id) === Number(characterId) &&
+        sheetTabIsProtected(meta),
+    );
+  }, []);
+
+  /**
+   * Store a server row as the sheet's base. Never moves the version backwards.
+   * With onlyIfClean, skip it while the sheet has unsaved edits: the sheet
+   * keeps old values on screen then, and the next save's 409 does the
+   * overlap check instead.
+   */
+  const adoptServerRow = useCallback(
+    (raw, { onlyIfClean = false } = {}) => {
+      if (raw?.id == null || typeof raw.version !== "number") return;
+      if (onlyIfClean && characterHasUnsavedSheet(raw.id)) return;
+      const held = serverBaseRef.current[raw.id];
+      if (!isSameOrNewerVersion(held?.version, raw.version)) return;
+      serverBaseRef.current[raw.id] = raw;
+    },
+    [characterHasUnsavedSheet],
+  );
+
+  const adoptServerRowIfClean = useCallback(
+    (raw) => adoptServerRow(raw, { onlyIfClean: true }),
+    [adoptServerRow],
+  );
+
   /**
    * Refresh campaigns list and merge full character detail into every open tab (GM edits, session P/E, etc.).
    * Always GET /characters/:id/ per open PC so stats stay aligned with the server.
@@ -612,6 +656,7 @@ export default function CharacterPage({
       ]);
       // Keep the current list when the fetch fails (see loadReferenceData).
       if (c != null) setCampaigns(c);
+      (chars || []).forEach(adoptServerRowIfClean);
       const front = (chars || []).map(transformBackendToFrontend);
       setCharacters(front);
       byId = new Map(front.map((x) => [x.id, x]));
@@ -638,6 +683,7 @@ export default function CharacterPage({
             }
             try {
               const raw = await characterAPI.getCharacter(t.characterId);
+              adoptServerRowIfClean(raw);
               const transformed = transformBackendToFrontend(raw);
               // Re-check after await: allocate/deallocate or edits may have
               // marked dirty while the GET was in flight; applying a stale
@@ -663,7 +709,7 @@ export default function CharacterPage({
       })();
       return prev;
     });
-  }, [bumpSheetSync]);
+  }, [bumpSheetSync, adoptServerRowIfClean]);
 
   // Full sync, no arguments. Callers pass event or row objects (e.g.
   // onFactionChange(created)), which must not reach onlyCharacterIds.
@@ -703,6 +749,7 @@ export default function CharacterPage({
     setCharactersError(null);
     try {
       const list = await characterAPI.getCharacters({ mine: true });
+      (list || []).forEach(adoptServerRowIfClean);
       const front = (list || []).map(transformBackendToFrontend);
       setCharacters(front);
       return front;
@@ -713,7 +760,7 @@ export default function CharacterPage({
     } finally {
       setCharactersLoading(false);
     }
-  }, []);
+  }, [adoptServerRowIfClean]);
 
   useEffect(() => {
     loadCharacters().then(async (front) => {
@@ -734,6 +781,7 @@ export default function CharacterPage({
         }
         try {
           const raw = await characterAPI.getCharacter(initialCharacterId);
+          adoptServerRowIfClean(raw);
           const ch = transformBackendToFrontend(raw);
           const tab = { tabId: nextTabId++, characterId: ch.id, character: ch };
           setCharTabs([tab]);
@@ -992,34 +1040,99 @@ export default function CharacterPage({
       // Server-owned fields: only include when the sheet marked them touched this draft.
       // Untouched omit lets concurrent roll/GM stress survive the PATCH.
       const touches = payload._fieldTouches || {};
-      if (!touches.stress) {
-        delete toSend.stress;
-      }
-      if (!touches.trauma) {
-        delete toSend.trauma;
-      }
-      if (!touches.coin) {
-        delete toSend.coin_boxes;
-      }
-      if (!touches.stash) {
-        delete toSend.stash_slots;
-      }
-      const withFile = {
-        ...toSend,
-        ...(isImageUploadPayload(frontend.imageFile)
-          ? { imageFile: frontend.imageFile }
-          : {}),
+      const dropUntouchedServerOwned = (body) => {
+        if (!touches.stress) {
+          delete body.stress;
+        }
+        if (!touches.trauma) {
+          delete body.trauma;
+        }
+        if (!touches.coin) {
+          delete body.coin_boxes;
+        }
+        if (!touches.stash) {
+          delete body.stash_slots;
+        }
+        return body;
       };
-      const saveOnce = async (savePayload, requestOptions = {}) => {
+      dropUntouchedServerOwned(toSend);
+      const fileFields = isImageUploadPayload(frontend.imageFile)
+        ? { imageFile: frontend.imageFile }
+        : {};
+      const withFile = { ...toSend, ...fileFields };
+
+      // Same pipeline as toSend, for the clean copy and server rows, so the
+      // versioned save compares like with like.
+      const bodyFromSheetLike = (src) => {
+        const fe = normalizeSheetPayloadToFrontend(src, traumaList);
+        fe.trauma = traumaObjectToIds(src.trauma || {}, traumaList);
+        return transformFrontendToBackend({
+          ...fe,
+          name: String(fe.name ?? "").trim() || nameForSave,
+          heritage: resolveHeritagePkForSave(fe.heritage, heritageList),
+          campaign: src.campaign ?? fe.campaign,
+        });
+      };
+      const bodyFromRaw = (raw) =>
+        bodyFromSheetLike(transformBackendToFrontend(raw));
+      const baseRaw = payload.id ? serverBaseRef.current[payload.id] : null;
+      // An existing character with an adopted server row saves only the
+      // fields the user edited, checked against that row's version.
+      const versioned = Boolean(payload.id && baseRaw);
+      if (payload.id && !baseRaw) {
+        console.warn(
+          "Sheet save: no server copy held for this character; saving without version",
+        );
+      }
+      const cleanBody = options.cleanPayload
+        ? bodyFromSheetLike(options.cleanPayload)
+        : null;
+      const retries = {
+        get: () => saveRetryCountRef.current[payload.id] || 0,
+        set: (n) => {
+          saveRetryCountRef.current[payload.id] = n;
+        },
+      };
+      let sentBody = withFile;
+      const saveOnce = async (savePayload) => {
+        if (versioned) {
+          const result = await runVersionedSheetPatch({
+            localBody: savePayload,
+            cleanBody,
+            base: {
+              raw: serverBaseRef.current[payload.id],
+              body: bodyFromRaw(serverBaseRef.current[payload.id]),
+            },
+            bodyFromRaw,
+            patch: (body) => characterAPI.patchCharacter(payload.id, body),
+            adopt: (raw) => adoptServerRow(raw),
+            retries,
+            excludeUnits: options.excludeUnits || [],
+          });
+          sentBody = result.sentBody;
+          return result.saved;
+        }
         // Existing characters must PATCH (partial). PUT was wiping omitted server-owned fields.
-        if (payload.id)
-          return characterAPI.patchCharacter(payload.id, savePayload, requestOptions);
-        return characterAPI.createCharacter(savePayload);
+        if (payload.id) {
+          const saved = await characterAPI.patchCharacter(payload.id, savePayload);
+          adoptServerRow(saved);
+          return saved;
+        }
+        const created = await characterAPI.createCharacter(savePayload);
+        adoptServerRow(created);
+        return created;
       };
+      // Prefer the local value for a field only when this save sent it. A
+      // versioned save leaves out fields the user didn't edit; for those the
+      // reply is the server's newer value, and keeping the local one would
+      // leave the sheet showing old data.
+      const sentField = (...keys) =>
+        !versioned ||
+        keys.some((k) => Object.prototype.hasOwnProperty.call(sentBody, k));
       try {
         let saved;
         try {
-          saved = await saveOnce(withFile, options);
+          saved = await saveOnce(withFile);
         } catch (err) {
           const msg = String(err?.message || "");
           const needsRequiredSelections =
@@ -1032,30 +1145,15 @@ export default function CharacterPage({
           );
           if (!repairedFrontend) throw err;
 
-          const repairedBackend = transformFrontendToBackend({
-            ...repairedFrontend,
-            heritage: heritageValue,
-            campaign: payload.campaign ?? frontend.campaign,
-          });
-          if (!touches.stress) {
-            delete repairedBackend.stress;
-          }
-          if (!touches.trauma) {
-            delete repairedBackend.trauma;
-          }
-          if (!touches.coin) {
-            delete repairedBackend.coin_boxes;
-          }
-          if (!touches.stash) {
-            delete repairedBackend.stash_slots;
-          }
-          const repairedWithFile = {
-            ...repairedBackend,
-            ...(isImageUploadPayload(frontend.imageFile)
-              ? { imageFile: frontend.imageFile }
-              : {}),
-          };
-          saved = await saveOnce(repairedWithFile, options);
+          const repairedBackend = dropUntouchedServerOwned(
+            transformFrontendToBackend({
+              ...repairedFrontend,
+              heritage: heritageValue,
+              campaign: payload.campaign ?? frontend.campaign,
+            }),
+          );
+          // The retry reads the held version again inside saveOnce.
+          saved = await saveOnce({ ...repairedBackend, ...fileFields });
         }
         if (
           saved?.rejected_fields &&
@@ -1067,12 +1165,11 @@ export default function CharacterPage({
             saved.rejected_fields,
           );
         }
-        // Aborted by a newer local edit — do not write tab character (stale echo).
-        // A create is never dropped: its reply carries the new id.
-        if (shouldDropAbortedSaveResult(payload.id, options?.signal)) {
-          const abortErr = new Error("Save aborted");
-          abortErr.name = "AbortError";
-          throw abortErr;
+        // Superseded by a newer local edit — do not write tab character (stale
+        // echo). The reply's version is already held above. A create is never
+        // dropped: its reply carries the new id.
+        if (shouldDropSupersededSaveResult(payload.id, options?.isSuperseded)) {
+          throw new SupersededSaveError();
         }
         if (!payload.id && saved.id && typeof window !== "undefined")
           window.location.hash = characterHashFromIdAndName(
@@ -1133,25 +1230,36 @@ export default function CharacterPage({
           ...savedFrontend,
           // Prefer the draft we just sent for chargen placements — a late older
           // PATCH echo must not snap action dots / Stand Coin back.
-          actionRatings:
-            frontend.actionRatings ?? savedFrontend.actionRatings,
-          standStats: frontend.standStats ?? savedFrontend.standStats,
+          actionRatings: sentField("action_dots")
+            ? (frontend.actionRatings ?? savedFrontend.actionRatings)
+            : savedFrontend.actionRatings,
+          standStats: sentField("stand", "coin_stats")
+            ? (frontend.standStats ?? savedFrontend.standStats)
+            : savedFrontend.standStats,
           crew: payload.crew ?? savedFrontend.crew,
           crewId: payload.crewId ?? savedFrontend.crewId,
           image: savedFrontend.image,
           image_url: isImageUploadPayload(payload.imageFile)
             ? savedFrontend.image_url || ""
-            : (payload.image_url ?? savedFrontend.image_url),
-          vice: payload.vice ?? savedFrontend.vice,
-          viceDetails:
-            payload.viceDetails ??
-            payload.vice_details ??
-            savedFrontend.viceDetails,
-          closeFriend:
-            payload.closeFriend ??
-            payload.close_friend ??
-            savedFrontend.closeFriend,
-          rival: payload.rival ?? savedFrontend.rival,
+            : sentField("image_url")
+              ? (payload.image_url ?? savedFrontend.image_url)
+              : savedFrontend.image_url,
+          vice: sentField("vice", "custom_vice")
+            ? (payload.vice ?? savedFrontend.vice)
+            : savedFrontend.vice,
+          viceDetails: sentField("vice_details")
+            ? (payload.viceDetails ??
+              payload.vice_details ??
+              savedFrontend.viceDetails)
+            : savedFrontend.viceDetails,
+          closeFriend: sentField("close_friend")
+            ? (payload.closeFriend ??
+              payload.close_friend ??
+              savedFrontend.closeFriend)
+            : savedFrontend.closeFriend,
+          rival: sentField("rival")
+            ? (payload.rival ?? savedFrontend.rival)
+            : savedFrontend.rival,
           personal_crew_name:
             payload.personal_crew_name ??
             savedFrontend.personal_crew_name ??
@@ -1201,6 +1309,7 @@ export default function CharacterPage({
             );
             const touchesInv = payload._fieldTouches?.inventory;
             if (touchesInv) return fromPayload;
+            if (!sentField("inventory")) return fromServer;
             if (
               saved &&
               Object.prototype.hasOwnProperty.call(saved, "inventory") &&
@@ -1215,6 +1324,9 @@ export default function CharacterPage({
           sheetNotes: (() => {
             const fromPayload =
               payload.sheetNotes ?? frontend.sheetNotes ?? "";
+            if (!sentField("background_note2")) {
+              return savedFrontend.sheetNotes ?? "";
+            }
             if (
               saved &&
               Object.prototype.hasOwnProperty.call(saved, "background_note2")
@@ -1236,6 +1348,7 @@ export default function CharacterPage({
               payload.npc_standing ??
               {};
             const fromServer = savedFrontend.npcStanding ?? {};
+            if (!sentField("npc_standing")) return { ...fromServer };
             const payloadKeys = Object.keys(fromPayload || {});
             const serverKeys = Object.keys(fromServer || {});
             if (
@@ -1252,20 +1365,33 @@ export default function CharacterPage({
               : { ...fromServer };
           })(),
           // Prefer richer payload customs when echo lost/weakened the unique package.
-          abilities: mergeAbilitiesPreferRicherCustoms(
-            Array.isArray(frontend.abilities) ? frontend.abilities : [],
-            Array.isArray(savedFrontend.abilities)
+          abilities: !sentField(
+            "standard_abilities",
+            "hamon_ability_ids",
+            "spin_ability_ids",
+            "custom_ability_type",
+          )
+            ? Array.isArray(savedFrontend.abilities)
               ? savedFrontend.abilities
-              : [],
-            { emptyPreferredClearsCustoms: true },
-          ),
+              : []
+            : mergeAbilitiesPreferRicherCustoms(
+                Array.isArray(frontend.abilities) ? frontend.abilities : [],
+                Array.isArray(savedFrontend.abilities)
+                  ? savedFrontend.abilities
+                  : [],
+                { emptyPreferredClearsCustoms: true },
+              ),
         };
-        if (shouldDropAbortedSaveResult(payload.id, options?.signal)) {
-          const abortErr = new Error("Save aborted");
-          abortErr.name = "AbortError";
-          throw abortErr;
+        if (shouldDropSupersededSaveResult(payload.id, options?.isSuperseded)) {
+          throw new SupersededSaveError();
         }
-        updateActiveCharTab(merged.id, merged);
+        if (options.reloadAfter) {
+          // Conflict "Reload": show the server copy, which now holds this
+          // save's non-conflicting edits, and reset the sheet's draft.
+          handleCharacterReloaded(transformBackendToFrontend(saved));
+        } else {
+          updateActiveCharTab(merged.id, merged);
+        }
         await loadCharacters();
       } catch (err) {
         console.error("Save character failed:", err);
@@ -1277,9 +1403,23 @@ export default function CharacterPage({
       heritages,
       loadCharacters,
       updateActiveCharTab,
+      handleCharacterReloaded,
+      adoptServerRow,
       charTabs,
       activeCharTabId,
     ],
+  );
+
+  // Conflict banner "Reload": save the edits that don't conflict, then show
+  // the server copy. The conflicting fields take the server's values.
+  const handleReloadSheetConflict = useCallback(
+    (payload, { cleanPayload, units } = {}) =>
+      handleSaveCharacter(payload, {
+        cleanPayload,
+        excludeUnits: units || [],
+        reloadAfter: true,
+      }),
+    [handleSaveCharacter],
   );
 
   const handleSwitchCharacter = useCallback(
@@ -1987,6 +2127,7 @@ export default function CharacterPage({
           let front = fromList;
           if (!front) {
             const raw = await characterAPI.getCharacter(targetChar.id);
+            adoptServerRowIfClean(raw);
             front = transformBackendToFrontend(raw);
           }
           setMode(MODES.CHARACTER);
@@ -2002,7 +2143,7 @@ export default function CharacterPage({
         }
       })();
     },
-    [characters, openCharacterInTab],
+    [characters, openCharacterInTab, adoptServerRowIfClean],
   );
 
   // ── Render ───────────────────────────────────────────────────────────────
@@ -2400,6 +2541,8 @@ export default function CharacterPage({
             onCrewNameUpdated={handleCrewNameUpdated}
             onCampaignRefresh={refreshCampaigns}
             onCharacterReloaded={handleCharacterReloaded}
+            onReloadSheetConflict={handleReloadSheetConflict}
+            onServerCharacter={adoptServerRowIfClean}
             sessionDataPollTick={sheetPollTick}
             sheetSync={sheetSync}
             sheetRealtimeReason={sheetRealtimeReason}
