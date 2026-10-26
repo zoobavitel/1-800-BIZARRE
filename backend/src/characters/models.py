@@ -1712,6 +1712,12 @@ class CampaignAuditLog(models.Model):
         return f"{self.action} @ {self.timestamp}"
 
 
+# Bookkeeping columns, not sheet data. "version" is the stale-save counter:
+# while a save runs it holds an unevaluated F() expression, and undo/redo
+# must never write it back.
+CHARACTER_HISTORY_IGNORED_FIELDS = frozenset({"version"})
+
+
 def _character_scalar_snapshot(character):
     """Serialize concrete scalar fields for history diffing."""
     snap = {}
@@ -1720,6 +1726,8 @@ def _character_scalar_snapshot(character):
             continue
         name = field.name
         if field.many_to_many:
+            continue
+        if name in CHARACTER_HISTORY_IGNORED_FIELDS:
             continue
         internal = field.get_internal_type()
         try:
