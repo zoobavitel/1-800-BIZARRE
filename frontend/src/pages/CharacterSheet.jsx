@@ -1462,7 +1462,18 @@ const CharacterSheetWrapper = ({
     };
   }, [character?.id]);
 
+  // A server sync resets the dedupe baseline, so the next render's payload,
+  // which then holds the server's values, counts as saved. Not while this
+  // sheet has unsaved edits: the new baseline would include them, and the
+  // pending autosave would skip them as already saved. That dropped an edit
+  // whenever an event for this character (another device's save, a roll
+  // marking stress) arrived inside the autosave debounce.
   useEffect(() => {
+    if (dirtyIntentRef.current) return;
+    if (lastSavedPayloadRef.current != null && buildPayloadRef.current) {
+      const now = sheetPayloadDedupeKey(buildPayloadRef.current());
+      if (now !== lastSavedPayloadRef.current) return;
+    }
     lastSavedPayloadRef.current = null;
     cleanPayloadRef.current = null;
   }, [tickFull, tickCharacter]);
