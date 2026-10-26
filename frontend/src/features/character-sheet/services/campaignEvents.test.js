@@ -120,3 +120,119 @@ describe("subscribeCampaignEvents tickets", () => {
     expect(FakeEventSource.instances).toHaveLength(0);
   });
 });
+
+describe("subscribeCampaignEvents eviction (PR 5a)", () => {
+  let unsub;
+  let visibility;
+
+  const send = (es, data) => es.onmessage({ data: JSON.stringify(data) });
+  const setVisible = (v) => {
+    visibility = v;
+    document.dispatchEvent(new Event("visibilitychange"));
+  };
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    FakeEventSource.instances = [];
+    global.EventSource = FakeEventSource;
+    localStorage.setItem("authToken", "secret-login-token");
+    visibility = "hidden";
+    jest
+      .spyOn(document, "visibilityState", "get")
+      .mockImplementation(() => visibility);
+    let n = 0;
+    global.fetch = jest.fn(async () => {
+      n += 1;
+      return ticketResponse(`t${n}`);
+    });
+  });
+
+  afterEach(() => {
+    unsub?.();
+    unsub = null;
+    jest.restoreAllMocks();
+    jest.useRealTimers();
+    localStorage.clear();
+    delete global.fetch;
+    delete global.EventSource;
+  });
+
+  async function evictedStream(onUpdate = () => {}) {
+    unsub = subscribeCampaignEvents(7, { onUpdate });
+    await flush();
+    const es = FakeEventSource.instances[0];
+    send(es, { type: "connected" });
+    send(es, { type: "evicted" });
+    // The server closes the response right after the frame.
+    es.onerror?.();
+    return es;
+  }
+
+  test("an evicted stream closes and does not reconnect on its own", async () => {
+    const es = await evictedStream();
+    expect(es.closed).toBe(true);
+
+    jest.advanceTimersByTime(10 * 60_000);
+    await flush();
+    expect(FakeEventSource.instances).toHaveLength(1);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  test("the tab becoming visible reconnects once and catches up", async () => {
+    const onUpdate = jest.fn();
+    await evictedStream(onUpdate);
+    onUpdate.mockClear();
+
+    setVisible("visible");
+    window.dispatchEvent(new Event("focus"));
+    await flush();
+    expect(FakeEventSource.instances).toHaveLength(2);
+    expect(FakeEventSource.instances[1].url).toContain("?ticket=t2");
+
+    send(FakeEventSource.instances[1], { type: "connected" });
+    expect(onUpdate).toHaveBeenCalledWith("update", { reason: "update" });
+  });
+
+  test("window focus reconnects an evicted stream", async () => {
+    await evictedStream();
+    // Visible without a visibilitychange (e.g. the tab was already in front).
+    visibility = "visible";
+    window.dispatchEvent(new Event("focus"));
+    await flush();
+    expect(FakeEventSource.instances).toHaveLength(2);
+  });
+
+  test("becoming hidden does not reconnect", async () => {
+    await evictedStream();
+    setVisible("hidden");
+    await flush();
+    expect(FakeEventSource.instances).toHaveLength(1);
+  });
+
+  test("focus on a live stream opens no second stream", async () => {
+    unsub = subscribeCampaignEvents(7, { onUpdate: () => {} });
+    await flush();
+    send(FakeEventSource.instances[0], { type: "connected" });
+    window.dispatchEvent(new Event("focus"));
+    setVisible("visible");
+    await flush();
+    expect(FakeEventSource.instances).toHaveLength(1);
+  });
+
+  test("after an evict the stream reads unhealthy at 35 s, so polling resumes", async () => {
+    const { isCampaignSseHealthy } = require("./campaignEvents");
+    await evictedStream();
+    expect(isCampaignSseHealthy(unsub)).toBe(true);
+    jest.advanceTimersByTime(36_000);
+    expect(isCampaignSseHealthy(unsub)).toBe(false);
+  });
+
+  test("unsubscribe stops wake events from reconnecting", async () => {
+    await evictedStream();
+    unsub();
+    unsub = null;
+    window.dispatchEvent(new Event("focus"));
+    await flush();
+    expect(FakeEventSource.instances).toHaveLength(1);
+  });
+});
