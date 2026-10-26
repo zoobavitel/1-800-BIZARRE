@@ -280,17 +280,14 @@ These endpoints are used for creating, retrieving, updating, and managing player
 These endpoints facilitate interactive game mechanics and character actions.
 
 *   **`/api/characters/{id}/roll-action/` (POST)**: Simulate a dice roll for a character action, considering action dots, attribute dice, position (controlled, risky, desperate), and effect (limited, standard, great).
-*   **`/api/characters/{id}/indulge-vice/` (POST)**: Allows a character to indulge their vice to reduce stress, recording the activity as a Downtime Activity.
-*   **`/api/characters/{id}/take-harm/` (POST)**: Records harm taken by a character at a specific level (1-4).
-*   **`/api/characters/{id}/heal-harm/` (POST)**: Heals a specific level of harm and advances the character's healing clock.
+*   Stress, harm and vice relief are saved on the sheet through `PATCH /api/characters/{id}/`; there are no separate harm or vice endpoints.
 
 ### 6.5. Progression and Tracking Endpoints
 
 These endpoints manage character advancement and various in-game tracking mechanisms.
 
 *   **`/api/characters/{id}/add-xp/` (POST)**: Adds experience points to a character's specific XP tracks (insight, prowess, resolve, heritage, playbook).
-*   **`/api/characters/{id}/add-progress-clock/` (POST)**: Creates a new progress clock associated with a character (e.g., for long-term projects, healing, or custom tracking).
-*   **`/api/characters/{id}/update-progress-clock/` (POST)**: Updates the filled segments of an existing progress clock.
+*   **`/api/progress-clocks/` (POST) and `/api/progress-clocks/{id}/` (PATCH)**: Create a progress clock (for a character, crew, faction or campaign) and change its segments.
 
 ### 6.6. Campaign and Crew Management Endpoints
 
