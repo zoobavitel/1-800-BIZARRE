@@ -1730,19 +1730,37 @@ const CharacterSheetWrapper = ({
     );
   }, [character?.id, character?.disguised_as_human]);
 
-  // When parent merges id before full GET/list row arrives, fill empty identity from server (avoid PATCH wiping true_name, etc.)
+  // Name, Stand name, Background and Look follow the server copy while this
+  // sheet has no unsaved edits, so another device's or the GM's change shows
+  // up (it used to fill only empty fields, so an edit elsewhere never
+  // appeared). While the sheet has edits they stay as typed; the versioned
+  // save's conflict check handles overlaps. A blank server name is never
+  // taken: the server rejects a blank true_name, so it means a partial row.
+  // Before the character has an id, only empty fields are filled.
   useEffect(() => {
-    if (sheetDraftIsDirty) return;
+    if (sheetDraftIsDirty || dirtyIntentRef.current) return;
     setCharData((prev) => {
       const patch = {};
-      const n = character?.id ? (character?.name ?? "") : "";
-      if (n && !(prev.name || "").trim()) patch.name = n;
-      const sn = character?.standName ?? "";
-      if (sn && !(prev.standName || "").trim()) patch.standName = sn;
-      const bg = character?.background ?? "";
-      if (bg && !(prev.background || "").trim()) patch.background = bg;
-      const look = character?.look ?? "";
-      if (look && !(prev.look || "").trim()) patch.look = look;
+      if (character?.id) {
+        const fromServer = {
+          name: character?.name,
+          standName: character?.standName,
+          background: character?.background,
+          look: character?.look,
+        };
+        for (const [key, v] of Object.entries(fromServer)) {
+          if (typeof v !== "string") continue;
+          if (key === "name" && !v.trim()) continue;
+          if ((prev[key] ?? "") !== v) patch[key] = v;
+        }
+      } else {
+        const sn = character?.standName ?? "";
+        if (sn && !(prev.standName || "").trim()) patch.standName = sn;
+        const bg = character?.background ?? "";
+        if (bg && !(prev.background || "").trim()) patch.background = bg;
+        const look = character?.look ?? "";
+        if (look && !(prev.look || "").trim()) patch.look = look;
+      }
       return Object.keys(patch).length ? { ...prev, ...patch } : prev;
     });
   }, [
