@@ -99,8 +99,11 @@ def campaign_events_stream(request, campaign_id):
             next_heartbeat = time.monotonic() + heartbeat
             while time.monotonic() < deadline:
                 if not holds_slot(user.id, cid, stream_id):
-                    # A newer stream from this user replaced this one; free the thread.
+                    # A newer stream from this user replaced this one; free the
+                    # thread. Say so first: a client that reconnected on its
+                    # own would evict another of its streams, and so on.
                     logger.info("sse evict campaign=%s user=%s", cid, user.id)
+                    yield f"data: {json.dumps({'type': 'evicted'})}\n\n"
                     break
                 now = time.monotonic()
                 wait = min(next_heartbeat - now, slot_check, deadline - now)

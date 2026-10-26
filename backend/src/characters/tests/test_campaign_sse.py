@@ -119,6 +119,20 @@ class SSEStreamCapTests(TestCase):
         body = b"".join(r.streaming_content).decode()
         self.assertLess(time.monotonic() - started, 2)
         self.assertIn('"type": "connected"', body)
+        # Tell the client it was replaced, so it stops instead of reconnecting
+        # and evicting another of its own streams (PR 5a).
+        self.assertTrue(body.rstrip().endswith('data: {"type": "evicted"}'), body)
+
+    @override_settings(
+        SSE_STREAM_MAX_SECONDS=0.05,
+        SSE_HEARTBEAT_SECONDS=10,
+        SSE_SLOT_CHECK_SECONDS=0.01,
+    )
+    def test_stream_that_times_out_is_not_marked_evicted(self):
+        r = self.client.get(stream_path(self.client, self.token, self.campaign.id))
+        body = b"".join(r.streaming_content).decode()
+        self.assertIn('"type": "connected"', body)
+        self.assertNotIn('"evicted"', body)
 
 
 class FakeTicketRedis:
