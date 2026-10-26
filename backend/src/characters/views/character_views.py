@@ -90,7 +90,7 @@ def _character_queryset_for_user(user):
 _character_queryset_detail = _character_queryset_for_user
 
 def _max_stress_for_character(character):
-    """Stress track length. Durability does not change box count (always 9)."""
+    """Stress track length: 9, or 8 to 12 from the Stand's Durability grade."""
     return max_stress_slots_for_character(character)
 
 def _user_may_edit_character(user, character):
@@ -397,6 +397,13 @@ class CharacterViewSet(viewsets.ModelViewSet):
     def roll_action(self, request, pk=None):
         """Roll dice for a character action. Supports position, effect, push (stress), and persists to Roll when session_id provided."""
         character = self.get_object()
+        # get_object() only proves the caller can see this PC (any campaign
+        # member can). Rolling writes its stress, XP and roll log, so it
+        # needs edit rights: the owner, the campaign GM, or staff.
+        if not _user_may_edit_character(request.user, character):
+            raise PermissionDenied(
+                "Only this character's player or the GM can roll for it."
+            )
         action_name = request.data.get("action")
         session_id = request.data.get("session_id")
 
@@ -1230,6 +1237,29 @@ class CharacterViewSet(viewsets.ModelViewSet):
                         ),
                     )
                     helper_max_stress = _max_stress_for_character(assist_helper)
+                    # Table trust, on purpose: the roller may charge a crewmate
+                    # 1 stress without that player clicking anything (they said
+                    # "I help" out loud). The helper-initiated assist-help flow
+                    # checks rights instead. The exception is the box that
+                    # fills the track (trauma): only the helper's player or
+                    # the GM may mark it. Don't "fix" this asymmetry without
+                    # asking the table.
+                    if (
+                        not prepaid
+                        and hs + 1 >= helper_max_stress
+                        and not _user_may_edit_character(request.user, assist_helper)
+                    ):
+                        helper_name = (assist_helper.true_name or "").strip() or "the helper"
+                        return Response(
+                            {
+                                "error": (
+                                    f"This assist would fill {helper_name}'s stress "
+                                    "track. Only their player or the GM can mark "
+                                    "that box: ask them to use Assist on their own sheet."
+                                )
+                            },
+                            status=status.HTTP_403_FORBIDDEN,
+                        )
                     if not prepaid:
                         if hs >= helper_max_stress:
                             return Response(
@@ -1241,7 +1271,13 @@ class CharacterViewSet(viewsets.ModelViewSet):
                                 status=status.HTTP_400_BAD_REQUEST,
                             )
                         assist_helper.stress = min(helper_max_stress, hs + 1)
-                        assist_helper.save(update_fields=["stress"])
+                        # Record the roller as the editor, so the helper's
+                        # history says who marked the box.
+                        history_token = bind_character_history_editor(request.user)
+                        try:
+                            assist_helper.save(update_fields=["stress"])
+                        finally:
+                            reset_character_history_editor(history_token)
                     elif prepaid:
                         AssistHelpPending.objects.filter(pk=pending_row.pk).delete()
 
@@ -1249,7 +1285,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
                     modifier_sources.append(
                         {
                             "kind": "assist",
-                            "name": f"Assist ({assist_helper.true_name})",
+                            "name": f"Assist ({assist_helper.true_name}, +1 stress)",
                             "delta": "+1d",
                             "category": "system",
                         }

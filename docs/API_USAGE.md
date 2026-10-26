@@ -139,3 +139,9 @@ For more detailed information on available endpoints and their parameters, refer
 ```bash
 curl -X GET http://127.0.0.1:8000/api/docs/
 ```
+
+## 6. Rolling and assists
+
+`POST /api/characters/{id}/roll-action/` needs edit rights on that character: its player, the campaign GM, or staff. Any other campaign member gets 403, even though they can see the character.
+
+An inline assist (`assist_helper_id` on the roller's request) charges the helper 1 stress without the helper's player confirming. This is table trust, on purpose: the helper said "I help" out loud, and the roller records it. The same-campaign and same-crew checks still apply (400). The one exception is a +1 that would fill the helper's stress track (trauma). Only the helper's player, the GM or staff may charge that box; anyone else gets 403 and the helper uses Assist on their own sheet (`POST /api/characters/{id}/assist-help/`, which checks the helper's rights itself). The roll lists the assist as "Assist (name, +1 stress)", and the helper's history records who marked the box.
