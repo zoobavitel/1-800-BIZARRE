@@ -324,6 +324,52 @@ describe("subscribeCampaignEvents replay (PR 6)", () => {
     expect(onUpdate).toHaveBeenCalledWith("update", { reason: "update" });
   });
 
+  test("after a resync with an empty log, quiet reconnects stop refetching", async () => {
+    const onUpdate = jest.fn();
+    const second = await reconnectAfter(1000, onUpdate);
+    send(second, { type: "connected", replay: true, cursor: null });
+    send(second, { type: "resync", cursor: null });
+    onUpdate.mockClear();
+    // Quick rollovers with no events: no stale id, no refetch each time.
+    for (let i = 0; i < 3; i += 1) {
+      const es = FakeEventSource.instances[FakeEventSource.instances.length - 1];
+      send(es, { type: "heartbeat" });
+      es.onerror();
+      jest.advanceTimersByTime(3500);
+      await flush();
+      const next = FakeEventSource.instances[FakeEventSource.instances.length - 1];
+      expect(next.url).not.toContain("last_event_id");
+      send(next, { type: "connected", replay: true, cursor: null });
+    }
+    expect(onUpdate).not.toHaveBeenCalled();
+  });
+
+  test("a resync hands over the server's newest id", async () => {
+    const second = await reconnectAfter(1000, () => {});
+    send(second, { type: "connected", replay: true });
+    send(second, { type: "resync", cursor: "1700000009999-0" });
+    second.onerror();
+    jest.advanceTimersByTime(60_000);
+    await flush();
+    expect(FakeEventSource.instances[2].url).toContain(
+      "last_event_id=1700000009999-0",
+    );
+  });
+
+  test("a fresh stream takes the server's newest id as its cursor", async () => {
+    unsub = subscribeCampaignEvents(7, { onUpdate: () => {} });
+    await flush();
+    const first = FakeEventSource.instances[0];
+    send(first, { type: "connected", replay: true, cursor: "1700000005555-0" });
+    send(first, { type: "heartbeat" });
+    first.onerror();
+    jest.advanceTimersByTime(60_000);
+    await flush();
+    expect(FakeEventSource.instances[1].url).toContain(
+      "last_event_id=1700000005555-0",
+    );
+  });
+
   test("replayed ids move the cursor for the next reconnect", async () => {
     const second = await reconnectAfter(1000, () => {});
     send(second, { type: "connected", replay: true });
