@@ -80,6 +80,17 @@ def _count_real_pcs():
     )
 
 
+def top_heritages(counts, limit=3):
+    """The most used heritages; ties in name order.
+
+    Counter.most_common keeps insertion order for ties, and the counts come
+    from an unordered GROUP BY, so Postgres could return tied heritages in
+    any order.
+    """
+    ranked = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+    return [{'name': name, 'count': count} for name, count in ranked[:limit]]
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def site_stats(request):
@@ -105,10 +116,7 @@ def site_stats(request):
         name = row['heritage__name'] or '—'
         h_counter[name] += row['c']
 
-    top_heritages = [
-        {'name': name, 'count': count}
-        for name, count in h_counter.most_common(3)
-    ]
+    top = top_heritages(h_counter)
 
     return Response(
         {
@@ -118,7 +126,7 @@ def site_stats(request):
             'pc_count': _count_real_pcs(),
             'npc_count': NPC.objects.count(),
             'playbook_counts': playbook_counts,
-            'top_heritages': top_heritages,
+            'top_heritages': top,
         }
     )
 
