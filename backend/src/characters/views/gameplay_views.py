@@ -3,9 +3,11 @@ from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 
+from app.permissions import IsStaffOrReadOnly
+
 from ..models import (
     Claim, CrewSpecialAbility, CrewPlaybook, CrewUpgrade,
-    Character, XPHistory, StressHistory, ChatMessage, ProgressClock,
+    Character, XPHistory, ProgressClock,
     CampaignAuditLog,
 )
 
@@ -34,31 +36,30 @@ def _log_progress_clock_audit(clock, user, action, extra=None):
     )
 from ..serializers import (
     ClaimSerializer, CrewSpecialAbilitySerializer, CrewPlaybookSerializer,
-    CrewUpgradeSerializer, XPHistorySerializer, StressHistorySerializer,
-    ChatMessageSerializer, ProgressClockSerializer
+    CrewUpgradeSerializer, XPHistorySerializer, ProgressClockSerializer
 )
 
 
 class ClaimViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsStaffOrReadOnly]
     queryset = Claim.objects.all()
     serializer_class = ClaimSerializer
 
 
 class CrewSpecialAbilityViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsStaffOrReadOnly]
     queryset = CrewSpecialAbility.objects.all()
     serializer_class = CrewSpecialAbilitySerializer
 
 
 class CrewPlaybookViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsStaffOrReadOnly]
     queryset = CrewPlaybook.objects.all()
     serializer_class = CrewPlaybookSerializer
 
 
 class CrewUpgradeViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsStaffOrReadOnly]
     queryset = CrewUpgrade.objects.all()
     serializer_class = CrewUpgradeSerializer
 
@@ -81,18 +82,6 @@ class XPHistoryViewSet(viewsets.ReadOnlyModelViewSet):
                 return qs.filter(character_id=char_id)
             return XPHistory.objects.none()
         return qs.filter(character__user=user)
-
-
-class StressHistoryViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
-    queryset = StressHistory.objects.all()
-    serializer_class = StressHistorySerializer
-
-
-class ChatMessageViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
-    queryset = ChatMessage.objects.all()
-    serializer_class = ChatMessageSerializer
 
 
 class ProgressClockViewSet(viewsets.ModelViewSet):

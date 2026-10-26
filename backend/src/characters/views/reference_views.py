@@ -6,14 +6,16 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from app.permissions import IsStaffOrReadOnly
+
 from ..models import (
-    Heritage, Vice, Ability, Stand, StandAbility, HamonAbility, SpinAbility,
+    Heritage, Vice, Ability, HamonAbility, SpinAbility,
     Trauma, CharacterHistory, CrewHistory, Character, ExperienceTracker, Campaign,
     Crew,
 )
 from ..serializers import (
-    HeritageSerializer, ViceSerializer, AbilitySerializer, StandSerializer,
-    StandAbilitySerializer, HamonAbilitySerializer, SpinAbilitySerializer,
+    HeritageSerializer, ViceSerializer, AbilitySerializer,
+    HamonAbilitySerializer, SpinAbilitySerializer,
     TraumaSerializer, CharacterHistorySerializer, CrewHistorySerializer,
     ExperienceTrackerSerializer,
 )
@@ -32,7 +34,7 @@ SESSION_TRIGGER_DESCRIPTION_PREFIX = "Session XP trigger"
 LEGACY_MANUAL_TOGGLE_DESCRIPTION_PREFIX = "Manual session XP toggle"
 
 class HeritageViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsStaffOrReadOnly]
     queryset = Heritage.objects.all()
     serializer_class = HeritageSerializer
 
@@ -41,32 +43,22 @@ class HeritageViewSet(viewsets.ModelViewSet):
         return Heritage.objects.exclude(name__in=["H", "H2"])
 
 class ViceViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsStaffOrReadOnly]
     queryset = Vice.objects.all()
     serializer_class = ViceSerializer
 
 class AbilityViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsStaffOrReadOnly]
     queryset = Ability.objects.all()
     serializer_class = AbilitySerializer
 
-class StandViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
-    queryset = Stand.objects.all()
-    serializer_class = StandSerializer
-
-class StandAbilityViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
-    queryset = StandAbility.objects.all()
-    serializer_class = StandAbilitySerializer
-
 class HamonAbilityViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsStaffOrReadOnly]
     queryset = HamonAbility.objects.all()
     serializer_class = HamonAbilitySerializer
 
 class SpinAbilityViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsStaffOrReadOnly]
     queryset = SpinAbility.objects.all()
     serializer_class = SpinAbilitySerializer
 
