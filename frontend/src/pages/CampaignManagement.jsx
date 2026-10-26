@@ -16,10 +16,9 @@ import { normalizeListResponse } from "../features/character-sheet/services/api"
 import { EQUIPMENT_CATEGORY_OPTIONS, categoryLabel } from "../features/character-sheet/utils/loadoutUtils";
 import { isGmManagedProgressClock } from "../features/character-sheet/utils/progressClockVisibility";
 import { useAuth } from "../features/auth";
-import {
-  isCampaignSseHealthy,
-  subscribeCampaignEvents,
-} from "../features/character-sheet/services/campaignEvents";
+import { isCampaignSseHealthy } from "../features/character-sheet/services/campaignEvents";
+// One stream per browser, shared by its tabs (PR 5b).
+import { subscribeCampaignEventsShared } from "../features/character-sheet/services/campaignEventsShared";
 import {
   pickSessionPanelRefetches,
   SESSION_PANEL_HEAVY_REASONS,
@@ -3844,7 +3843,7 @@ function SessionDetail({
         }
       }, 350);
     };
-    const unsubscribe = subscribeCampaignEvents(campaign.id, {
+    const unsubscribe = subscribeCampaignEventsShared(campaign.id, {
       onUpdate: schedule,
     });
     sessionSseUnsubRef.current = unsubscribe;
