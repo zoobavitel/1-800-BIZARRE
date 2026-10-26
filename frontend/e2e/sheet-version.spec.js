@@ -33,7 +33,8 @@ async function api(request, method, path, data) {
 }
 
 test.beforeAll(async ({ request }) => {
-  const username = `e2e_ver_${Date.now()}`;
+  // Random suffix: parallel workers start in the same millisecond.
+  const username = `e2e_ver_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   const res = await request.post(`${API}/accounts/signup/`, {
     data: { username, password: `pw-${username}-local` },
   });

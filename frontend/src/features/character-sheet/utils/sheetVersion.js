@@ -235,6 +235,24 @@ export class SheetConflictError extends Error {
   }
 }
 
+/**
+ * Thrown when a newer local edit superseded an update while it was in flight.
+ * The server took the save and its reply is the held copy; only applying the
+ * reply to the screen is skipped. Kept apart from AbortError on purpose: a
+ * request that really aborted was not saved and must not be treated as saved.
+ */
+export class SupersededSaveError extends Error {
+  constructor() {
+    super("Save superseded by a newer edit");
+    this.name = "SupersededSaveError";
+    this.code = "sheet_superseded";
+  }
+}
+
+export function isSupersededSaveError(err) {
+  return err?.code === "sheet_superseded";
+}
+
 /** Thrown when silent retries ran out without an overlap; try again later. */
 export class SheetSaveRetryError extends Error {
   constructor() {
