@@ -1730,36 +1730,63 @@ const CharacterSheetWrapper = ({
     );
   }, [character?.id, character?.disguised_as_human]);
 
-  // Name, Stand name, Background and Look follow the server copy while this
-  // sheet has no unsaved edits, so another device's or the GM's change shows
-  // up (it used to fill only empty fields, so an edit elsewhere never
-  // appeared). While the sheet has edits they stay as typed; the versioned
-  // save's conflict check handles overlaps. A blank server name is never
-  // taken: the server rejects a blank true_name, so it means a partial row.
-  // Before the character has an id, only empty fields are filled.
+  // Name, Stand name, Background and Look take a server change, so another
+  // device's or the GM's edit shows up (they used to fill only empty fields,
+  // so an edit elsewhere never appeared).
+  // A field is taken only when the server's value for that field changed
+  // since this sheet last saw it. The character prop can still hold old
+  // values (right after this tab's own save, before its reply is merged, or
+  // when an event changed a different field); copying every field that
+  // differs would put this tab's own edit back to the old value.
+  // While the sheet has unsaved edits nothing is taken; the change applies
+  // once it is clean. A blank server name is never taken: the server rejects
+  // a blank true_name, so it means a partial row. Before the character has an
+  // id, only empty fields are filled.
+  const identitySeenRef = useRef({ id: undefined, values: {} });
   useEffect(() => {
+    const fromServer = {
+      name: character?.name,
+      standName: character?.standName,
+      background: character?.background,
+      look: character?.look,
+    };
+    const fillEmpty = (keys) =>
+      setCharData((prev) => {
+        const patch = {};
+        for (const key of keys) {
+          const v = fromServer[key];
+          if (typeof v === "string" && v && !(prev[key] || "").trim()) {
+            patch[key] = v;
+          }
+        }
+        return Object.keys(patch).length ? { ...prev, ...patch } : prev;
+      });
+    if (!character?.id) {
+      if (sheetDraftIsDirty) return;
+      fillEmpty(["standName", "background", "look"]);
+      return;
+    }
+    const seen = identitySeenRef.current;
+    if (seen.id !== character.id) {
+      // First copy of this character: the sheet's state came from it.
+      identitySeenRef.current = { id: character.id, values: { ...fromServer } };
+      if (!sheetDraftIsDirty) fillEmpty(Object.keys(fromServer));
+      return;
+    }
     if (sheetDraftIsDirty || dirtyIntentRef.current) return;
+    const changed = Object.keys(fromServer).filter(
+      (key) =>
+        typeof fromServer[key] === "string" &&
+        fromServer[key] !== seen.values[key],
+    );
+    if (changed.length === 0) return;
+    for (const key of changed) seen.values[key] = fromServer[key];
     setCharData((prev) => {
       const patch = {};
-      if (character?.id) {
-        const fromServer = {
-          name: character?.name,
-          standName: character?.standName,
-          background: character?.background,
-          look: character?.look,
-        };
-        for (const [key, v] of Object.entries(fromServer)) {
-          if (typeof v !== "string") continue;
-          if (key === "name" && !v.trim()) continue;
-          if ((prev[key] ?? "") !== v) patch[key] = v;
-        }
-      } else {
-        const sn = character?.standName ?? "";
-        if (sn && !(prev.standName || "").trim()) patch.standName = sn;
-        const bg = character?.background ?? "";
-        if (bg && !(prev.background || "").trim()) patch.background = bg;
-        const look = character?.look ?? "";
-        if (look && !(prev.look || "").trim()) patch.look = look;
+      for (const key of changed) {
+        const v = fromServer[key];
+        if (key === "name" && !v.trim()) continue;
+        if ((prev[key] ?? "") !== v) patch[key] = v;
       }
       return Object.keys(patch).length ? { ...prev, ...patch } : prev;
     });

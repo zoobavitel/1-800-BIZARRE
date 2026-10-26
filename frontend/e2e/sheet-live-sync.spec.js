@@ -127,3 +127,100 @@ test("typing on this sheet is not overwritten by an outside change", async ({
     "Outside look",
   );
 });
+
+// The next three came from the #246 verification pass. The field's value is
+// sampled every 100 ms, so a brief jump back to the old value fails too.
+
+async function slowPatches(page) {
+  await page.route(/\/api\/characters\/\d+\/$/, async (route) => {
+    if (route.request().method() === "PATCH") {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+    await route.continue();
+  });
+}
+
+async function sampleValues(page, value, ms) {
+  // Every distinct value seen in inputs that started as `value`.
+  return page.evaluate(
+    ([start, duration]) =>
+      new Promise((resolve) => {
+        const el = [...document.querySelectorAll("input,textarea")].find(
+          (x) => x.value === start,
+        );
+        if (!el) {
+          resolve(["<field not found>"]);
+          return;
+        }
+        const seen = [el.value];
+        const timer = setInterval(() => {
+          if (seen[seen.length - 1] !== el.value) seen.push(el.value);
+        }, 100);
+        setTimeout(() => {
+          clearInterval(timer);
+          resolve(seen);
+        }, duration);
+      }),
+    [value, ms],
+  );
+}
+
+async function typeInto(page, from, to) {
+  const handle = await page.evaluateHandle(
+    (v) =>
+      [...document.querySelectorAll("input,textarea")].find((x) => x.value === v),
+    from,
+  );
+  await handle.asElement().fill(to);
+}
+
+test("this tab's own edit does not jump back during a slow save", async ({
+  page,
+  request,
+}) => {
+  const id = await openCampaignSheet(page, request);
+  await slowPatches(page);
+  await typeInto(page, "Before look", "Mine look");
+  expect(await sampleValues(page, "Mine look", 8000)).toEqual(["Mine look"]);
+  await expect
+    .poll(async () => (await api(request, "GET", `/characters/${id}/`)).appearance, {
+      timeout: 15_000,
+    })
+    .toBe("Mine look");
+  await page.reload();
+  await expectOnScreen(page, "Mine look", 20_000);
+});
+
+test("typing on during a slow save keeps the newest text", async ({
+  page,
+  request,
+}) => {
+  const id = await openCampaignSheet(page, request);
+  await slowPatches(page);
+  await typeInto(page, "Before Name", "Name A");
+  await page.waitForTimeout(1800);
+  await typeInto(page, "Name A", "Name AB");
+  expect(await sampleValues(page, "Name AB", 8000)).toEqual(["Name AB"]);
+  await expect
+    .poll(async () => (await api(request, "GET", `/characters/${id}/`)).true_name, {
+      timeout: 15_000,
+    })
+    .toBe("Name AB");
+});
+
+test("an outside change to one field leaves an unsaved edit in another", async ({
+  page,
+  request,
+}) => {
+  const id = await openCampaignSheet(page, request);
+  await typeInto(page, "Before look", "Mine look");
+  await api(request, "PATCH", `/characters/${id}/`, { true_name: "Device B Name" });
+  await expectOnScreen(page, "Device B Name", 15_000);
+  expect(await sampleValues(page, "Mine look", 3000)).toEqual(["Mine look"]);
+  await expect
+    .poll(async () => {
+      const c = await api(request, "GET", `/characters/${id}/`);
+      return `${c.true_name}|${c.appearance}`;
+    }, { timeout: 15_000 })
+    .toBe("Device B Name|Mine look");
+});
