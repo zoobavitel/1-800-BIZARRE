@@ -109,7 +109,6 @@ EXPECTED = {
     "DELETE /api/crews/{id}/ as member": (OPEN, "KNOWN HOLE, S5: any campaign member can delete the crew"),
     "POST /api/npcs/ as stranger": (OPEN, "KNOWN HOLE, S5: an NPC can be created inside a campaign you're not in"),
     "POST /api/progress-clocks/ as member": (OPEN, "KNOWN HOLE, S6: a member can bind a clock to another player's PC"),
-    **_both("POST", "/api/sessions/", OPEN, "KNOWN HOLE, S4: anyone can create a session in any campaign"),
     **_both("POST", "/api/equipment-items/", OPEN, "KNOWN HOLE, S7: anyone can create a global TEMPLATE item"),
     "POST /api/npcs/ as member": (OPEN, "KNOWN HOLE, S5: players may not create NPCs in a campaign; only its GM (user, 2026-10-26)"),
     **_both("POST", "/api/user-profiles/", ERROR, "KNOWN BUG, D: a second profile hits the unique constraint (500)"),
@@ -333,6 +332,12 @@ class PermissionMatrixTests(TestCase):
         "POST /api/campaigns/{id}/unassign-character/": "owner",
     }
 
+    # Positive controls known to 5xx today. The fix PR deletes its entry; a
+    # stale entry fails like EXPECTED.
+    KNOWN_CONTROL_ERRORS = {
+        "POST /api/user-profiles/": "KNOWN BUG, D: a second profile hits the unique constraint (500)",
+    }
+
     # Routes where no actor can reach a 2xx/4xx other than 404/405, with why.
     NO_POSITIVE_CONTROL = {}
 
@@ -353,6 +358,7 @@ class PermissionMatrixTests(TestCase):
         results = {}
         self.skipped = []
         self.control_failures = []
+        self.control_errors = set()
         for method, template, prefix in write_endpoints():
             needs_id = "{id}" in template
             obj_id = self.target_id(prefix) if needs_id else None
@@ -385,11 +391,18 @@ class PermissionMatrixTests(TestCase):
                 with transaction.atomic():
                     control = self.send(self.allowed_user(prefix, key), method, url, body)
                     transaction.set_rollback(True)
+                who = self.allowed_user(prefix, key).username
                 if control.status_code in (404, 405):
                     self.control_failures.append(
-                        f"{key}: positive control ({self.allowed_user(prefix, key).username}) got "
+                        f"{key}: positive control ({who}) got "
                         f"{control.status_code}; the URL or target is wrong, or add it to NO_POSITIVE_CONTROL"
                     )
+                elif control.status_code >= 500:
+                    self.control_errors.add(key)
+                    if key not in self.KNOWN_CONTROL_ERRORS:
+                        self.control_failures.append(
+                            f"{key}: positive control ({who}) got {control.status_code} (server error)"
+                        )
         return results
 
     def test_every_write_is_closed_unless_listed(self):
@@ -401,6 +414,8 @@ class PermissionMatrixTests(TestCase):
         # A route with no target object would never be tested; fail instead.
         problems = [f"{route}: no object to target (add it to target_id)" for route in self.skipped]
         problems += self.control_failures
+        for key in sorted(set(self.KNOWN_CONTROL_ERRORS) - self.control_errors):
+            problems.append(f"{key}: listed in KNOWN_CONTROL_ERRORS but its positive control no longer errors")
         for key, (cls, code) in sorted(results.items()):
             expected_cls = EXPECTED.get(key, (CLOSED, ""))[0]
             if cls != expected_cls:

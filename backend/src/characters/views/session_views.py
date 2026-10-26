@@ -90,6 +90,11 @@ class SessionViewSet(viewsets.ModelViewSet):
         )
 
     def perform_create(self, serializer):
+        # Only the campaign's GM (or staff) may open a session in it.
+        campaign = serializer.validated_data.get("campaign")
+        user = self.request.user
+        if campaign is None or not (campaign.gm_id == user.id or user.is_staff):
+            raise PermissionDenied("Only the campaign GM can create a session.")
         serializer.save()
 
     def perform_update(self, serializer):
@@ -102,18 +107,18 @@ class SessionViewSet(viewsets.ModelViewSet):
             allowed_only = data_keys <= {"loadout_by_character"}
             if not allowed_only:
                 raise PermissionDenied("Only the GM can update this session")
-            char = Character.objects.filter(
-                user=user, campaign_id=session.campaign_id
-            ).first()
-            if not char:
-                raise PermissionDenied("No character in this campaign")
             patch = self.request.data.get("loadout_by_character")
             if not isinstance(patch, dict) or len(patch) != 1:
                 raise PermissionDenied(
                     "Players may only update their own loadout entry"
                 )
-            char_key = str(char.id)
-            if str(next(iter(patch.keys()))) != char_key:
+            # The one entry must be one of this player's PCs in the campaign
+            # (a player may run more than one PC there).
+            char_key = str(next(iter(patch.keys())))
+            owns_it = char_key.isdigit() and Character.objects.filter(
+                pk=int(char_key), user=user, campaign_id=session.campaign_id
+            ).exists()
+            if not owns_it:
                 raise PermissionDenied(
                     "Players may only update their own loadout entry"
                 )
