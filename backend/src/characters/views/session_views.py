@@ -90,6 +90,11 @@ class SessionViewSet(viewsets.ModelViewSet):
         )
 
     def perform_create(self, serializer):
+        # Only the campaign's GM (or staff) may open a session in it.
+        campaign = serializer.validated_data.get("campaign")
+        user = self.request.user
+        if campaign is None or not (campaign.gm_id == user.id or user.is_staff):
+            raise PermissionDenied("Only the campaign GM can create a session.")
         serializer.save()
 
     def perform_update(self, serializer):
