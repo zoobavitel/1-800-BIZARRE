@@ -91,3 +91,27 @@ class SiteStatsTests(TestCase):
         self.assertEqual(r.data['npc_count'], 1)
         # Blank "New Character" shells with no sheet progress are excluded.
         self.assertEqual(r.data['pc_count'], 4)
+
+
+class TopHeritagesOrderTests(TestCase):
+    """Tied counts come out in name order, whatever order the database returns."""
+
+    def test_ties_sort_by_name_not_query_order(self):
+        from collections import Counter
+
+        from characters.views.utility_views import top_heritages
+
+        # Insertion order is what Counter.most_common keeps for ties.
+        counts = Counter()
+        counts["Human"] += 2
+        counts["Vampire"] += 1
+        counts["Rock Human"] += 1
+        counts["Pillar Man"] += 1
+        self.assertEqual(
+            top_heritages(counts),
+            [
+                {"name": "Human", "count": 2},
+                {"name": "Pillar Man", "count": 1},
+                {"name": "Rock Human", "count": 1},
+            ],
+        )
