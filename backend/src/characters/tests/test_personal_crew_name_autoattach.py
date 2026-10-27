@@ -82,12 +82,13 @@ class PersonalCrewNameAutoAttachTest(TestCase):
             format="json",
         )
         crew = Crew.objects.get(campaign=self.campaign)
+        # rep is GM only since S5; notes stays a shared field.
         resp = client.patch(
-            f"/api/crews/{crew.id}/", {"rep": 5}, format="json"
+            f"/api/crews/{crew.id}/", {"notes": "Shared notes"}, format="json"
         )
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         crew.refresh_from_db()
-        self.assertEqual(crew.rep, 5)
+        self.assertEqual(crew.notes, "Shared notes")
 
     def test_outsider_cannot_create_crew_for_other_campaign(self):
         outsider = User.objects.create_user(username="out", password="pw")
