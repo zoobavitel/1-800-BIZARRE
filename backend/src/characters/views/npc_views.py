@@ -1,5 +1,6 @@
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.parsers import JSONParser, FormParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -131,8 +132,23 @@ class NPCViewSet(viewsets.ModelViewSet):
             'defeated': new_value >= max_segments and max_segments > 0,
         })
 
+    def _check_campaign_gm(self, campaign):
+        """Only the campaign's GM (or staff) may put an NPC in a campaign (S5).
+        An NPC with no campaign is fine for anyone."""
+        user = self.request.user
+        if campaign is not None and not (campaign.gm_id == user.id or user.is_staff):
+            raise PermissionDenied("Only the campaign GM can add NPCs to this campaign.")
+
     def perform_create(self, serializer):
+        self._check_campaign_gm(serializer.validated_data.get("campaign"))
         serializer.save(creator=self.request.user)
+
+    def perform_update(self, serializer):
+        if "campaign" in serializer.validated_data:
+            new_campaign = serializer.validated_data["campaign"]
+            if getattr(new_campaign, "pk", None) != serializer.instance.campaign_id:
+                self._check_campaign_gm(new_campaign)
+        serializer.save()
 
     @action(detail=True, methods=["get"], url_path="export-pdf")
     def export_pdf(self, request, pk=None):

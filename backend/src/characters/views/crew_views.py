@@ -18,15 +18,8 @@ _CREW_MEMBER_ALLOWED_PATCH_FIELDS = frozenset(
         "description",
         "notes",
         "upgrade_progress",
-        "xp",
         "xp_track_size",
         "advancement_points",
-        "level",
-        "hold",
-        "rep",
-        "turf",
-        "wanted_level",
-        "coin",
         "stash",
         "image",
         "image_url",
@@ -36,6 +29,12 @@ _CREW_MEMBER_ALLOWED_PATCH_FIELDS = frozenset(
         # Server-managed alongside session_xp_triggers merges (rep tally).
         "session_rep_contributions",
     }
+)
+
+# GM only (user, 2026-10-26). A member may still send these when the value is
+# unchanged, because the sheet's crew autosave sends them with every save.
+_CREW_GM_ONLY_STAT_FIELDS = frozenset(
+    {"level", "xp", "coin", "rep", "hold", "turf", "wanted_level"}
 )
 
 # Trigger boolean keys that players may toggle in session_xp_triggers[sid].
@@ -203,7 +202,19 @@ class CrewViewSet(viewsets.ModelViewSet):
         # Crew members can update shared crew sheet fields (name, stash grid, resources, etc.)
         if self._is_crew_member(user, crew):
             validated = serializer.validated_data
-            if set(validated.keys()) <= _CREW_MEMBER_ALLOWED_PATCH_FIELDS:
+            changed_stats = [
+                key for key in _CREW_GM_ONLY_STAT_FIELDS & validated.keys()
+                if validated[key] != getattr(crew, key)
+            ]
+            if changed_stats:
+                raise PermissionDenied(
+                    "Only the campaign GM can change the crew's "
+                    + ", ".join(sorted(changed_stats))
+                )
+            unchanged_stats = _CREW_GM_ONLY_STAT_FIELDS & validated.keys()
+            if set(validated.keys()) - unchanged_stats <= _CREW_MEMBER_ALLOWED_PATCH_FIELDS:
+                for key in unchanged_stats:
+                    validated.pop(key)
                 serializer.save()
                 crew.refresh_from_db()
                 if "name" in validated:
@@ -213,6 +224,12 @@ class CrewViewSet(viewsets.ModelViewSet):
                     crew.approved_by.clear()
                 return
         raise PermissionDenied("Only the GM or crew members can update this crew")
+
+    def perform_destroy(self, instance):
+        user = self.request.user
+        if not (instance.campaign.gm_id == user.id or user.is_staff):
+            raise PermissionDenied("Only the campaign GM can delete the crew.")
+        instance.delete()
 
     def _authorize_session_xp_triggers_patch(
         self, user, crew, validated_data, is_gm_or_staff

@@ -106,18 +106,15 @@ def _both(method, template, cls, reason):
 # key: "<METHOD> <url template> as <actor>" -> (class, reason)
 EXPECTED = {
     # KNOWN HOLES. Each fix PR deletes its own entries.
-    "DELETE /api/crews/{id}/ as member": (OPEN, "KNOWN HOLE, S5: any campaign member can delete the crew"),
-    "POST /api/npcs/ as stranger": (OPEN, "KNOWN HOLE, S5: an NPC can be created inside a campaign you're not in"),
     "POST /api/progress-clocks/ as member": (OPEN, "KNOWN HOLE, S6: a member can bind a clock to another player's PC"),
     **_both("POST", "/api/equipment-items/", OPEN, "KNOWN HOLE, S7: anyone can create a global TEMPLATE item"),
-    "POST /api/npcs/ as member": (OPEN, "KNOWN HOLE, S5: players may not create NPCs in a campaign; only its GM (user, 2026-10-26)"),
     **_both("POST", "/api/user-profiles/", ERROR, "KNOWN BUG, D: a second profile hits the unique constraint (500)"),
 
     # BY DESIGN.
     **_both("POST", "/api/campaigns/", OPEN, "BY DESIGN: anyone may create their own campaign and becomes its GM"),
     "POST /api/characters/ as member": (OPEN, "BY DESIGN: a player may add a PC to a campaign they play in"),
     "POST /api/crews/ as member": (OPEN, "BY DESIGN: a player may create a crew in their campaign"),
-    "PATCH /api/crews/{id}/ as member": (OPEN, "BY DESIGN: crew members edit name, stash, description, notes and upgrade progress; level, xp, coin, rep, hold, turf and wanted_level become GM only in S5 (see test_member_crew_stat_patch)"),
+    "PATCH /api/crews/{id}/ as member": (OPEN, "BY DESIGN: crew members edit name, stash, description, notes and upgrade progress; level, xp, coin, rep, hold, turf and wanted_level are GM only since S5 (see test_member_crew_stat_patch)"),
     "POST /api/crews/{id}/propose-name/ as member": (OPEN, "BY DESIGN: crew members propose crew names"),
     "POST /api/crews/{id}/approve-name/ as member": (OPEN, "BY DESIGN: crew members approve a proposed crew name"),
     "POST /api/campaigns/{id}/increment-wanted/ as member": (OPEN, "BY DESIGN (U4): any member may bump the wanted level"),
@@ -425,17 +422,14 @@ class PermissionMatrixTests(TestCase):
         self.assertEqual(problems, [], "\n" + "\n".join(problems))
 
     def test_member_crew_stat_patch(self):
-        """KNOWN HOLE, S5: a crew member can PATCH crew stats.
-
-        The user decided (2026-10-26) that level, xp, coin, rep, hold, turf and
-        wanted_level are GM only. Today a member's PATCH of coin goes through.
-        S5 flips this test to expect 403 and the coin unchanged.
-        """
+        """S5: level, xp, coin, rep, hold, turf and wanted_level are GM only
+        (user, 2026-10-26). A member's PATCH of coin is refused and coin stays."""
         with transaction.atomic():
             member = self.fresh_actor("member")
-            response = self.send(member, "PATCH", f"/api/crews/{self.crew.pk}/", {"coin": 3})
+            coin_before = self.crew.coin
+            response = self.send(member, "PATCH", f"/api/crews/{self.crew.pk}/", {"coin": coin_before + 3})
             self.crew.refresh_from_db()
             coin_after = self.crew.coin
             transaction.set_rollback(True)
-        self.assertEqual(response.status_code, 200, response.content)
-        self.assertEqual(coin_after, 3)
+        self.assertEqual(response.status_code, 403, response.content)
+        self.assertEqual(coin_after, coin_before)
