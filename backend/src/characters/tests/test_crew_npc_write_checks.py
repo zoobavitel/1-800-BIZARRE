@@ -44,11 +44,14 @@ class CrewGmOnlyWriteTests(TestCase):
         self.assertTrue(Crew.objects.filter(pk=self.crew.pk).exists())
 
     def test_gm_and_staff_can_delete_the_crew(self):
-        self.client.force_authenticate(self.gm)
-        self.assertEqual(self.client.delete(f"/api/crews/{self.crew.pk}/").status_code, 204)
+        # Staff may delete any time; the GM only once no players remain
+        # (2026-10-29 rule, see test_crew_delete_rule).
         other = Crew.objects.create(name="CW Crew 2", campaign=self.campaign)
         self.client.force_authenticate(self.staff)
         self.assertEqual(self.client.delete(f"/api/crews/{other.pk}/").status_code, 204)
+        self.campaign.players.clear()
+        self.client.force_authenticate(self.gm)
+        self.assertEqual(self.client.delete(f"/api/crews/{self.crew.pk}/").status_code, 204)
 
     # Stats
 
