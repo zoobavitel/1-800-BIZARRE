@@ -15872,7 +15872,8 @@ const CharacterSheetWrapper = ({
                           isGM ? handlePromoteItemToCampaign : undefined
                         }
                         onPublishToSite={
-                          isGM ? handlePublishItemToSite : undefined
+                          // Site-wide catalog publishing is admin only (2026-10-29).
+                          user?.is_staff ? handlePublishItemToSite : undefined
                         }
                       />
                     ) : null}

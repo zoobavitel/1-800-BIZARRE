@@ -1198,6 +1198,8 @@ const NPCSheet = ({
   campaigns = [],
   allNpcs = [],
   isGM = false,
+  // Site-wide catalog publishing is admin only (2026-10-29).
+  canPublishToSite = false,
   readOnly = false,
   onFactionChange,
   onCampaignRefresh,
@@ -4727,7 +4729,7 @@ const NPCSheet = ({
                         isGM ? handlePromoteItemToCampaign : undefined
                       }
                       onPublishToSite={
-                        isGM ? handlePublishItemToSite : undefined
+                        canPublishToSite ? handlePublishItemToSite : undefined
                       }
                     />
                   </div>
@@ -8266,7 +8268,7 @@ const NPCSheet = ({
                       isGM ? handlePromoteItemToCampaign : undefined
                     }
                     onPublishToSite={
-                      isGM ? handlePublishItemToSite : undefined
+                      canPublishToSite ? handlePublishItemToSite : undefined
                     }
                   />
                 </div>
@@ -8285,7 +8287,7 @@ const NPCSheet = ({
                       isGM ? handlePromoteItemToCampaign : undefined
                     }
                     onPublishToSite={
-                      isGM ? handlePublishItemToSite : undefined
+                      canPublishToSite ? handlePublishItemToSite : undefined
                     }
                   />
                 </div>

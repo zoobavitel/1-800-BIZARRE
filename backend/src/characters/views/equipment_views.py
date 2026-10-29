@@ -2,6 +2,7 @@ from django.db import models
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 
 from ..models import Campaign, Character, EquipmentItem, CampaignEquipmentAccess
@@ -110,17 +111,26 @@ class EquipmentItemViewSet(viewsets.ModelViewSet):
                 code="gm_only",
             )
 
+    def _assert_may_place(self, request, scope, campaign):
+        """Who may put an item at this scope (S7). SITE and TEMPLATE items show
+        in every campaign, so only staff place them; a CAMPAIGN item needs that
+        campaign's GM. Checked on create and whenever an edit changes scope or
+        campaign."""
+        if scope in ("SITE", "TEMPLATE"):
+            if not request.user.is_staff:
+                self.permission_denied(
+                    request,
+                    message="Only staff can create or move items into the shared catalog.",
+                )
+        elif scope == "CAMPAIGN":
+            if campaign is None:
+                raise ValidationError({"campaign": ["A campaign item needs a campaign."]})
+            self._assert_gm(request, campaign)
+
     def perform_create(self, serializer):
         scope = serializer.validated_data.get("scope", "CAMPAIGN")
         campaign = serializer.validated_data.get("campaign")
-        if scope == "SITE":
-            if not self.request.user.is_staff:
-                self.permission_denied(
-                    self.request,
-                    message="Only staff can create site-wide catalog items.",
-                )
-        elif scope == "CAMPAIGN":
-            self._assert_gm(self.request, campaign)
+        self._assert_may_place(self.request, scope, campaign)
         serializer.save(created_by=self.request.user)
 
     def _can_edit_catalog_item(self, request, instance):
@@ -142,6 +152,11 @@ class EquipmentItemViewSet(viewsets.ModelViewSet):
                 self.request,
                 message="Only the item creator, campaign GM, or staff can edit this catalog entry.",
             )
+        data = serializer.validated_data
+        scope = data.get("scope", instance.scope)
+        campaign = data["campaign"] if "campaign" in data else instance.campaign
+        if scope != instance.scope or campaign != instance.campaign:
+            self._assert_may_place(self.request, scope, campaign)
         serializer.save()
 
     def perform_destroy(self, instance):
@@ -179,12 +194,14 @@ class EquipmentItemViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="publish-to-site")
     def publish_to_site(self, request, pk=None):
-        """GM promotes a campaign item to the site catalog (staff may also use)."""
+        """Copy an item into the site-wide catalog. Admin (staff) only: a GM
+        keeps items in their own campaign with from-kit-item (user's rule,
+        2026-10-29)."""
         item = self.get_object()
-        if item.scope == "CAMPAIGN" and item.campaign_id:
-            self._assert_gm(request, item.campaign)
-        elif not request.user.is_staff:
-            self.permission_denied(request, message="GM or staff only.")
+        if not request.user.is_staff:
+            self.permission_denied(
+                request, message="Only admins can publish items to the site catalog."
+            )
         existing = (
             EquipmentItem.objects.filter(
                 scope__in=("TEMPLATE", "SITE"),
@@ -247,6 +264,13 @@ class EquipmentItemViewSet(viewsets.ModelViewSet):
                 ).data
             )
         source_character_id = request.data.get("source_character")
+        if source_character_id and not Character.objects.filter(
+            pk=source_character_id, campaign=campaign
+        ).exists():
+            return Response(
+                {"source_character": ["Must be a character in this campaign."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         item = EquipmentItem.objects.create(
             name=name,
             description=str(request.data.get("detail") or request.data.get("description") or ""),
