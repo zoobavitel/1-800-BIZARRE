@@ -194,12 +194,14 @@ class EquipmentItemViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="publish-to-site")
     def publish_to_site(self, request, pk=None):
-        """GM promotes a campaign item to the site catalog (staff may also use)."""
+        """Copy an item into the site-wide catalog. Admin (staff) only: a GM
+        keeps items in their own campaign with from-kit-item (user's rule,
+        2026-10-29)."""
         item = self.get_object()
-        if item.scope == "CAMPAIGN" and item.campaign_id:
-            self._assert_gm(request, item.campaign)
-        elif not request.user.is_staff:
-            self.permission_denied(request, message="GM or staff only.")
+        if not request.user.is_staff:
+            self.permission_denied(
+                request, message="Only admins can publish items to the site catalog."
+            )
         existing = (
             EquipmentItem.objects.filter(
                 scope__in=("TEMPLATE", "SITE"),
@@ -262,6 +264,13 @@ class EquipmentItemViewSet(viewsets.ModelViewSet):
                 ).data
             )
         source_character_id = request.data.get("source_character")
+        if source_character_id and not Character.objects.filter(
+            pk=source_character_id, campaign=campaign
+        ).exists():
+            return Response(
+                {"source_character": ["Must be a character in this campaign."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         item = EquipmentItem.objects.create(
             name=name,
             description=str(request.data.get("detail") or request.data.get("description") or ""),

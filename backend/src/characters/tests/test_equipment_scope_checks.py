@@ -62,3 +62,46 @@ class EquipmentScopeTests(TestCase):
 
     def test_the_gm_can_still_rename_their_item(self):
         self.assertEqual(self.patch(self.gm, {"name": "Renamed"}).status_code, 200)
+
+
+class SiteCatalogAndKitItemTests(TestCase):
+    """The user's rule (2026-10-29): a player's own items stay private to
+    their character; a GM may add one to their own campaign; only admins put
+    anything in the site-wide catalog."""
+
+    def setUp(self):
+        from characters.models import Character, Heritage
+
+        self.gm = User.objects.create_user(username="pub_gm", password="pw-pub-gm-1")
+        self.staff = User.objects.create_user(username="pub_staff", password="pw-pub-staff-1", is_staff=True)
+        self.campaign = Campaign.objects.create(name="Pub Camp", gm=self.gm)
+        heritage, _ = Heritage.objects.get_or_create(name="Human", defaults={"base_hp": 0, "description": ""})
+        far_gm = User.objects.create_user(username="pub_far_gm", password="pw-pub-far-1")
+        far_campaign = Campaign.objects.create(name="Far Pub Camp", gm=far_gm)
+        self.far_pc = Character.objects.create(user=far_gm, campaign=far_campaign, true_name="Far PC", heritage=heritage)
+        self.item = EquipmentItem.objects.create(
+            name="Pub item unique", scope="CAMPAIGN", campaign=self.campaign, created_by=self.gm
+        )
+        self.client = APIClient()
+
+    def publish(self, user):
+        self.client.force_authenticate(user)
+        return self.client.post(f"/api/equipment-items/{self.item.id}/publish-to-site/", {}, format="json")
+
+    def test_a_gm_cannot_publish_to_the_site_catalog(self):
+        response = self.publish(self.gm)
+        self.assertEqual(response.status_code, 403, getattr(response, "data", None))
+        self.assertFalse(EquipmentItem.objects.filter(scope="SITE", name="Pub item unique").exists())
+
+    def test_staff_can_publish_to_the_site_catalog(self):
+        self.assertEqual(self.publish(self.staff).status_code, 201)
+
+    def test_save_to_campaign_library_rejects_a_character_from_another_campaign(self):
+        self.client.force_authenticate(self.gm)
+        response = self.client.post(
+            "/api/equipment-items/from-kit-item/",
+            {"campaign": self.campaign.id, "name": "Kit thing unique", "source_character": self.far_pc.id},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400, getattr(response, "data", None))
+        self.assertFalse(EquipmentItem.objects.filter(name="Kit thing unique").exists())
