@@ -84,6 +84,42 @@ class XPHistoryViewSet(viewsets.ReadOnlyModelViewSet):
         return qs.filter(character__user=user)
 
 
+
+_CLOCK_LINK_FIELDS = ("character", "crew", "npc", "faction", "session")
+
+
+def _check_clock_links(user, data, instance=None, is_gm=False):
+    """What a clock points at must sit in the clock's own campaign (S6).
+
+    Only a PC's player or the GM may bind a clock to that PC, so nobody can
+    put a clock on another player's sheet. Only the GM may move a clock to a
+    different campaign. Unchanged links always pass.
+    """
+    from rest_framework.exceptions import PermissionDenied, ValidationError
+
+    from .character_views import _user_may_edit_character
+
+    if instance is not None and "campaign" in data and data["campaign"] != instance.campaign:
+        if not (is_gm or user.is_staff):
+            raise PermissionDenied("Only the GM can move a clock to another campaign.")
+    campaign = data["campaign"] if "campaign" in data else getattr(instance, "campaign", None)
+    campaign_moved = instance is not None and campaign != instance.campaign
+    for name in _CLOCK_LINK_FIELDS:
+        if name in data:
+            target = data[name]
+            changed = instance is None or target != getattr(instance, name)
+        else:
+            target = getattr(instance, name, None) if instance is not None else None
+            changed = False
+        if target is None or not (changed or campaign_moved):
+            continue
+        if campaign is None or getattr(target, "campaign_id", None) != campaign.id:
+            raise ValidationError({name: ["Must be in the clock's campaign."]})
+        if name == "character" and changed and not _user_may_edit_character(user, target):
+            raise PermissionDenied(
+                "Only that character's player or the GM can put a clock on it."
+            )
+
 class ProgressClockViewSet(viewsets.ModelViewSet):
     """CRUD for progress clocks. GM and players can create; visibility filter for non-GM."""
     permission_classes = [IsAuthenticated]
@@ -192,8 +228,10 @@ class ProgressClockViewSet(viewsets.ModelViewSet):
             )
             if not in_campaign:
                 raise PermissionDenied("Only campaign members can create progress clocks.")
+            _check_clock_links(user, serializer.validated_data, is_gm=False)
             clock = serializer.save(created_by=user)
         else:
+            _check_clock_links(user, serializer.validated_data, is_gm=True)
             clock = serializer.save(created_by=user)
         _log_progress_clock_audit(clock, user, "clock_created")
 
@@ -233,6 +271,7 @@ class ProgressClockViewSet(viewsets.ModelViewSet):
                     )
             else:
                 raise PermissionDenied("Only the creator or GM can update this clock.")
+        _check_clock_links(user, data, instance=obj, is_gm=bool(is_gm))
 
         before = {
             "filled_segments": obj.filled_segments,
