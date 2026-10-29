@@ -225,11 +225,21 @@ class CrewViewSet(viewsets.ModelViewSet):
                 return
         raise PermissionDenied("Only the GM or crew members can update this crew")
 
-    def perform_destroy(self, instance):
-        user = self.request.user
+    def destroy(self, request, *args, **kwargs):
+        """GM only, and only once the campaign has no players left (user's
+        rule, 2026-10-29). Deleting the campaign still removes its crews.
+        Staff may delete any time, for cleanup."""
+        instance = self.get_object()
+        user = request.user
         if not (instance.campaign.gm_id == user.id or user.is_staff):
             raise PermissionDenied("Only the campaign GM can delete the crew.")
+        if not user.is_staff and instance.campaign.players.exists():
+            return Response(
+                {"detail": "Remove all players from the campaign first."},
+                status=status.HTTP_409_CONFLICT,
+            )
         instance.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     def _authorize_session_xp_triggers_patch(
         self, user, crew, validated_data, is_gm_or_staff
