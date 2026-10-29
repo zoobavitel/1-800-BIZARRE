@@ -107,7 +107,6 @@ def _both(method, template, cls, reason):
 EXPECTED = {
     # KNOWN HOLES. Each fix PR deletes its own entries.
     "POST /api/progress-clocks/ as member": (OPEN, "KNOWN HOLE, S6: a member can bind a clock to another player's PC"),
-    **_both("POST", "/api/equipment-items/", OPEN, "KNOWN HOLE, S7: anyone can create a global TEMPLATE item"),
     **_both("POST", "/api/user-profiles/", ERROR, "KNOWN BUG, D: a second profile hits the unique constraint (500)"),
 
     # BY DESIGN.
