@@ -88,6 +88,7 @@ import {
   isPlaybookFoundationAbility,
   shouldSkipSheetDraftHydration,
   shouldSkipServerOwnedFieldHydration,
+  freshFieldTouches,
   applyHarmSlotTextChange,
   computeHealingClockAfterSegments,
   normalizeCrewFromCharacter,
@@ -1086,16 +1087,7 @@ const CharacterSheetWrapper = ({
     dirtyIntent: false,
   });
   /** User touched server-owned field controls this draft; gates hydrate omit + PATCH include. */
-  const fieldTouchRef = useRef({
-    stress: false,
-    trauma: false,
-    xp: false,
-    healingClock: false,
-    inventory: false,
-    coin: false,
-    stash: false,
-    heritage: false,
-  });
+  const fieldTouchRef = useRef(freshFieldTouches());
   const markDirtyIntent = useCallback(() => {
     dirtyIntentRef.current = true;
     const nextMeta = {
@@ -1451,15 +1443,9 @@ const CharacterSheetWrapper = ({
   }, [character?.id]);
 
   useEffect(() => {
-    fieldTouchRef.current = {
-      stress: false,
-      trauma: false,
-      xp: false,
-      healingClock: false,
-      inventory: false,
-      coin: false,
-      stash: false,
-    };
+    // Built from the shared key list: a hand-written copy here once left out
+    // "heritage", so benefit/detriment picks were undone by the next sync.
+    fieldTouchRef.current = freshFieldTouches();
   }, [character?.id]);
 
   // A server sync resets the dedupe baseline, so the next render's payload,

@@ -35,6 +35,7 @@ export {
   shouldSkipSheetDraftHydration,
   shouldSkipServerOwnedFieldHydration,
   SERVER_OWNED_FIELD_TOUCH_KEYS,
+  freshFieldTouches,
   computeHealingClockAfterSegments,
   applyHarmSlotTextChange,
   normalizeCrewFromCharacter,
