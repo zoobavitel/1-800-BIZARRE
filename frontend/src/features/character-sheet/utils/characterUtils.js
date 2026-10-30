@@ -766,6 +766,11 @@ export const SERVER_OWNED_FIELD_TOUCH_KEYS = [
   "heritage",
 ];
 
+/** An untouched field-touch map with every key in SERVER_OWNED_FIELD_TOUCH_KEYS. */
+export function freshFieldTouches() {
+  return Object.fromEntries(SERVER_OWNED_FIELD_TOUCH_KEYS.map((k) => [k, false]));
+}
+
 /**
  * Pure healing-clock advance (recover roll / manual +). Returns new filled count
  * and how many full-clock harm downgrades to apply.
