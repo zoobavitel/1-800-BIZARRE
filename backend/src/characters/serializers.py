@@ -2067,7 +2067,9 @@ class CharacterSerializer(serializers.ModelSerializer):
     def _validate_campaign_membership(self, data):
         """A PC may only join a campaign its user is in (GM or player).
 
-        Only a change is checked: an unchanged campaign always passes.
+        A PC already in a campaign can't move straight to another one: it
+        leaves first (campaign set to null), then joins. Only a change is
+        checked: an unchanged campaign always passes.
         The sheet autosave sends `campaign` on every save, and some older PCs
         may already point at a campaign or crew they couldn't join today.
         Staff are exempt. The crew rule (crew must be in the PC's campaign)
@@ -2082,6 +2084,12 @@ class CharacterSerializer(serializers.ModelSerializer):
             new_campaign = data["campaign"]
             old_id = getattr(instance, "campaign_id", None) if instance else None
             new_id = getattr(new_campaign, "pk", None)
+            if new_campaign is not None and old_id is not None and new_id != old_id:
+                # A PC belongs to one campaign: leave the old one first.
+                old_name = getattr(instance.campaign, "name", "its campaign")
+                raise serializers.ValidationError(
+                    {"campaign": f'Remove this character from "{old_name}" first.'}
+                )
             if new_campaign is not None and new_id != old_id:
                 is_member = (
                     new_campaign.gm_id == user.id
