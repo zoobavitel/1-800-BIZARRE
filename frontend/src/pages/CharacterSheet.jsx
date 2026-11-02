@@ -1279,13 +1279,15 @@ const CharacterSheetWrapper = ({
   }, [charCampaign?.active_session_detail, characterId]);
 
   const handleLoadoutChange = useCallback(
-    async (nextEntry) => {
+    async (nextEntry, { auto = false } = {}) => {
       if (!activeSessionId || characterId == null) return;
       try {
         await sessionAPI.patchSession(activeSessionId, {
           loadout_by_character: { [String(characterId)]: nextEntry },
         });
-        onCampaignRefresh?.();
+        // The automatic load save needs no refresh: the sheet works the load
+        // out from the items. Rigging ticks show the session copy, so refresh.
+        if (!auto) onCampaignRefresh?.();
       } catch (err) {
         console.error("Loadout save failed:", err);
       }
