@@ -426,6 +426,22 @@ class CampaignViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+        # A PC belongs to one campaign: it must be removed from the old one
+        # first (that also clears the old campaign's crew). Staff may move.
+        if (
+            character.campaign_id
+            and character.campaign_id != campaign.id
+            and not request.user.is_staff
+        ):
+            return Response(
+                {
+                    "error": (
+                        f'Remove this character from "{character.campaign.name}" first.'
+                    )
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
         character.campaign = campaign
         character.save(update_fields=["campaign"])
         if not campaign.players.filter(id=request.user.id).exists():
