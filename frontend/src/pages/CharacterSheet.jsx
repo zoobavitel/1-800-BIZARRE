@@ -2263,6 +2263,8 @@ const CharacterSheetWrapper = ({
 
   useEffect(() => {
     if (sheetDraftIsDirty) return;
+    // A tick not saved yet must not be overwritten by an older server copy.
+    if (fieldTouchRef.current.armor) return;
     if (typeof character?.standArmorUsed === "number" && Number.isFinite(character.standArmorUsed))
       setStandArmorUsed(Math.max(0, Math.floor(character.standArmorUsed)));
     const u = character?.physicalArmorUsed;
@@ -10345,6 +10347,7 @@ const CharacterSheetWrapper = ({
           if (touches.coin) fieldTouchRef.current.coin = false;
           if (touches.stash) fieldTouchRef.current.stash = false;
           if (touches.heritage) fieldTouchRef.current.heritage = false;
+          if (touches.armor) fieldTouchRef.current.armor = false;
           // Re-assert only fields this save included. A clock autosave that
           // omitted stress must not push a stale truth-lock count over the
           // server echo (GM unmark / concurrent roll marks).
@@ -15501,18 +15504,33 @@ const CharacterSheetWrapper = ({
                         showStandArmor={showStandArmor}
                         standArmorMax={standArmorMax}
                         standArmorUsed={standArmorUsed}
-                        onStandArmorUsedChange={setStandArmorUsed}
+                        onStandArmorUsedChange={(v) => {
+                          markFieldTouch("armor");
+                          setStandArmorUsed(v);
+                        }}
                         showSpinArmor={showSpinArmor}
                         spinArmorUsed={spinArmorUsed}
-                        onSpinArmorUsedChange={setSpinArmorUsed}
+                        onSpinArmorUsedChange={(v) => {
+                          markFieldTouch("armor");
+                          setSpinArmorUsed(v);
+                        }}
                         showHamonArmor={showHamonArmor}
                         hamonArmorUsed={hamonArmorUsed}
-                        onHamonArmorUsedChange={setHamonArmorUsed}
+                        onHamonArmorUsedChange={(v) => {
+                          markFieldTouch("armor");
+                          setHamonArmorUsed(v);
+                        }}
                         inventory={charData.inventory}
                         physicalArmorUsed={physicalArmorUsed}
-                        onPhysicalArmorUsedChange={setPhysicalArmorUsed}
+                        onPhysicalArmorUsedChange={(v) => {
+                          markFieldTouch("armor");
+                          setPhysicalArmorUsed(v);
+                        }}
                         specialArmorUsed={specialArmorUsed}
-                        onSpecialArmorUsedChange={setSpecialArmorUsed}
+                        onSpecialArmorUsedChange={(v) => {
+                          markFieldTouch("armor");
+                          setSpecialArmorUsed(v);
+                        }}
                       />
                       {characterHasLegendaryGuard(abilities) ? (
                         <div

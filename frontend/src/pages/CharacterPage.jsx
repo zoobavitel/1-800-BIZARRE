@@ -1052,6 +1052,15 @@ export default function CharacterPage({
         if (!touches.stash) {
           delete body.stash_slots;
         }
+        // Untouched armor stays off the PATCH, so an old count in this tab
+        // can't overwrite a tick saved from elsewhere.
+        if (!touches.armor) {
+          delete body.stand_armor_used;
+          delete body.physical_armor_used;
+          delete body.spin_armor_used;
+          delete body.hamon_armor_used;
+          delete body.special_armor_used;
+        }
         return body;
       };
       dropUntouchedServerOwned(toSend);
