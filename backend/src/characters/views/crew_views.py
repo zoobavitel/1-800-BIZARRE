@@ -28,13 +28,16 @@ _CREW_MEMBER_ALLOWED_PATCH_FIELDS = frozenset(
         "session_xp_triggers",
         # Server-managed alongside session_xp_triggers merges (rep tally).
         "session_rep_contributions",
+        # Crew stats. S5 made these GM only; the user opened them to crew
+        # members again on 2026-11-02.
+        "level",
+        "xp",
+        "coin",
+        "rep",
+        "hold",
+        "turf",
+        "wanted_level",
     }
-)
-
-# GM only (user, 2026-10-26). A member may still send these when the value is
-# unchanged, because the sheet's crew autosave sends them with every save.
-_CREW_GM_ONLY_STAT_FIELDS = frozenset(
-    {"level", "xp", "coin", "rep", "hold", "turf", "wanted_level"}
 )
 
 # Trigger boolean keys that players may toggle in session_xp_triggers[sid].
@@ -202,19 +205,7 @@ class CrewViewSet(viewsets.ModelViewSet):
         # Crew members can update shared crew sheet fields (name, stash grid, resources, etc.)
         if self._is_crew_member(user, crew):
             validated = serializer.validated_data
-            changed_stats = [
-                key for key in _CREW_GM_ONLY_STAT_FIELDS & validated.keys()
-                if validated[key] != getattr(crew, key)
-            ]
-            if changed_stats:
-                raise PermissionDenied(
-                    "Only the campaign GM can change the crew's "
-                    + ", ".join(sorted(changed_stats))
-                )
-            unchanged_stats = _CREW_GM_ONLY_STAT_FIELDS & validated.keys()
-            if set(validated.keys()) - unchanged_stats <= _CREW_MEMBER_ALLOWED_PATCH_FIELDS:
-                for key in unchanged_stats:
-                    validated.pop(key)
+            if set(validated.keys()) <= _CREW_MEMBER_ALLOWED_PATCH_FIELDS:
                 serializer.save()
                 crew.refresh_from_db()
                 if "name" in validated:
