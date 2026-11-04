@@ -2018,17 +2018,11 @@ class CharacterSerializer(serializers.ModelSerializer):
         data["advancement_plan"] = [
             serialize_plan_item(item) for item in list_queued_plan_items(instance)
         ]
-        # Crew-linked PCs store stash on Crew.stash_slots; expose resolved grid on
-        # the character payload so clients hydrate without a separate /crews/ GET.
-        crew_obj = getattr(instance, "crew", None)
-        if crew_obj is not None:
-            data["effective_stash_slots"] = list(
-                crew_obj.stash_slots or _default_stash_slots()
-            )
-        else:
-            data["effective_stash_slots"] = list(
-                instance.stash_slots or _default_stash_slots()
-            )
+        # Stash is personal, crew or not (user, 2026-11-03). Kept under this
+        # name so older clients that read it still get the right grid.
+        data["effective_stash_slots"] = list(
+            instance.stash_slots or _default_stash_slots()
+        )
         from characters.services.xp_allocation import compute_pc_level
 
         data["level"] = compute_pc_level(instance)
