@@ -38,3 +38,7 @@ paths = [
   # Node modules
   "node_modules",
 ]
+# Doc placeholders like `Authorization: Token YOUR_TOKEN` are not secrets.
+regexes = [
+  '''(?i)^<?your[_-]?(auth[_-]?)?token(_here)?>?$''',
+]

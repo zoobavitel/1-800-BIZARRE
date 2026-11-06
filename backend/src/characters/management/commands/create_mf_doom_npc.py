@@ -1,6 +1,7 @@
 from django.core.management.base import BaseCommand
 from django.contrib.auth.models import User
 from characters.models import NPC, Heritage, Campaign, SpinAbility
+from characters.management.seed_passwords import seed_password
 
 class Command(BaseCommand):
     help = 'Create the MF DOOM NPC for testing and demonstration purposes.'
@@ -12,7 +13,7 @@ class Command(BaseCommand):
             defaults={'email': 'admin@example.com', 'is_staff': True, 'is_superuser': True}
         )
         if created:
-            user.set_password('admin')
+            user.set_password(seed_password(self.stdout, user.username))
             user.save()
             self.stdout.write(self.style.SUCCESS('Created admin user.'))
         else:
