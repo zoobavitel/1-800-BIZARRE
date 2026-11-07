@@ -134,10 +134,14 @@ class EquipmentItemViewSet(viewsets.ModelViewSet):
         serializer.save(created_by=self.request.user)
 
     def _can_edit_catalog_item(self, request, instance):
-        """Creator, campaign GM (CAMPAIGN), or staff. TEMPLATE is staff-only."""
+        """Staff, or for a CAMPAIGN item its creator or campaign GM.
+
+        TEMPLATE and SITE (the core catalog) are staff-only, even for the
+        user who created a SITE item before publishing became staff-only.
+        """
         if request.user.is_staff:
             return True
-        if instance.scope == "TEMPLATE":
+        if instance.scope in ("TEMPLATE", "SITE"):
             return False
         if instance.created_by_id and instance.created_by_id == request.user.id:
             return True
@@ -150,7 +154,7 @@ class EquipmentItemViewSet(viewsets.ModelViewSet):
         if not self._can_edit_catalog_item(self.request, instance):
             self.permission_denied(
                 self.request,
-                message="Only the item creator, campaign GM, or staff can edit this catalog entry.",
+                message="Only staff can edit core catalog items. Campaign items: the creator, the campaign GM, or staff.",
             )
         data = serializer.validated_data
         scope = data.get("scope", instance.scope)
@@ -163,7 +167,7 @@ class EquipmentItemViewSet(viewsets.ModelViewSet):
         if not self._can_edit_catalog_item(self.request, instance):
             self.permission_denied(
                 self.request,
-                message="Only the item creator, campaign GM, or staff can delete this catalog entry.",
+                message="Only staff can delete core catalog items. Campaign items: the creator, the campaign GM, or staff.",
             )
         instance.delete()
 

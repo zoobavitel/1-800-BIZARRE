@@ -63,6 +63,21 @@ class EquipmentScopeTests(TestCase):
     def test_the_gm_can_still_rename_their_item(self):
         self.assertEqual(self.patch(self.gm, {"name": "Renamed"}).status_code, 200)
 
+    def test_only_staff_edit_or_delete_site_items_even_their_creator(self):
+        # Site items a GM published before publishing became staff-only
+        # (2026-10-29) still list that GM as creator.
+        site = EquipmentItem.objects.create(name="Old site item", scope="SITE", created_by=self.gm)
+        self.client.force_authenticate(self.gm)
+        url = f"/api/equipment-items/{site.id}/"
+        self.assertEqual(self.client.patch(url, {"name": "Changed"}, format="json").status_code, 403)
+        self.assertEqual(self.client.delete(url).status_code, 403)
+        site.refresh_from_db()
+        self.assertEqual(site.name, "Old site item")
+
+        self.client.force_authenticate(self.staff)
+        self.assertEqual(self.client.patch(url, {"name": "Changed"}, format="json").status_code, 200)
+        self.assertEqual(self.client.delete(url).status_code, 204)
+
 
 class SiteCatalogAndKitItemTests(TestCase):
     """The user's rule (2026-10-29): a player's own items stay private to
