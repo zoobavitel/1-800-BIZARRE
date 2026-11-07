@@ -1373,6 +1373,28 @@ const CharacterSheetWrapper = ({
     [campaignId, characterId],
   );
 
+  // S8: the sheet's owner makes one of their custom items public.
+  const handleShareItem = useCallback(
+    async (item) => {
+      if (characterId == null || !String(item?.name || "").trim()) return null;
+      try {
+        return await equipmentAPI.share({
+          name: item.name,
+          detail: item.detail,
+          category: item.category,
+          load: item.load,
+          quality: item.quality,
+          coin_value: item.coin_value,
+          source_character: characterId,
+        });
+      } catch (err) {
+        console.error("Make item public failed:", err);
+        return null;
+      }
+    },
+    [characterId],
+  );
+
   const handlePublishItemToSite = useCallback(
     async (item) => {
       const cid =
@@ -15872,7 +15894,13 @@ const CharacterSheetWrapper = ({
                           isGM ? handlePromoteItemToCampaign : undefined
                         }
                         onPublishToSite={
-                          isGM ? handlePublishItemToSite : undefined
+                          // Site-wide catalog publishing is admin only (2026-10-29).
+                          user?.is_staff ? handlePublishItemToSite : undefined
+                        }
+                        onShareItem={
+                          character?.id && character?.user_id === user?.id
+                            ? handleShareItem
+                            : undefined
                         }
                       />
                     ) : null}

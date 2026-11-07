@@ -496,11 +496,12 @@ function PendingInvitations({ invitations, onAccept, onDecline }) {
 // ---------------------------------------------------------------------------
 // Campaign Detail View
 // ---------------------------------------------------------------------------
-function CampaignEquipmentPanel({ campaign, onRefresh }) {
+export function CampaignEquipmentPanel({ campaign, onRefresh }) {
   const { user } = useAuth();
   const [items, setItems] = useState([]);
   const [form, setForm] = useState(null);
   const [error, setError] = useState(null);
+  const [notice, setNotice] = useState(null);
 
   const loadItems = useCallback(() => {
     if (!campaign?.id) return;
@@ -517,11 +518,14 @@ function CampaignEquipmentPanel({ campaign, onRefresh }) {
   const campaignItems = items.filter((i) => i.scope === "CAMPAIGN");
   const templates = items.filter((i) => i.scope === "TEMPLATE");
   const siteItems = items.filter((i) => i.scope === "SITE");
+  const sharedItems = items.filter((i) => i.scope === "SHARED");
 
   const canDeleteCatalogItem = (item) => {
     if (!user) return false;
     if (user.is_staff) return true;
-    if (item.scope === "TEMPLATE") return false;
+    // Core catalog (SRD, site) is staff-only. A public item is edited by its
+    // creator on their account page, not here.
+    if (["TEMPLATE", "SITE", "SHARED"].includes(item.scope)) return false;
     if (item.created_by != null && Number(item.created_by) === Number(user.id)) {
       return true;
     }
@@ -548,6 +552,20 @@ function CampaignEquipmentPanel({ campaign, onRefresh }) {
     setError(null);
   };
 
+  // Renaming a catalog item doesn't touch copies already on sheets: each copy
+  // is its own row and is edited on its sheet (user's choice, 2026-11-06).
+  const startEdit = (item) => {
+    setForm({
+      editingId: item.id,
+      name: item.name || "",
+      description: item.description || "",
+      category: item.category || "other",
+      load_slots: item.load_slots ?? 1,
+      quality: item.quality ?? 1,
+    });
+    setError(null);
+  };
+
   const handleSave = async () => {
     if (!form?.name?.trim()) {
       setError("Name required.");
@@ -555,6 +573,20 @@ function CampaignEquipmentPanel({ campaign, onRefresh }) {
     }
     setError(null);
     try {
+      if (form.editingId != null) {
+        // Only the fields the form shows. Scope and campaign stay as they are.
+        await equipmentAPI.update(form.editingId, {
+          name: form.name.trim(),
+          description: form.description || "",
+          category: form.category,
+          load_slots: Number(form.load_slots) || 1,
+          quality: Number(form.quality) || 1,
+        });
+        setForm(null);
+        loadItems();
+        onRefresh?.();
+        return;
+      }
       await equipmentAPI.create({
         name: form.name.trim(),
         description: form.description || "",
@@ -583,6 +615,29 @@ function CampaignEquipmentPanel({ campaign, onRefresh }) {
     }
   };
 
+  const handleShare = async (item) => {
+    setError(null);
+    try {
+      await equipmentAPI.share({ item: item.id });
+      setNotice(`“${item.name}” is now public. Other GMs can turn it on for their campaigns.`);
+    } catch (e) {
+      setError(e.message || "Could not make the item public.");
+    }
+  };
+
+  // A GM's edit of someone else's public item goes into a copy in this
+  // campaign's library; the original stays as its creator made it.
+  const handleCopyShared = async (item) => {
+    setError(null);
+    try {
+      const copy = await equipmentAPI.copyToCampaign(item.id, campaign.id);
+      loadItems();
+      if (copy?.id != null) startEdit(copy);
+    } catch (e) {
+      setError(e.message || "Could not copy the item.");
+    }
+  };
+
   const handleDelete = async (item) => {
     if (!window.confirm(`Delete catalog item “${item.name}”?`)) return;
     setError(null);
@@ -601,6 +656,11 @@ function CampaignEquipmentPanel({ campaign, onRefresh }) {
       {error ? (
         <div style={{ color: "var(--sheet-label)", fontSize: "11px", marginBottom: "8px" }}>
           {error}
+        </div>
+      ) : null}
+      {notice ? (
+        <div style={{ color: "var(--text-muted)", fontSize: "11px", marginBottom: "8px" }}>
+          {notice}
         </div>
       ) : null}
       <div style={{ color: "var(--text-muted)", fontSize: "11px", marginBottom: "6px" }}>
@@ -639,6 +699,26 @@ function CampaignEquipmentPanel({ campaign, onRefresh }) {
               />
               Available when adding
             </label>
+            {canDeleteCatalogItem(item) ? (
+              <button
+                type="button"
+                aria-label={`Edit ${item.name}`}
+                style={{ ...S.btn, marginLeft: "12px", fontSize: "11px" }}
+                onClick={() => startEdit(item)}
+              >
+                Edit
+              </button>
+            ) : null}
+            {canDeleteCatalogItem(item) ? (
+              <button
+                type="button"
+                aria-label={`Make ${item.name} public`}
+                style={{ ...S.btn, marginLeft: "12px", fontSize: "11px" }}
+                onClick={() => handleShare(item)}
+              >
+                Make public
+              </button>
+            ) : null}
             {canDeleteCatalogItem(item) ? (
               <button
                 type="button"
@@ -740,6 +820,51 @@ function CampaignEquipmentPanel({ campaign, onRefresh }) {
                   onClick={() => handleDelete(item)}
                 >
                   Delete
+                </button>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {sharedItems.length > 0 ? (
+        <div style={{ marginTop: "10px" }}>
+          <div style={{ color: "var(--text-muted)", fontSize: "11px", marginBottom: "6px" }}>
+            Shared by players and GMs (hidden until you enable it for this campaign)
+          </div>
+          {sharedItems.map((item) => (
+            <div
+              key={`shared-${item.id}`}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                fontSize: "11px",
+                color: "var(--hftf-text-cream)",
+                marginBottom: "4px",
+                flexWrap: "wrap",
+              }}
+            >
+              <label style={{ display: "inline-flex", alignItems: "center" }}>
+                <input
+                  type="checkbox"
+                  checked={Boolean(item.enabled_for_campaign)}
+                  onChange={(e) => toggleAccess(item, e.target.checked)}
+                  style={{ marginRight: "6px" }}
+                />
+                {item.name}
+              </label>
+              <span style={{ color: "var(--text-dim)" }}>
+                Shared by {item.created_by_username || "a player"} · {categoryLabel(item.category)} · load{" "}
+                {item.load_slots} · Q{item.quality}
+              </span>
+              {campaign?.gm?.id != null && Number(campaign.gm.id) === Number(user?.id) ? (
+                <button
+                  type="button"
+                  aria-label={`Copy ${item.name} to my library and edit`}
+                  style={{ ...S.btn, fontSize: "10px", padding: "2px 6px" }}
+                  onClick={() => handleCopyShared(item)}
+                >
+                  Copy to my library and edit
                 </button>
               ) : null}
             </div>

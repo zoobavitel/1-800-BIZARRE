@@ -256,7 +256,9 @@ class EquipmentCatalogPermissionTests(TestCase):
         self.campaign = Campaign.objects.create(name="EqCamp", gm=self.gm)
         self.client = APIClient()
 
-    def test_creator_can_delete_own_site_item(self):
+    def test_creator_cannot_delete_own_site_item(self):
+        # Site items are core catalog: staff-only, even for their creator
+        # (user's rule, 2026-11-06).
         item = EquipmentItem.objects.create(
             name="Creator Site Widget",
             category="gear",
@@ -265,8 +267,8 @@ class EquipmentCatalogPermissionTests(TestCase):
         )
         self.client.force_authenticate(self.creator)
         res = self.client.delete(f"/api/equipment-items/{item.id}/")
-        self.assertEqual(res.status_code, 204)
-        self.assertFalse(EquipmentItem.objects.filter(pk=item.id).exists())
+        self.assertEqual(res.status_code, 403)
+        self.assertTrue(EquipmentItem.objects.filter(pk=item.id).exists())
 
     def test_non_creator_cannot_delete_site_item(self):
         item = EquipmentItem.objects.create(
@@ -378,7 +380,9 @@ class EquipmentCatalogPermissionTests(TestCase):
             campaign=self.campaign,
             created_by=self.gm,
         )
-        self.client.force_authenticate(self.gm)
+        # Publishing to the site catalog is admin only (2026-10-29).
+        staff = User.objects.create_user(username="pub_staff_ss", password="pw-staff-ss-1", is_staff=True)
+        self.client.force_authenticate(staff)
         res = self.client.post(
             f"/api/equipment-items/{camp.id}/publish-to-site/"
         )

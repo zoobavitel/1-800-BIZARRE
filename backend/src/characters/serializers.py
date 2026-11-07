@@ -3021,8 +3021,9 @@ class EquipmentItemSerializer(serializers.ModelSerializer):
             "source_character",
             "available_when_adding",
             "enabled_for_campaign",
+            "is_public",
         ]
-        read_only_fields = ["created_by", "created_by_username"]
+        read_only_fields = ["created_by", "created_by_username", "is_public"]
 
     def get_created_by_username(self, obj):
         if obj.created_by_id:
@@ -3045,7 +3046,7 @@ class EquipmentItemSerializer(serializers.ModelSerializer):
                 campaign_id=campaign_id, item_id=obj.id
             ).first()
             return access.enabled if access else True
-        if obj.scope == "SITE":
+        if obj.scope in ("SITE", "SHARED"):
             access = CampaignEquipmentAccess.objects.filter(
                 campaign_id=campaign_id, item_id=obj.id
             ).first()
