@@ -446,12 +446,13 @@ export default function CharacterSheetInventoryList({
   ]);
 
   const refreshCatalog = useCallback(() => {
-    if (!campaignId) {
-      setCatalogItems([]);
-      return Promise.resolve();
-    }
+    // No campaign: the base SRD items only. Campaign libraries and site items
+    // need a campaign, because a GM enables those per campaign.
+    const params = campaignId
+      ? { campaign: campaignId, available_for_campaign: true }
+      : { scope: "TEMPLATE" };
     return equipmentAPI
-      .list({ campaign: campaignId, available_for_campaign: true })
+      .list(params)
       .then((list) => {
         setCatalogItems(Array.isArray(list) ? list : []);
       })
