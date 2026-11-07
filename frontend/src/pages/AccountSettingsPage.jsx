@@ -3,6 +3,7 @@ import { authAPI, useAuth } from "../features/auth";
 import { useTheme } from "../features/theme/ThemeContext";
 import { resolveMediaUrl } from "../features/character-sheet/services/api";
 import AvatarCropModal from "../components/AvatarCropModal";
+import MySharedItems from "../features/character-sheet/components/MySharedItems";
 
 // The server signs out every other device when the password changes.
 export const PASSWORD_CHANGED_MESSAGE =
@@ -737,6 +738,18 @@ export default function AccountSettingsPage() {
                 {passwordMessage}
               </span>
             )}
+          </div>
+        </section>
+
+        <section style={S.section}>
+          <h2 style={S.sectionTitle}>My shared items</h2>
+          <div style={S.card}>
+            <p style={S.mutedSmall}>
+              Items you made public. A GM has to turn one on before it shows
+              in their campaign. Unsharing hides it from new adds; copies
+              already on sheets stay.
+            </p>
+            <MySharedItems />
           </div>
         </section>
 

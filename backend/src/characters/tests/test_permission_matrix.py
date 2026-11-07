@@ -284,6 +284,8 @@ class PermissionMatrixTests(TestCase):
             "/api/crews/{id}/propose-name/": {"name": "Intruder crew name"},
             "/api/equipment-items/{id}/set-campaign-access/": {"campaign": c, "enabled": True},
             "/api/equipment-items/from-kit-item/": {"campaign": c, "name": "Intruder kit item"},
+            "/api/equipment-items/share/": {"name": "Intruder share", "source_character": pc},
+            "/api/equipment-items/{id}/copy-to-campaign/": {"campaign": c},
             "/api/characters/{id}/assist-help/": {"helper_character_id": self.member_pc.pk, "session_id": s},
         }
         return bodies.get(template, {})
@@ -325,6 +327,8 @@ class PermissionMatrixTests(TestCase):
         # A player assigns or unassigns their own PC.
         "POST /api/campaigns/{id}/assign-character/": "owner",
         "POST /api/campaigns/{id}/unassign-character/": "owner",
+        # A player shares a custom item from their own sheet (S8).
+        "POST /api/equipment-items/share/": "owner",
     }
 
     # Positive controls known to 5xx today. The fix PR deletes its entry; a
