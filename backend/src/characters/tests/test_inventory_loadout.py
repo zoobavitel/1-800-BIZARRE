@@ -378,7 +378,9 @@ class EquipmentCatalogPermissionTests(TestCase):
             campaign=self.campaign,
             created_by=self.gm,
         )
-        self.client.force_authenticate(self.gm)
+        # Publishing to the site catalog is admin only (2026-10-29).
+        staff = User.objects.create_user(username="pub_staff_ss", password="pw-staff-ss-1", is_staff=True)
+        self.client.force_authenticate(staff)
         res = self.client.post(
             f"/api/equipment-items/{camp.id}/publish-to-site/"
         )

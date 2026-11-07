@@ -2648,6 +2648,7 @@ export default function CharacterPage({
                   campaigns={campaigns}
                   allNpcs={npcs}
                   isGM={isNpcGm}
+                  canPublishToSite={Boolean(user?.is_staff)}
                   readOnly={!canEditNpc}
                   onFactionChange={refreshCampaigns}
                   onCampaignRefresh={refreshCampaigns}
