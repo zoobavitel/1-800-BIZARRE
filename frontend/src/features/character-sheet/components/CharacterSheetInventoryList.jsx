@@ -130,7 +130,9 @@ function CatalogSearchCard({
                   ? "Campaign"
                   : c.scope === "SITE"
                     ? "Site"
-                    : "Template"}{" "}
+                    : c.scope === "SHARED"
+                      ? `Shared by ${c.created_by_username || "a player"}`
+                      : "Template"}{" "}
                 · {categoryLabel(c.category)} · load {c.load_slots ?? 1}
               </span>
               <span style={{ display: "block", fontWeight: "bold" }}>{c.name}</span>
@@ -391,6 +393,7 @@ export default function CharacterSheetInventoryList({
   isGM = false,
   onPromoteToCampaign,
   onPublishToSite,
+  onShareItem,
   allowArmor = true,
   hideAggregateLoad = false,
 }) {
@@ -766,6 +769,30 @@ export default function CharacterSheetInventoryList({
                   }}
                 >
                   Save to campaign library
+                </button>
+              ) : null}
+              {onShareItem &&
+              !readOnly &&
+              !armorKind &&
+              item.catalog_id == null &&
+              String(item.name || "").trim() ? (
+                <button
+                  type="button"
+                  style={{ ...btnStyle, alignSelf: "flex-start", fontSize: "10px" }}
+                  aria-label={`Make ${item.name} public`}
+                  onClick={async () => {
+                    const shared = await onShareItem(item);
+                    if (shared?.id == null) return;
+                    // Link the row to its public copy so it isn't shared twice.
+                    onInventoryTouch?.();
+                    onChange(
+                      inv.map((row) =>
+                        row.id === item.id ? { ...row, catalog_id: shared.id } : row,
+                      ),
+                    );
+                  }}
+                >
+                  Make public
                 </button>
               ) : null}
               {isGM &&

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from characters.models import EquipmentItem
+from characters.models import EquipmentItem as _CurrentEquipmentItem
 
 # Blades-style flexible kits (one row each). Detail examples live in description.
 CANONICAL_SRD_EQUIPMENT_TEMPLATES = [
@@ -104,12 +104,16 @@ CANONICAL_TEMPLATE_NAMES = frozenset(
 )
 
 
-def sync_srd_equipment_templates(*, prune_obsolete: bool = True) -> dict:
+def sync_srd_equipment_templates(*, prune_obsolete: bool = True, model=None) -> dict:
     """
     Upsert TEMPLATE EquipmentItem rows by name.
     When prune_obsolete, delete TEMPLATE rows whose names are not canonical.
     Collapses duplicate TEMPLATE rows that share the same name.
+
+    A data migration passes its historical model (`apps.get_model`) so later
+    columns on EquipmentItem don't break it.
     """
+    EquipmentItem = model or _CurrentEquipmentItem
     created = 0
     updated = 0
     for row in CANONICAL_SRD_EQUIPMENT_TEMPLATES:

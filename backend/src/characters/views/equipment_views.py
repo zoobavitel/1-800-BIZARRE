@@ -30,17 +30,24 @@ class EquipmentItemViewSet(viewsets.ModelViewSet):
             except (TypeError, ValueError):
                 cid = None
 
+        # Public items are visible to everyone; an unshared one only to its
+        # creator (and staff).
+        shared_vis = models.Q(scope="SHARED", is_public=True) | models.Q(
+            scope="SHARED", created_by=user
+        )
+
         if user.is_staff:
             base = qs
         else:
             vis = (
                 models.Q(scope="TEMPLATE")
                 | models.Q(scope="SITE")
+                | shared_vis
                 | models.Q(campaign__gm=user)
                 | models.Q(campaign__characters__user=user)
             )
             if cid:
-                vis = models.Q(scope="TEMPLATE") | models.Q(scope="SITE") | (
+                vis = models.Q(scope="TEMPLATE") | models.Q(scope="SITE") | shared_vis | (
                     models.Q(scope="CAMPAIGN", campaign_id=cid)
                     & (
                         models.Q(campaign__gm=user)
@@ -53,22 +60,26 @@ class EquipmentItemViewSet(viewsets.ModelViewSet):
             base = base.filter(
                 models.Q(scope="TEMPLATE")
                 | models.Q(scope="SITE")
+                | models.Q(scope="SHARED", is_public=True)
                 | models.Q(scope="CAMPAIGN", campaign_id=cid)
             )
         elif getattr(self, "action", None) == "list":
             # Unscoped list is the global catalog: never leak campaign libraries.
-            base = base.filter(scope__in=("TEMPLATE", "SITE"))
+            base = base.filter(scope__in=("TEMPLATE", "SITE", "SHARED"))
         elif not user.is_staff:
             # Detail/update/publish: GM/player may still fetch their campaign rows by id.
             base = base.filter(
                 models.Q(scope="TEMPLATE")
                 | models.Q(scope="SITE")
+                | shared_vis
                 | models.Q(campaign__gm=user)
                 | models.Q(campaign__characters__user=user)
             ).distinct()
 
         if scope:
             base = base.filter(scope=str(scope).upper())
+        if self.request.query_params.get("mine"):
+            base = base.filter(created_by=user)
 
         if available_only:
             if not cid:
@@ -77,7 +88,8 @@ class EquipmentItemViewSet(viewsets.ModelViewSet):
             disabled_template_ids = access.filter(enabled=False).values_list(
                 "item_id", flat=True
             )
-            enabled_site_ids = access.filter(enabled=True).values_list(
+            # SITE and SHARED items are opt-in: off until the GM ticks them.
+            enabled_opt_in_ids = access.filter(enabled=True).values_list(
                 "item_id", flat=True
             )
             base = base.filter(
@@ -85,7 +97,8 @@ class EquipmentItemViewSet(viewsets.ModelViewSet):
                     models.Q(scope="TEMPLATE")
                     & ~models.Q(id__in=disabled_template_ids)
                 )
-                | models.Q(scope="SITE", id__in=enabled_site_ids)
+                | models.Q(scope="SITE", id__in=enabled_opt_in_ids)
+                | models.Q(scope="SHARED", is_public=True, id__in=enabled_opt_in_ids)
                 | models.Q(
                     scope="CAMPAIGN",
                     campaign_id=cid,
@@ -122,6 +135,11 @@ class EquipmentItemViewSet(viewsets.ModelViewSet):
                     request,
                     message="Only staff can create or move items into the shared catalog.",
                 )
+        elif scope == "SHARED":
+            self.permission_denied(
+                request,
+                message="Use share to make an item public.",
+            )
         elif scope == "CAMPAIGN":
             if campaign is None:
                 raise ValidationError({"campaign": ["A campaign item needs a campaign."]})
@@ -164,6 +182,11 @@ class EquipmentItemViewSet(viewsets.ModelViewSet):
         serializer.save()
 
     def perform_destroy(self, instance):
+        if instance.scope == "SHARED" and not self.request.user.is_staff:
+            self.permission_denied(
+                self.request,
+                message="Unshare a public item instead of deleting it.",
+            )
         if not self._can_edit_catalog_item(self.request, instance):
             self.permission_denied(
                 self.request,
@@ -184,9 +207,9 @@ class EquipmentItemViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         self._assert_gm(request, campaign)
-        if item.scope not in ("TEMPLATE", "SITE"):
+        if item.scope not in ("TEMPLATE", "SITE", "SHARED"):
             return Response(
-                {"error": "Only template or site items use campaign access toggles."},
+                {"error": "Only template, site or shared items use campaign access toggles."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         access, _ = CampaignEquipmentAccess.objects.update_or_create(
@@ -292,3 +315,144 @@ class EquipmentItemViewSet(viewsets.ModelViewSet):
             EquipmentItemSerializer(item, context=self.get_serializer_context()).data,
             status=status.HTTP_201_CREATED,
         )
+
+    # Public (shared) items, story S8 (user's rules, 2026-11-06).
+
+    def _shared_response(self, item, created):
+        return Response(
+            EquipmentItemSerializer(item, context=self.get_serializer_context()).data,
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
+
+    @action(detail=False, methods=["post"], url_path="share")
+    def share(self, request):
+        """Make one of your own items public: a custom item from your sheet
+        (name, detail, ... plus source_character) or an item from your
+        campaign library (item). Creates a SHARED copy; the source stays."""
+        user = request.user
+        library_id = request.data.get("item")
+        if library_id not in (None, ""):
+            source = (
+                EquipmentItem.objects.select_related("campaign")
+                .filter(pk=library_id, scope="CAMPAIGN")
+                .first()
+            )
+            if source is None:
+                return Response({"error": "Campaign item not found."}, status=status.HTTP_404_NOT_FOUND)
+            if not (
+                user.is_staff
+                or source.created_by_id == user.id
+                or (source.campaign_id and source.campaign.gm_id == user.id)
+            ):
+                self.permission_denied(request, message="You can only share your own items.")
+            fields = {
+                "name": source.name,
+                "description": source.description,
+                "category": source.category,
+                "load_slots": source.load_slots,
+                "quality": source.quality,
+                "coin_value": source.coin_value,
+                "source_character_id": source.source_character_id,
+            }
+        else:
+            character_id = request.data.get("source_character")
+            try:
+                character = Character.objects.get(pk=character_id)
+            except (Character.DoesNotExist, TypeError, ValueError):
+                return Response(
+                    {"source_character": ["Your character is required."]},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if character.user_id != user.id:
+                self.permission_denied(request, message="You can only share items from your own sheet.")
+            fields = {
+                "name": str(request.data.get("name") or "").strip(),
+                "description": str(request.data.get("detail") or request.data.get("description") or ""),
+                "category": str(request.data.get("category") or "other"),
+                "load_slots": _bounded_int(request.data.get("load"), 0, 2, 1),
+                "quality": _bounded_int(request.data.get("quality"), 0, 3, 1),
+                "coin_value": request.data.get("coin_value"),
+                "source_character_id": character.id,
+            }
+        if not fields["name"]:
+            return Response({"error": "name is required."}, status=status.HTTP_400_BAD_REQUEST)
+        valid_categories = {value for value, _ in EquipmentItem.CATEGORY_CHOICES}
+        if fields["category"] not in valid_categories:
+            fields["category"] = "other"
+
+        existing = (
+            EquipmentItem.objects.filter(scope="SHARED", created_by=user, name__iexact=fields["name"])
+            .order_by("id")
+            .first()
+        )
+        if existing:
+            if not existing.is_public:
+                existing.is_public = True
+                existing.save(update_fields=["is_public"])
+            return self._shared_response(existing, created=False)
+        item = EquipmentItem.objects.create(scope="SHARED", is_public=True, created_by=user, **fields)
+        return self._shared_response(item, created=True)
+
+    def _assert_shared_owner(self, request, item):
+        if not (request.user.is_staff or item.created_by_id == request.user.id):
+            self.permission_denied(request, message="Only the item's creator or staff can do this.")
+        if item.scope != "SHARED":
+            raise ValidationError({"scope": ["Only shared items can be shared or unshared."]})
+
+    @action(detail=True, methods=["post"], url_path="unshare")
+    def unshare(self, request, pk=None):
+        """Hide a public item from new adds everywhere. The row stays, so
+        copies already on sheets keep pointing at it."""
+        item = self.get_object()
+        self._assert_shared_owner(request, item)
+        item.is_public = False
+        item.save(update_fields=["is_public"])
+        return self._shared_response(item, created=False)
+
+    @action(detail=True, methods=["post"], url_path="reshare")
+    def reshare(self, request, pk=None):
+        item = self.get_object()
+        self._assert_shared_owner(request, item)
+        item.is_public = True
+        item.save(update_fields=["is_public"])
+        return self._shared_response(item, created=False)
+
+    @action(detail=True, methods=["post"], url_path="copy-to-campaign")
+    def copy_to_campaign(self, request, pk=None):
+        """A GM's edit of someone else's public item: copy it into their own
+        campaign library to change it there. The original is untouched and is
+        switched off in that campaign so it isn't listed twice."""
+        item = self.get_object()
+        try:
+            campaign = Campaign.objects.get(pk=request.data.get("campaign"))
+        except (Campaign.DoesNotExist, TypeError, ValueError):
+            return Response({"error": "Valid campaign id required."}, status=status.HTTP_400_BAD_REQUEST)
+        self._assert_gm(request, campaign)
+        if item.scope != "SHARED" or not (item.is_public or request.user.is_staff):
+            raise ValidationError({"scope": ["Only public shared items can be copied."]})
+        copy = EquipmentItem.objects.create(
+            name=item.name,
+            description=item.description,
+            category=item.category,
+            load_slots=item.load_slots,
+            quality=item.quality,
+            coin_value=item.coin_value,
+            scope="CAMPAIGN",
+            campaign=campaign,
+            created_by=request.user,
+            available_when_adding=True,
+        )
+        CampaignEquipmentAccess.objects.update_or_create(
+            campaign=campaign, item=item, defaults={"enabled": False}
+        )
+        return self._shared_response(copy, created=True)
+
+
+def _bounded_int(value, low, high, default):
+    """Parse an int and clamp it. Blank or invalid gives the default; 0 stays 0."""
+    if value in (None, ""):
+        return default
+    try:
+        return min(high, max(low, int(value)))
+    except (TypeError, ValueError):
+        return default

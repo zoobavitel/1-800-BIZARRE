@@ -768,6 +768,7 @@ export const equipmentAPI = {
     if (params.campaign != null) q.set("campaign", String(params.campaign));
     if (params.scope) q.set("scope", params.scope);
     if (params.available_for_campaign) q.set("available_for_campaign", "1");
+    if (params.mine) q.set("mine", "1");
     const qs = q.toString();
     return apiRequest(`/equipment-items/${qs ? `?${qs}` : ""}`);
   },
@@ -795,6 +796,23 @@ export const equipmentAPI = {
     apiRequest("/equipment-items/from-kit-item/", {
       method: "POST",
       body: JSON.stringify(data),
+    }),
+  // Public items (S8): share your own sheet item ({name, ..., source_character})
+  // or campaign library item ({item}); unshare/reshare your own.
+  share: (data) =>
+    apiRequest("/equipment-items/share/", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  unshare: (id) =>
+    apiRequest(`/equipment-items/${id}/unshare/`, { method: "POST" }),
+  reshare: (id) =>
+    apiRequest(`/equipment-items/${id}/reshare/`, { method: "POST" }),
+  // A GM edits someone else's public item by copying it into their library.
+  copyToCampaign: (id, campaignId) =>
+    apiRequest(`/equipment-items/${id}/copy-to-campaign/`, {
+      method: "POST",
+      body: JSON.stringify({ campaign: campaignId }),
     }),
 };
 
