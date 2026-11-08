@@ -9,12 +9,12 @@ function setup(initialPayload, { syncedKey } = {}) {
   const syncedKeyRef = {
     current: syncedKey === undefined ? JSON.stringify(initialPayload) : syncedKey,
   };
-  const hook = renderHook(
+  const utils = renderHook(
     ({ payload }) =>
       useCrewAutosave({ crewId: 1, hydratedRef, payload, syncedKeyRef, save }),
     { initialProps: { payload: initialPayload } },
   );
-  return { save, syncedKeyRef, ...hook };
+  return { save, syncedKeyRef, ...utils };
 }
 
 const flush = async (ms = 1000) => {
