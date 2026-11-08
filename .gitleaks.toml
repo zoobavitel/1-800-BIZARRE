@@ -29,6 +29,24 @@ tags = ["secret", "fixture"]
 # Placeholder hashes (all-x) used in sanitised test fixtures are fine
 regexes = ['''pbkdf2_sha256\$[0-9]+\$x{10,}\$x{40,}''']
 
+[[rules]]
+id = "tailscale-tailnet-hostname"
+description = "A real Tailscale tailnet name (tail + 6 hex). Use <your-tailnet> or tailnet-example in code and docs."
+regex = '''[a-z0-9-]+\.tail[0-9a-f]{6}\.ts\.net'''
+tags = ["infra", "private"]
+
+[[rules]]
+id = "private-lan-ip"
+description = "A home LAN address (192.168.x.y). Use 192.168.1.X in docs and examples."
+regex = '''\b192\.168\.[0-9]{1,3}\.[0-9]{1,3}\b'''
+tags = ["infra", "private"]
+
+[[rules]]
+id = "ngrok-tunnel-host"
+description = "A real ngrok tunnel host. Use example.ngrok-free.dev."
+regex = '''\b[a-z]+-[a-z]+-[a-z]+\.ngrok-free\.(dev|app)\b'''
+tags = ["infra", "private"]
+
 [allowlist]
 description = "Global allowlist"
 paths = [
