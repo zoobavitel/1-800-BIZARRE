@@ -201,6 +201,10 @@ import {
 } from "../features/character-sheet/utils/heritageRollBonusMeta";
 import { derivePartyFacingSessionNpc } from "../features/character-sheet/utils/sessionNpcPartyFace";
 import { getResistanceResultSheetAbilityReminders } from "../features/character-sheet/utils/sheetAbilityResistanceReminders";
+import {
+  sheetPayloadDedupeKey,
+  withResolvedHeritage,
+} from "../features/character-sheet/utils/sheetDedupeKey";
 
 function archetypesEqual(a, b) {
   if (a === b) return true;
@@ -782,16 +786,6 @@ function inventorySyncFingerprint(inv) {
   );
 }
 
-/** Stable autosave dedupe key — File stringifies as {}, which falsely matched "already saved". */
-function sheetPayloadDedupeKey(payload, { ignorePendingImageFile = false } = {}) {
-  const { lastModified, _fieldTouches, ...rest } = payload || {};
-  const file = rest.imageFile;
-  let imageFileKey = null;
-  if (!ignorePendingImageFile && isImageUploadPayload(file)) {
-    imageFileKey = `pending:${file.name || "blob"}:${file.size}:${file.type || ""}`;
-  }
-  return JSON.stringify({ ...rest, imageFile: imageFileKey });
-}
 
 function hasMeaningfulDraftChanges(payload) {
   if (!payload || payload.id) return false;
@@ -10215,6 +10209,18 @@ const CharacterSheetWrapper = ({
         ignorePendingImageFile: true,
       });
       cleanPayloadRef.current = payload;
+    } else if (
+      payload.id &&
+      lastSavedPayloadRef.current != null &&
+      character?.heritage != null &&
+      payload.heritage === Number(character.heritage)
+    ) {
+      // The baseline was taken before the heritage list loaded. Only the
+      // server's own heritage is filled in, so a first pick still saves.
+      lastSavedPayloadRef.current = withResolvedHeritage(
+        lastSavedPayloadRef.current,
+        payload.heritage,
+      );
     }
     const isDirty = !payload.id
       ? hasMeaningfulDraftChanges(payload)
@@ -10235,7 +10241,7 @@ const CharacterSheetWrapper = ({
     };
     lastDraftMetaRef.current = meta;
     onDraftMetaChange(meta);
-  }, [onDraftMetaChange, buildPayload, saveStatus]);
+  }, [onDraftMetaChange, buildPayload, saveStatus, character?.heritage]);
 
   // Debounced auto-save (busy-collision queues via pendingResaveRef; drain rebuilds payload fresh)
   useEffect(() => {
