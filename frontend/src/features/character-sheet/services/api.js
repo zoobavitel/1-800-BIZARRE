@@ -1895,13 +1895,9 @@ export const transformFrontendToBackend = (frontendCharacter) => {
       0,
       Math.floor(Number(frontendCharacter.healingClock) || 0),
     ),
-    healing_clock_segments: Math.min(
-      5,
-      Math.max(
-        4,
-        Math.floor(Number(frontendCharacter.healingClockSegments) || 4),
-      ),
-    ),
+    // healing_clock_segments is not sent: the server sets it from the saved
+    // detriments (Slower Recovery gives 5). Sending it from a stale local
+    // pick flipped it 4/5 on every save and kept the sheet autosaving.
     spin_armor_used: Math.min(
       3,
       Math.max(0, Math.floor(Number(frontendCharacter.spinArmorUsed) || 0)),
