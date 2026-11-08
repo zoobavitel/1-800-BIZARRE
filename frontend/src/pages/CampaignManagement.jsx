@@ -16,6 +16,7 @@ import { normalizeListResponse } from "../features/character-sheet/services/api"
 import { EQUIPMENT_CATEGORY_OPTIONS, categoryLabel } from "../features/character-sheet/utils/loadoutUtils";
 import { isGmManagedProgressClock } from "../features/character-sheet/utils/progressClockVisibility";
 import { useAuth } from "../features/auth";
+import { campaignRoleLabel, viewerIsCampaignGm } from "../utils/campaignRole";
 import { isCampaignSseHealthy } from "../features/character-sheet/services/campaignEvents";
 // One stream per browser, shared by its tabs (PR 5b).
 import { subscribeCampaignEventsShared } from "../features/character-sheet/services/campaignEventsShared";
@@ -201,7 +202,7 @@ function RoleBadge({ role }) {
     <span
       style={{
         ...S.badge,
-        background: role === "GM" ? "var(--hftf-purple)" : "var(--accent)",
+        background: role === "Player" ? "var(--accent)" : "var(--hftf-purple)",
         color: "#fff",
       }}
     >
@@ -223,7 +224,7 @@ const CAMPAIGN_LIST_THUMB = {
 };
 
 function CampaignListCard({ campaign: c, user, onSelect }) {
-  const isGM = c.gm?.id === user?.id;
+  const isGM = viewerIsCampaignGm(c, user);
   const roster = c.campaign_characters || [];
   const myChar = roster.find((cc) => cc.user_id === user?.id);
   const others = [
@@ -319,7 +320,7 @@ function CampaignListCard({ campaign: c, user, onSelect }) {
           }}
         >
           <StatusBadge active={c.is_active !== false} />
-          <RoleBadge role={isGM ? "GM" : "Player"} />
+          <RoleBadge role={campaignRoleLabel(c, user)} />
         </div>
 
         {c.description ? (
@@ -1920,7 +1921,7 @@ function CampaignDetail({
                   }}
                 >
                   <StatusBadge active={campaign.is_active} />
-                  <RoleBadge role={isGM ? "GM" : "Player"} />
+                  <RoleBadge role={campaignRoleLabel(campaign, user)} />
                   <span style={{ fontSize: "11px", color: "var(--text-dim)" }}>
                     GM: {campaign.gm?.username} | Started{" "}
                     {campaign.created_at
@@ -3588,7 +3589,7 @@ function SessionDetail({
   onNavigateToNPC,
 }) {
   const { user } = useAuth();
-  const isGM = Number(campaign?.gm?.id) === Number(user?.id);
+  const isGM = viewerIsCampaignGm(campaign, user);
   const [sessionData, setSessionData] = useState(session);
   const [rolls, setRolls] = useState([]);
   const [clocks, setClocks] = useState([]);
@@ -5586,7 +5587,7 @@ export default function CampaignManagement({
 
   // ---- Campaign detail view ----
   if (selectedCampaign) {
-    const isGM = selectedCampaign.gm?.id === user?.id;
+    const isGM = viewerIsCampaignGm(selectedCampaign, user);
     return (
       <div style={S.page}>
         <div style={S.content}>
