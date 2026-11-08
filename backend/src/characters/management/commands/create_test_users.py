@@ -1,6 +1,7 @@
 from django.core.management.base import BaseCommand
 from django.contrib.auth.models import User
 from django.db import IntegrityError
+from characters.management.seed_passwords import seed_password
 
 
 class Command(BaseCommand):
@@ -18,7 +19,7 @@ class Command(BaseCommand):
             "test_player_7",
         ]
 
-        password = User.objects.make_random_password()
+        password = seed_password()
         created_count = 0
         skipped_count = 0
 
