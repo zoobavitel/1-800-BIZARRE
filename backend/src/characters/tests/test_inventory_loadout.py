@@ -439,7 +439,10 @@ class EquipmentCatalogPermissionTests(TestCase):
         names = [row["name"] for row in res.json()]
         self.assertNotIn("Campaign Only Widget", names)
 
-    def test_available_for_campaign_site_is_opt_in(self):
+    def test_available_for_campaign_never_lists_site_items(self):
+        """Since S10, Add Item is SRD plus the campaign library. A site item
+        the GM turned on goes to the owned-homebrew picker instead
+        (test_homebrew_use)."""
         site = EquipmentItem.objects.create(
             name="Opt In Site Widget",
             category="gear",
@@ -471,7 +474,7 @@ class EquipmentCatalogPermissionTests(TestCase):
         res = self.client.get(url)
         self.assertEqual(res.status_code, 200)
         names = [row["name"] for row in res.json()]
-        self.assertIn("Opt In Site Widget", names)
+        self.assertNotIn("Opt In Site Widget", names)
 
     def test_other_campaign_library_not_in_this_campaign_picker(self):
         other = Campaign.objects.create(name="OtherEqCamp", gm=self.other)

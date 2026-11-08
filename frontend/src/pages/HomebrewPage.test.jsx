@@ -7,15 +7,30 @@ import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import HomebrewPage from "./HomebrewPage";
-import { equipmentAPI } from "../features/character-sheet/services/api";
+import {
+  campaignAPI,
+  characterAPI,
+  equipmentAPI,
+} from "../features/character-sheet/services/api";
 
 jest.mock("../features/character-sheet/services/api", () => ({
   ...jest.requireActual("../features/character-sheet/services/api"),
   equipmentAPI: {
     list: jest.fn(), share: jest.fn(), publish: jest.fn(), unpublish: jest.fn(), update: jest.fn(),
-    collect: jest.fn(), uncollect: jest.fn(),
+    collect: jest.fn(), uncollect: jest.fn(), addToCharacter: jest.fn(), setCampaignAccess: jest.fn(),
   },
+  characterAPI: { getCharacters: jest.fn() },
+  campaignAPI: { getCampaigns: jest.fn() },
 }));
+
+jest.mock("../features/auth", () => ({
+  useAuth: () => ({ user: { id: 7, username: "player1" } }),
+}));
+
+beforeEach(() => {
+  characterAPI.getCharacters.mockResolvedValue([]);
+  campaignAPI.getCampaigns.mockResolvedValue([]);
+});
 
 const crowbar = {
   id: 2, name: "Crowbar", description: "SRD kit", category: "tools",
@@ -123,5 +138,48 @@ describe("Homebrew page: find homebrew (S9)", () => {
     render(<HomebrewPage tab="collection" />);
     await waitFor(() => expect(equipmentAPI.list).toHaveBeenCalledWith({ homebrew: "collection" }));
     expect(await screen.findByRole("button", { name: "Remove Odd Lantern from my collection" })).toBeInTheDocument();
+  });
+});
+
+describe("Homebrew page: use homebrew (S10)", () => {
+  const coin = {
+    id: 99, name: "Lucky Coin", description: "", category: "gear", load_slots: 0, quality: 0,
+    scope: "SHARED", is_public: false, created_by_username: "player1", is_mine: true,
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    equipmentAPI.list.mockResolvedValue([coin]);
+    equipmentAPI.addToCharacter.mockResolvedValue({ character: 12 });
+    equipmentAPI.setCampaignAccess.mockResolvedValue({ enabled: true });
+    characterAPI.getCharacters.mockResolvedValue([{ id: 12, true_name: "Player One PC", user_id: 7 }]);
+    campaignAPI.getCampaigns.mockResolvedValue([
+      { id: 3, name: "My Table", gm: { id: 7 } },
+      { id: 4, name: "Someone Else's Table", gm: { id: 8 } },
+    ]);
+  });
+
+  it("adds one of my creations to one of my sheets", async () => {
+    render(<HomebrewPage tab="creations" />);
+    await waitFor(() => expect(characterAPI.getCharacters).toHaveBeenCalledWith({ mine: true }));
+    fireEvent.change(await screen.findByLabelText("Sheet for Lucky Coin"), { target: { value: "12" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add Lucky Coin to the sheet" }));
+    await waitFor(() => expect(equipmentAPI.addToCharacter).toHaveBeenCalledWith(99, 12));
+    expect(await screen.findByText(/Added to Player One PC/)).toBeInTheDocument();
+  });
+
+  it("turns one of my creations on for a campaign I run, and only lists those", async () => {
+    render(<HomebrewPage tab="creations" />);
+    const select = await screen.findByLabelText("Campaign for Lucky Coin");
+    await screen.findByRole("option", { name: "My Table" });
+    expect(screen.queryByRole("option", { name: "Someone Else's Table" })).toBeNull();
+    fireEvent.change(select, { target: { value: "3" } });
+    fireEvent.click(screen.getByRole("button", { name: "Use Lucky Coin in the campaign" }));
+    await waitFor(() => expect(equipmentAPI.setCampaignAccess).toHaveBeenCalledWith(99, 3, true));
+  });
+
+  it("offers the same actions on my collection", async () => {
+    render(<HomebrewPage tab="collection" />);
+    expect(await screen.findByLabelText("Sheet for Lucky Coin")).toBeInTheDocument();
   });
 });

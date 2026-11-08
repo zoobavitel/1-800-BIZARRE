@@ -55,7 +55,10 @@ class PublicItemBase(TestCase):
         return EquipmentItem.objects.get(pk=response.data["id"])
 
     def available_names(self, user, campaign):
-        response = self.as_user(user).get(URL, {"campaign": campaign.id, "available_for_campaign": 1})
+        """What the user's sheet in that campaign can add as homebrew. Since
+        S10 that's the "Add owned homebrew item" picker, not Add Item."""
+        character = Character.objects.filter(user=user, campaign=campaign).first()
+        response = self.as_user(user).get(URL, {"homebrew": "owned", "character": character.id})
         self.assertEqual(response.status_code, 200)
         rows = response.data["results"] if isinstance(response.data, dict) else response.data
         return {row["name"] for row in rows}
