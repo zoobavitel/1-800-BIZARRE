@@ -290,15 +290,6 @@ def build_standing_crew_pdf_bytes(character: Character, player_view: bool = Fals
         y,
         max_w,
     )
-    stash = crew.stash_slots if isinstance(crew.stash_slots, list) else []
-    filled_stash = sum(1 for s in stash if s)
-    y = _draw_wrapped(
-        c,
-        f"Stash filled: {filled_stash}/{len(stash) or 40} (also on page 1 when linked)",
-        MARGIN,
-        y,
-        max_w,
-    )
     y -= 6
 
     section("Special Abilities")
