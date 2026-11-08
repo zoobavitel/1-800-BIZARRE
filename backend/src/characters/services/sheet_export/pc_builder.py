@@ -269,10 +269,8 @@ def _heritage_picks(character: Character) -> str:
 
 
 def _stash_slots(character: Character) -> list[bool]:
-    if character.crew_id and character.crew is not None:
-        slots = character.crew.stash_slots or []
-    else:
-        slots = character.stash_slots or []
+    # Stash is personal, crew or not (user, 2026-11-03).
+    slots = character.stash_slots or []
     normalized = [bool(x) for x in slots]
     while len(normalized) < MAX_STASH_SLOTS:
         normalized.append(False)
