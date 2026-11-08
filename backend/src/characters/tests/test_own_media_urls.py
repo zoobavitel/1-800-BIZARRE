@@ -17,12 +17,14 @@ _PNG_1X1 = (
     b"\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\x0f"
     b"\x00\x00\x01\x01\x00\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82"
 )
-OLD_HOST = "https://bizarre-api.tailb65341.ts.net"
+# A Funnel-style host the API answers on (from ALLOWED_HOSTS, not the code).
+FUNNEL_HOST = "bizarre-api.tailnet-example.ts.net"
+OLD_HOST = f"https://{FUNNEL_HOST}"
 MEDIA_ROOT = "/tmp/bizarre_test_media_own_urls"
 
 
 class MediaNameFromUrlTests(SimpleTestCase):
-    hosts = {"bizarre-api.tailb65341.ts.net", "api.1-800-bizarre.com"}  # gitleaks:allow
+    hosts = {FUNNEL_HOST, "api.1-800-bizarre.com"}
 
     def test_own_host_media_url(self):
         self.assertEqual(
@@ -43,7 +45,8 @@ class MediaNameFromUrlTests(SimpleTestCase):
         self.assertIsNone(media_name_from_url("", self.hosts))
 
 
-@override_settings(MEDIA_ROOT=MEDIA_ROOT)
+# The Funnel host reaches the code through ALLOWED_HOSTS, as on prod.
+@override_settings(MEDIA_ROOT=MEDIA_ROOT, ALLOWED_HOSTS=["testserver", FUNNEL_HOST])
 class OwnMediaUrlSerializerTests(TestCase):
     def setUp(self):
         self.client = APIClient()
@@ -93,7 +96,8 @@ class OwnMediaUrlSerializerTests(TestCase):
         self.assertEqual(self.npc.image_url, url)
 
 
-@override_settings(MEDIA_ROOT=MEDIA_ROOT)
+# The Funnel host reaches the code through ALLOWED_HOSTS, as on prod.
+@override_settings(MEDIA_ROOT=MEDIA_ROOT, ALLOWED_HOSTS=["testserver", FUNNEL_HOST])
 class UnpinMigrationTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username="own_media_mig", password="pw")

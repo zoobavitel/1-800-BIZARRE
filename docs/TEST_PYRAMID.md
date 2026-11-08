@@ -114,7 +114,7 @@ After that run is clean, open only port 8443 (`tailscale funnel --bg --https=844
 
 ```bash
 PERF_ALLOW_REMOTE=1 \
-PERF_API_BASE_URL=https://bizarre-api.tailb65341.ts.net:8443 \
+PERF_API_BASE_URL=https://bizarre-api.<your-tailnet>.ts.net:8443 \
 PERF_SEED_JSON=/path/to/bizarre-perf-seed.json \
 PERF_ROLL_P95_MS=500 \
 PERF_WARMUP_MS=15000 \

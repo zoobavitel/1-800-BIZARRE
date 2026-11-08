@@ -14,15 +14,10 @@ from urllib.parse import unquote, urlsplit
 from django.conf import settings
 from django.core.files.storage import default_storage
 
-# Public hosts the API has been served from. Kept here (not only in
-# ALLOWED_HOSTS) so URLs saved under a retired host are still recognized.
-KNOWN_API_HOSTS = frozenset(
-    {
-        "bizarre-api.tailb65341.ts.net",
-        "api.1-800-bizarre.com",
-        "roger-premunicipal-branden.ngrok-free.dev",
-    }
-)
+# The public API host. Every other host the API answers on (the Tailscale
+# Funnel name, a LAN address) is read from ALLOWED_HOSTS in _own_hosts(), so
+# private host names stay out of the code.
+KNOWN_API_HOSTS = frozenset({"api.1-800-bizarre.com"})
 
 
 def _own_hosts() -> set[str]:
