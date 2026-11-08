@@ -4,6 +4,460 @@
  */
 export const PATCH_NOTES = [
   {
+    "date": "2026-11-01",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "wip armor"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-10-30",
+    "version": null,
+    "sections": [
+      {
+        "title": "Fixed",
+        "items": [
+          "heritage picks stick; stop healing-clock autosave loop"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-10-29",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #258 from zoobavitel/fix/clock-fk-checks"
+        ]
+      },
+      {
+        "title": "Fixed",
+        "items": [
+          "a clock only points at things in its own campaign (S6)"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-10-27",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #257 from zoobavitel/fix/crew-npc-write-checks"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-10-26",
+    "version": null,
+    "sections": [
+      {
+        "title": "Fixed",
+        "items": [
+          "crew stats, crew delete and campaign NPCs are GM only (S5)",
+          "a player may save loadout for any of their own PCs, and only theirs",
+          "keep session writes inside the GM's own campaign",
+          "only add a PC to a campaign you're in",
+          "undo and redo work after real saves",
+          "word the trauma-box refusal for a track that is already full",
+          "only a PC's player or the GM may roll for it",
+          "make the SRD catalogs read-only and remove unused per-PC routes",
+          "send the newest event id as the cursor on connect and resync",
+          "take only identity fields the server changed",
+          "list tied heritages in name order",
+          "show another device's Name, Stand name, Background and Look"
+        ]
+      },
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #256 from zoobavitel/fix/session-write-checks",
+          "Merge pull request #255 from zoobavitel/fix/character-campaign-membership",
+          "Merge remote-tracking branch 'origin/master' into fix/character-campaign-membership",
+          "Merge pull request #254 from zoobavitel/test/permission-matrix",
+          "Merge remote-tracking branch 'origin/master' into test/permission-matrix",
+          "Merge pull request #253 from zoobavitel/fix/sheet-undo-redo",
+          "Merge pull request #252 from zoobavitel/chore/remove-dead-character-actions",
+          "Merge pull request #251 from zoobavitel/fix/character-write-checks",
+          "Merge pull request #250 from zoobavitel/fix/lock-open-routes",
+          "Merge pull request #249 from zoobavitel/fix/sse-resync-cursor",
+          "Merge branch 'master' into fix/sse-resync-cursor",
+          "Merge pull request #248 from zoobavitel/fix/site-stats-tie-order",
+          "Merge pull request #247 from zoobavitel/feature/sse-one-stream-per-browser",
+          "Merge pull request #246 from zoobavitel/fix/sheet-identity-sync",
+          "Merge pull request #245 from zoobavitel/fix/sheet-edit-lost-on-sync",
+          "Merge pull request #244 from zoobavitel/feature/sse-replay"
+        ]
+      },
+      {
+        "title": "Tests",
+        "items": [
+          "S4 closes the session holes in the permission matrix",
+          "fail the matrix when a positive control gets a server error",
+          "S3 closes the PC-attach hole in the permission matrix",
+          "fresh actors, positive controls and refusal messages in the matrix",
+          "fail the matrix when a route has no object to target",
+          "walk every write route as a stranger and as a non-owner member"
+        ]
+      },
+      {
+        "title": "Maintenance",
+        "items": [
+          "remove character actions that nothing calls"
+        ]
+      },
+      {
+        "title": "Added",
+        "items": [
+          "one campaign stream per browser, shared by its tabs (PR 5b)"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-10-25",
+    "version": null,
+    "sections": [
+      {
+        "title": "Fixed",
+        "items": [
+          "don't drop an edit when a live event arrives before its autosave",
+          "tell an evicted stream it was replaced; client waits to reconnect",
+          "save a change undone while its save was in flight",
+          "lock only the character row in commit_respec",
+          "sign out other devices when the password changes",
+          "stop faction autosave from losing edits or revealing hidden info"
+        ]
+      },
+      {
+        "title": "Added",
+        "items": [
+          "number campaign events and replay missed ones on reconnect (PR 6)",
+          "send version with sheet saves and resolve 409s (PR 7b)",
+          "version every character write and 409 stale sheet saves"
+        ]
+      },
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #243 from zoobavitel/fix/sse-evict-loop",
+          "Merge pull request #242 from zoobavitel/feature/sheet-version",
+          "Merge pull request #241 from zoobavitel/feature/character-version",
+          "Merge pull request #240 from zoobavitel/ci/backend-tests-on-postgres",
+          "Merge remote-tracking branch 'origin/ci/backend-tests-on-postgres' into feature/character-version",
+          "ci: run the backend tests on Postgres, the same engine as prod",
+          "Merge pull request #239 from zoobavitel/fix/password-change-revokes-tokens",
+          "Merge pull request #238 from zoobavitel/fix/faction-autosave",
+          "Merge pull request #237 from zoobavitel/feature/knox-token-expiry"
+        ]
+      },
+      {
+        "title": "Refactored",
+        "items": [
+          "own error for superseded saves; unique e2e usernames"
+        ]
+      },
+      {
+        "title": "Tests",
+        "items": [
+          "keep the test password out of a set_password() literal"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-10-24",
+    "version": null,
+    "sections": [
+      {
+        "title": "Maintenance",
+        "items": [
+          "ignore the placeholder token in the logout curl example"
+        ]
+      },
+      {
+        "title": "Documentation",
+        "items": [
+          "split logout curl example so the secret scan does not flag it"
+        ]
+      },
+      {
+        "title": "Added",
+        "items": [
+          "expiring per-device login tokens and real logout"
+        ]
+      },
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #236 from zoobavitel/fix/sse-drop-token"
+        ]
+      },
+      {
+        "title": "Fixed",
+        "items": [
+          "open SSE streams with a ticket in the perf scripts"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-10-23",
+    "version": null,
+    "sections": [
+      {
+        "title": "Fixed",
+        "items": [
+          "stop accepting the login token in the stream URL",
+          "stop new streams attaching to a leaving listener",
+          "stop autosave creating duplicate characters",
+          "refresh clocks without resyncing every sheet",
+          "open the campaign stream with a one-use ticket"
+        ]
+      },
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #235 from zoobavitel/fix/realtime-listener-race",
+          "Merge pull request #234 from zoobavitel/fix/duplicate-character-create",
+          "Merge pull request #233 from zoobavitel/fix/clock-sync",
+          "Merge pull request #232 from zoobavitel/fix/sse-ticket-frontend"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-10-22",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #231 from zoobavitel/fix/sse-ticket",
+          "Merge pull request #230 from zoobavitel/fix/remove-update-field",
+          "Merge pull request #228 from zoobavitel/feat/api-cloudflare-host",
+          "Merge pull request #229 from zoobavitel/fix/own-media-url-pin"
+        ]
+      },
+      {
+        "title": "Added",
+        "items": [
+          "one-use tickets for opening the campaign stream"
+        ]
+      },
+      {
+        "title": "Fixed",
+        "items": [
+          "remove the any-field character update endpoint"
+        ]
+      },
+      {
+        "title": "Maintenance",
+        "items": [
+          "ignore gitleaks false positive on media host test"
+        ]
+      },
+      {
+        "title": "Tests",
+        "items": [
+          "mark host-name test line as gitleaks false positive"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-10-21",
+    "version": null,
+    "sections": [
+      {
+        "title": "Fixed",
+        "items": [
+          "keep uploaded portraits as files, never host-pinned URLs"
+        ]
+      },
+      {
+        "title": "Added",
+        "items": [
+          "serve the API from api.1-800-bizarre.com via Cloudflare Tunnel"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-10-20",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #227 from zoobavitel/fix/xp-pending-advance-stale",
+          "Merge pull request #226 from zoobavitel/fix/sse-stream-cap",
+          "Merge pull request #225 from zoobavitel/fix/sse-scoped-refetch",
+          "Merge pull request #224 from zoobavitel/fix/caddy26-gunicorn-4w",
+          "Merge pull request #223 from zoobavitel/feature/sheet-roll-session-ux",
+          "Merge pull request #222 from zoobavitel/fix/perf-ops-caddy-conn",
+          "Merge pull request #221 from zoobavitel/fix/pdf-hide-hidden-factions"
+        ]
+      },
+      {
+        "title": "Fixed",
+        "items": [
+          "stop other server-owned fields going stale",
+          "keep Take advance visible after banking XP",
+          "cap live SSE streams per user per campaign",
+          "Caddy 2.6 config and 4 gunicorn workers",
+          "trim home stats and show an NPC chooser",
+          "reuse DB connections and put Caddy in front of Funnel",
+          "start crew actions collapsed",
+          "keep help popovers inside the viewport",
+          "omit action outcomes on resistance history",
+          "close resistance result after harm reduction",
+          "NPC sheet export is GM-only",
+          "character sheet PDF is always the player view",
+          "keep hidden factions and NPCs out of player PDF exports"
+        ]
+      },
+      {
+        "title": "Performance",
+        "items": [
+          "refetch only what each SSE event changed"
+        ]
+      },
+      {
+        "title": "Added",
+        "items": [
+          "choose starting position and effect before bonuses"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-10-19",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #220 from zoobavitel/fix/pdf-portrait-placement",
+          "Merge pull request #218 from zoobavitel/fix/respec-baseline-overflow",
+          "Merge pull request #217 from zoobavitel/fix/deploy-graceful-reload",
+          "Merge pull request #216 from zoobavitel/fix/pdf-export-portrait",
+          "Merge pull request #215 from zoobavitel/fix/sheet-sync-fanout",
+          "Merge pull request #214 from zoobavitel/feature/npc-faction-section-visibility"
+        ]
+      },
+      {
+        "title": "Fixed",
+        "items": [
+          "move the PDF portrait off the Identity fields",
+          "stop counting XP spends twice (\"Cannot raise grade beyond S\")",
+          "reload gunicorn on deploy instead of restarting it",
+          "stop PDF export crashing when a portrait is attached",
+          "refetch only what changed instead of every open sheet"
+        ]
+      },
+      {
+        "title": "Added",
+        "items": [
+          "let GMs hide NPC and faction sections from players"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-10-18",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #213 from zoobavitel/chore/remove-daily-bug-review"
+        ]
+      },
+      {
+        "title": "Maintenance",
+        "items": [
+          "remove unused daily critical bug review workflow"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-10-17",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #212 from zoobavitel/fix/remove-ngrok",
+          "Merge pull request #210 from zoobavitel/fix/keepalive-n1-retry",
+          "Merge pull request #211 from zoobavitel/fix/realtime-redis-and-prod-tree",
+          "Merge pull request #209 from zoobavitel/fix/sse-reconnect-backoff"
+        ]
+      },
+      {
+        "title": "Fixed",
+        "items": [
+          "drop ngrok from the live site",
+          "retry a GET once after a dropped connection",
+          "keep idle connections open past the Funnel proxy",
+          "share SSE across workers and keep logs out of the tree",
+          "back off dead campaign streams"
+        ]
+      },
+      {
+        "title": "Performance",
+        "items": [
+          "prefetch xp_entries on session retrieve"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-10-16",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #208 from zoobavitel/fix/firefox-private-network",
+          "Merge pull request #207 from zoobavitel/fix/campaign-roster-phone-level"
+        ]
+      },
+      {
+        "title": "Fixed",
+        "items": [
+          "let GitHub Pages reach the Funnel host from Firefox",
+          "show sheet level and stack phone columns"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-10-13",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #206 from zoobavitel/feature/npc-contacts-portraits",
+          "Merge pull request #205 from zoobavitel/fix/black-autofix-python",
+          "Merge pull request #204 from zoobavitel/feature/npc-sheet-vis-cancel-xp-hamon-spin"
+        ]
+      }
+    ]
+  },
+  {
     "date": "2026-10-12",
     "version": null,
     "sections": [
@@ -30,8 +484,17 @@ export const PATCH_NOTES = [
       {
         "title": "Added",
         "items": [
+          "show contact, faction, and crew portraits",
+          "GM visibility gear, cancel pending XP, desperate XP harden",
           "campaign/session Rep edits, peer visibility, home NPC links",
           "toggle NPC clock visibility from Campaign Management"
+        ]
+      },
+      {
+        "title": "Fixed",
+        "items": [
+          "run Black autofix on Python 3.11",
+          "align NPC players_see_inventory help_text with migration 0128"
         ]
       }
     ]
@@ -198,392 +661,13 @@ export const PATCH_NOTES = [
       {
         "title": "Other",
         "items": [
-          "Merge pull request #179 from zoobavitel/chore/dedupe-resistance-stress-dead-dice-rolling",
-          "Merge pull request #178 from zoobavitel/feature/campaign-shell-pc-columns",
-          "Merge pull request #177 from zoobavitel/feature/campaign-roster-ui-parity",
-          "Merge pull request #176 from zoobavitel/feature/campaign-roster-ui-parity",
-          "Align campaign/session roster expands with full-width expand-slot parity.",
-          "Merge pull request #175 from zoobavitel/fix/session-faction-npc-count",
-          "Remove unused CampaignManagement imports after roster extract.",
-          "Clarify campaign roster NPC strip drag and expand actions.",
-          "Replace campaign roster UI with session-style token panels.",
-          "Fix session faction cards showing wrong NPC counts.",
-          "Remove downtime phase logic from Train.",
-          "Allow repeat downtime Train on same track per phase.",
-          "Keep Train button label when track already trained.",
-          "Fix crew-linked stash disappearing on autosave.",
-          "Fix Train phase lock when no completed session exists.",
-          "Add change-password flow for logged-in users."
+          "Merge pull request #179 from zoobavitel/chore/dedupe-resistance-stress-dead-dice-rolling"
         ]
       },
       {
         "title": "Maintenance",
         "items": [
           "dedupe resistance stress cost, remove dead dice-rolling"
-        ]
-      },
-      {
-        "title": "Added",
-        "items": [
-          "per-PC shell columns and own-character Harm edits",
-          "fill campaign PC expand tabs",
-          "sheet fixes, per-NPC visibility, overlay expand, home undo delete",
-          "player access, PC Info, campaign shell ledgers"
-        ]
-      },
-      {
-        "title": "Fixed",
-        "items": [
-          "allow training multiple tracks per downtime phase",
-          "crew stash hydrate, train lock, and member crew access",
-          "scale gunicorn pool and lighten SSE poll load"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-09-28",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #167 from zoobavitel/feature/session-npc-photo-cards"
-        ]
-      },
-      {
-        "title": "Added",
-        "items": [
-          "choose add-existing or create NPC from dashed tile",
-          "NPC expand popover, XP/Scorecard unify, help tips"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-09-24",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #166 from zoobavitel/feature/session-npc-photo-cards"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-09-23",
-    "version": null,
-    "sections": [
-      {
-        "title": "Fixed",
-        "items": [
-          "flip Assist UI to helper-initiated flow"
-        ]
-      },
-      {
-        "title": "Added",
-        "items": [
-          "tuck XP help into ? bubble",
-          "allow Heritage downtime Train (house rule)",
-          "PC expand panels, token faces, roster polish",
-          "downtime Train buttons for XP tracks"
-        ]
-      },
-      {
-        "title": "Maintenance",
-        "items": [
-          "refresh patch notes after train+session commits"
-        ]
-      },
-      {
-        "title": "Other",
-        "items": [
-          "merge: bring sheet Train XP onto session-npc-photo-cards"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-09-22",
-    "version": null,
-    "sections": [
-      {
-        "title": "Added",
-        "items": [
-          "Manual XP column, ledger collapse, inventory picker, roster grid",
-          "server-derived completion and soft-dismiss",
-          "move crew description under name, upgrades into abilities",
-          "split CREW MODE identity and factions",
-          "move crew portrait beside CREW NAME",
-          "faction reputation card grid for all campaign factions",
-          "per-field GM visibility for tier, hold, rep, notes, NPCs",
-          "crew portrait upload crop and clear parity",
-          "inline faction editor replaces NPC grid in panel",
-          "allow_character_assignment toggle and hide GM roster card by default",
-          "crew portrait upload crop and clear parity",
-          "move SESSION and CLOCKS to left column",
-          "B→A standard picks use AbilityPickerPopover",
-          "align Assist UI to same-crew SRD rule"
-        ]
-      },
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #165 from zoobavitel/feature/crew-portrait-upload-crop",
-          "merge(master): resolve crew portrait PR conflicts with #164",
-          "Merge pull request #164 from zoobavitel/feature/campaign-ui-polish-chat",
-          "Merge pull request #163 from zoobavitel/feature/sheet-session-clocks-left-column",
-          "Merge pull request #162 from zoobavitel/feature/ba-standard-ability-picker",
-          "Merge pull request #161 from zoobavitel/fix/character-npc-mode-flicker",
-          "Merge branch 'feature/ba-standard-ability-picker' into feature/sheet-session-clocks-left-column"
-        ]
-      },
-      {
-        "title": "Maintenance",
-        "items": [
-          "refresh patch notes for crew portrait crop",
-          "refresh patchNotes for campaign UI polish branch"
-        ]
-      },
-      {
-        "title": "Fixed",
-        "items": [
-          "enlarge SESSION Wanted label and stars",
-          "stop progress-clock tile remount on create",
-          "wrap CLOCKS in S.card like STRESS",
-          "toggle crew portrait editor on thumb click",
-          "enlarge crew portrait beside CREW NAME",
-          "stop crew portrait on faction reputation rows",
-          "hide redacted faction status, notes, and NPC count on cards",
-          "honor per-field visibility on sheet and home cards",
-          "stop PC/NPC sheet flicker from stale npc route id",
-          "SSE-safe refetch and clock create stability"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-09-21",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #160 from zoobavitel/feature/teamwork-assist-and-clock-fix",
-          "Merge pull request #159 from zoobavitel/fix/coin-stash-autosave"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-09-15",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #158 from zoobavitel/fix/perf-dice-roll-debug"
-        ]
-      },
-      {
-        "title": "Fixed",
-        "items": [
-          "gate coin and stash PATCH on field touch",
-          "eliminate N+1 queries on session roll list"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-09-14",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #157 from zoobavitel/feature/home-faction-token-cards",
-          "Merge pull request #156 from zoobavitel/feature/favicon-visible",
-          "Merge pull request #155 from zoobavitel/fix/plan-button-active-session",
-          "Merge pull request #154 from zoobavitel/fix/plan-button-active-session",
-          "Merge pull request #153 from zoobavitel/fix/npc-image-save",
-          "Merge pull request #152 from zoobavitel/feature/xp-respec-mode"
-        ]
-      },
-      {
-        "title": "Added",
-        "items": [
-          "faction image URLs and active-campaign preview",
-          "restyle faction cards as dark HFTF token grid",
-          "responsive character/NPC card grid preview",
-          "larger portraits; keep tabs across mode switch"
-        ]
-      },
-      {
-        "title": "Fixed",
-        "items": [
-          "replace favicon with white-background cracked-hand mark",
-          "keep Plan mid-session; map BIZARRE to attune",
-          "clear stale NPC portrait selections",
-          "retain saved NPC portrait source",
-          "persist portrait uploads and raise size cap",
-          "harden CharacterSheet respec gating for frontend CI path",
-          "ignore stale respec status responses",
-          "reset history loading on empty character",
-          "clear CharacterSheet build warnings"
-        ]
-      },
-      {
-        "title": "Tests",
-        "items": [
-          "cover NPC portrait state fallbacks",
-          "cover account avatar size validation",
-          "update stale campaign image size assertion"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-09-13",
-    "version": null,
-    "sections": [
-      {
-        "title": "Added",
-        "items": [
-          "add Plan-mode respec and direct XP spends",
-          "show characters and NPCs as responsive token cards",
-          "full-bleed portraits on PC, NPC, and faction cards",
-          "use campaign image as full-bleed card background"
-        ]
-      },
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #151 from zoobavitel/feature/home-character-token-grid"
-        ]
-      },
-      {
-        "title": "Fixed",
-        "items": [
-          "show when load includes carried coin",
-          "align nav slugs with generated SRD section files",
-          "build section files from SRD_DEV"
-        ]
-      },
-      {
-        "title": "Style",
-        "items": [
-          "responsive layout for Game Rules on mobile"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-09-12",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #150 from zoobavitel/fix/rules-nav-skill-checks-slug",
-          "Merge pull request #148 from zoobavitel/fix/rules-nav-slug-alignment",
-          "Merge pull request #149 from zoobavitel/fix/rules-page-responsive-layout",
-          "Merge pull request #147 from zoobavitel/fix/rules-srd-dev-split",
-          "Merge pull request #146 from zoobavitel/feature/home-card-full-bleed-bg",
-          "Merge pull request #145 from zoobavitel/feature/home-campaign-card-bg",
-          "Merge pull request #144 from zoobavitel/feature/campaign-list-card-grid"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-09-11",
-    "version": null,
-    "sections": [
-      {
-        "title": "Fixed",
-        "items": [
-          "restore campaign card accessibility details",
-          "restore campaign card details and remove duplicate migration",
-          "add merge migration for characters app",
-          "merge 0114 campaign image and npc crew leaves",
-          "Your Factions only for GM campaigns",
-          "show site-wide counts in Live Stats and bar chart"
-        ]
-      },
-      {
-        "title": "Added",
-        "items": [
-          "show list as photo card grid",
-          "PC-style inventory, crew standing, crop, responsive",
-          "allowArmor prop for NPC kit list",
-          "crew FK, standing field, and data migrations",
-          "photos with crop upload",
-          "nest NPC cards in faction panels with crew merge"
-        ]
-      },
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #142 from zoobavitel/feature/npc-crew-standing-inventory",
-          "Merge pull request #141 from zoobavitel/feature/home-campaign-photos",
-          "Merge pull request #140 from zoobavitel/feature/home-site-wide-stats",
-          "Merge pull request #139 from zoobavitel/feature/campaign-roster-card-redesign",
-          "merge(master): resolve CampaignManagement roster conflict",
-          "Merge pull request #138 from zoobavitel/feature/home-character-preview-limit"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-09-10",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #137 from zoobavitel/fix/stand-coin-bump-after-chargen"
-        ]
-      },
-      {
-        "title": "Added",
-        "items": [
-          "preview first 3 lists and clickable roster cards",
-          "spend playbook XP via stand coin wedge click"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-09-09",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #136 from zoobavitel/feature/home-campaign-sort",
-          "Merge pull request #135 from zoobavitel/feature/clock-wedge-colors",
-          "Merge pull request #134 from zoobavitel/fix/pc-stand-coin-plan-decrease",
-          "Merge branch 'master' into fix/pc-stand-coin-plan-decrease",
-          "Merge branch 'master' into feature/clock-wedge-colors",
-          "Merge pull request #133 from zoobavitel/feature/garage-lair-upgrade",
-          "Merge pull request #132 from zoobavitel/feature/remove-character-bar"
-        ]
-      },
-      {
-        "title": "Added",
-        "items": [
-          "sort and collapse campaign/character lists",
-          "red→green wedge colors on NPC and GM clocks",
-          "rename lair carriage upgrade to garage",
-          "move level/XP under portrait, drop character bar"
-        ]
-      },
-      {
-        "title": "Fixed",
-        "items": [
-          "let GM lower PC Stand Coin grades"
         ]
       }
     ]
