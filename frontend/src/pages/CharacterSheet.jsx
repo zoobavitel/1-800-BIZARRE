@@ -201,6 +201,7 @@ import {
 } from "../features/character-sheet/utils/heritageRollBonusMeta";
 import { derivePartyFacingSessionNpc } from "../features/character-sheet/utils/sessionNpcPartyFace";
 import { getResistanceResultSheetAbilityReminders } from "../features/character-sheet/utils/sheetAbilityResistanceReminders";
+import { useCrewAutosave } from "../features/character-sheet/hooks/useCrewAutosave";
 import {
   sheetPayloadDedupeKey,
   withResolvedHeritage,
@@ -269,6 +270,21 @@ function upgradesToProgress(upgrades) {
     p[`training_${k}`] = !!v;
   });
   return p;
+}
+
+/** Crew fields the sheet autosaves, in PATCH shape. */
+function crewPatchPayload(crewData) {
+  return {
+    rep: crewData.rep,
+    turf: crewData.turf,
+    level: crewData.tier,
+    wanted_level: crewData.wanted,
+    coin: crewData.coin,
+    hold: crewData.hold,
+    description: crewData.description,
+    notes: crewData.notes,
+    upgrade_progress: upgradesToProgress(crewData.upgrades),
+  };
 }
 
 function progressToUpgrades(progress) {
@@ -3388,6 +3404,8 @@ const CharacterSheetWrapper = ({
     readCharSheetBool(characterId, "crew-history", false),
   );
   const crewHydratedRef = useRef(false);
+  /** JSON of the crew values the server has; useCrewAutosave skips a match. */
+  const crewSyncedKeyRef = useRef(null);
 
   useEffect(() => {
     setNpcPlayerVisOverrides({});
@@ -3574,19 +3592,7 @@ const CharacterSheetWrapper = ({
     isCampaignGm,
   ]);
 
-  const buildCrewPatchPayload = useCallback(() => {
-    return {
-      rep: crewData.rep,
-      turf: crewData.turf,
-      level: crewData.tier,
-      wanted_level: crewData.wanted,
-      coin: crewData.coin,
-      hold: crewData.hold,
-      description: crewData.description,
-      notes: crewData.notes,
-      upgrade_progress: upgradesToProgress(crewData.upgrades),
-    };
-  }, [crewData]);
+  const crewPatchBody = useMemo(() => crewPatchPayload(crewData), [crewData]);
 
   const crewPortraitSrc = useMemo(
     () => resolveMediaUrl(crewData.image || crewData.image_url || ""),
@@ -3672,38 +3678,43 @@ const CharacterSheetWrapper = ({
     const cid = charData.crewId;
     let cancelled = false;
     crewHydratedRef.current = false;
+    crewSyncedKeyRef.current = null;
     crewAPI
       .getCrew(cid)
       .then((d) => {
         if (cancelled) return;
-        setCrewData((p) => ({
-          ...p,
-          rep: Math.min(6, Math.max(0, Number(d.rep) || 0)),
-          turf: Math.min(6, Math.max(0, Number(d.turf) || 0)),
-          tier: Math.min(4, Math.max(0, Number(d.level) || 0)),
-          wanted: Math.min(5, Math.max(0, Number(d.wanted_level) || 0)),
-          coin: Math.min(4, Math.max(0, Number(d.coin) || 0)),
-          hold: d.hold === "weak" || d.hold === "strong" ? d.hold : p.hold,
-          description: d.description ?? "",
-          notes: d.notes ?? "",
-          image: d.image ?? "",
-          image_url: d.image_url ?? "",
-          upgrades: progressToUpgrades(d.upgrade_progress),
-          specialAbilities: (d.special_abilities || []).map((a) => ({
-            name: a.name,
-            description: a.description || "",
-          })),
-          sessionXpTriggers:
-            d.session_xp_triggers && typeof d.session_xp_triggers === "object"
-              ? d.session_xp_triggers
-              : {},
-          sessionRepContributions:
-            d.session_rep_contributions &&
-            typeof d.session_rep_contributions === "object"
-              ? d.session_rep_contributions
-              : {},
-          activeSessionCrewXpAvailable: !!d.active_session_crew_earned_xp,
-        }));
+        setCrewData((p) => {
+          const next = {
+            ...p,
+            rep: Math.min(6, Math.max(0, Number(d.rep) || 0)),
+            turf: Math.min(6, Math.max(0, Number(d.turf) || 0)),
+            tier: Math.min(4, Math.max(0, Number(d.level) || 0)),
+            wanted: Math.min(5, Math.max(0, Number(d.wanted_level) || 0)),
+            coin: Math.min(4, Math.max(0, Number(d.coin) || 0)),
+            hold: d.hold === "weak" || d.hold === "strong" ? d.hold : p.hold,
+            description: d.description ?? "",
+            notes: d.notes ?? "",
+            image: d.image ?? "",
+            image_url: d.image_url ?? "",
+            upgrades: progressToUpgrades(d.upgrade_progress),
+            specialAbilities: (d.special_abilities || []).map((a) => ({
+              name: a.name,
+              description: a.description || "",
+            })),
+            sessionXpTriggers:
+              d.session_xp_triggers && typeof d.session_xp_triggers === "object"
+                ? d.session_xp_triggers
+                : {},
+            sessionRepContributions:
+              d.session_rep_contributions &&
+              typeof d.session_rep_contributions === "object"
+                ? d.session_rep_contributions
+                : {},
+            activeSessionCrewXpAvailable: !!d.active_session_crew_earned_xp,
+          };
+          crewSyncedKeyRef.current = JSON.stringify(crewPatchPayload(next));
+          return next;
+        });
         setCrewPortraitUrlDraft(String(d.image_url || "").trim());
         setCrewFactionLinks(d.faction_relationships || []);
         crewHydratedRef.current = true;
@@ -3851,46 +3862,24 @@ const CharacterSheetWrapper = ({
     charCampaign?.campaign_characters,
   ]);
 
-  useEffect(() => {
-    if (!crewHydratedRef.current || !charData.crewId) return undefined;
-    const t = setTimeout(() => {
-      crewAPI
-        .patchCrew(charData.crewId, buildCrewPatchPayload())
-        .then(() => {
-          const cid = Number.parseInt(String(campaignId || ""), 10);
-          const wanted = Math.min(5, Math.max(0, Number(crewData.wanted) || 0));
-          const currentCampaignWanted = Number(charCampaign?.wanted_stars ?? 0);
-          if (
-            isGM &&
-            Number.isFinite(cid) &&
-            wanted !== currentCampaignWanted
-          ) {
-            campaignAPI
-              .patchCampaign(cid, { wanted_stars: wanted })
-              .then(() => onCampaignRefresh?.())
-              .catch(() => {});
-          }
-        })
-        .catch(() => {});
-    }, 900);
-    return () => clearTimeout(t);
-  }, [
-    charData.crewId,
-    buildCrewPatchPayload,
-    campaignId,
-    charCampaign?.wanted_stars,
-    isGM,
-    onCampaignRefresh,
-    crewData.rep,
-    crewData.turf,
-    crewData.tier,
-    crewData.wanted,
-    crewData.coin,
-    crewData.hold,
-    crewData.description,
-    crewData.notes,
-    crewData.upgrades,
-  ]);
+  useCrewAutosave({
+    crewId: charData.crewId,
+    hydratedRef: crewHydratedRef,
+    payload: crewPatchBody,
+    syncedKeyRef: crewSyncedKeyRef,
+    save: (body) =>
+      crewAPI.patchCrew(charData.crewId, body).then(() => {
+        const cid = Number.parseInt(String(campaignId || ""), 10);
+        const wanted = Math.min(5, Math.max(0, Number(crewData.wanted) || 0));
+        const currentCampaignWanted = Number(charCampaign?.wanted_stars ?? 0);
+        if (isGM && Number.isFinite(cid) && wanted !== currentCampaignWanted) {
+          campaignAPI
+            .patchCampaign(cid, { wanted_stars: wanted })
+            .then(() => onCampaignRefresh?.())
+            .catch(() => {});
+        }
+      }),
+  });
 
   // ─── Derived Values ──────────────────────────────────────────────────────────
 
