@@ -777,24 +777,32 @@ export default function CharacterSheetInventoryList({
               !armorKind &&
               item.catalog_id == null &&
               String(item.name || "").trim() ? (
-                <button
-                  type="button"
-                  style={{ ...btnStyle, alignSelf: "flex-start", fontSize: "10px" }}
-                  aria-label={`Make ${item.name} public`}
-                  onClick={async () => {
-                    const shared = await onShareItem(item);
-                    if (shared?.id == null) return;
-                    // Link the row to its public copy so it isn't shared twice.
-                    onInventoryTouch?.();
-                    onChange(
-                      inv.map((row) =>
-                        row.id === item.id ? { ...row, catalog_id: shared.id } : row,
-                      ),
-                    );
-                  }}
-                >
-                  Make public
-                </button>
+                <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                  {[
+                    ["Save", false],
+                    ["Publish", true],
+                  ].map(([verb, isPublic]) => (
+                    <button
+                      key={verb}
+                      type="button"
+                      style={{ ...btnStyle, fontSize: "10px" }}
+                      aria-label={`${verb} ${item.name} as homebrew`}
+                      onClick={async () => {
+                        const made = await onShareItem(item, { public: isPublic });
+                        if (made?.id == null) return;
+                        // Link the row to its homebrew item so it isn't made twice.
+                        onInventoryTouch?.();
+                        onChange(
+                          inv.map((row) =>
+                            row.id === item.id ? { ...row, catalog_id: made.id } : row,
+                          ),
+                        );
+                      }}
+                    >
+                      {verb} as homebrew
+                    </button>
+                  ))}
+                </div>
               ) : null}
               {isGM &&
               onPublishToSite &&

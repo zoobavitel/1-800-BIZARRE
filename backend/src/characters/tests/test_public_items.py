@@ -17,7 +17,7 @@ from characters.models import Campaign, CampaignEquipmentAccess, Character, Equi
 URL = "/api/equipment-items/"
 
 
-class PublicItemTests(TestCase):
+class PublicItemBase(TestCase):
     def setUp(self):
         heritage, _ = Heritage.objects.get_or_create(name="Human", defaults={"base_hp": 0, "description": ""})
         self.gm = User.objects.create_user(username="sh_gm", password="pw-sh-gm-1")
@@ -60,6 +60,8 @@ class PublicItemTests(TestCase):
         rows = response.data["results"] if isinstance(response.data, dict) else response.data
         return {row["name"] for row in rows}
 
+
+class PublicItemTests(PublicItemBase):
     # Sharing
 
     def test_a_player_shares_a_custom_item_from_their_own_sheet(self):
@@ -222,3 +224,94 @@ class PublicItemTests(TestCase):
         response = self.as_user(self.player).get(URL, {"scope": "SHARED", "mine": 1})
         rows = response.data["results"] if isinstance(response.data, dict) else response.data
         self.assertEqual([r["id"] for r in rows], [mine.id])
+
+
+class MakeHomebrewTests(PublicItemBase):
+    """S8 Make homebrew (user's rules, 2026-11-07).
+
+    - "Save as homebrew" keeps an item private (My creations only).
+      "Publish as homebrew" makes it public.
+    - Homebrew can also be made from scratch or from a template (an SRD item
+      or a public homebrew item). The template is never changed.
+    - Only the creator or staff publishes or unpublishes.
+    """
+
+    def browse_ids(self, user):
+        response = self.as_user(user).get(URL, {"scope": "SHARED"})
+        rows = response.data["results"] if isinstance(response.data, dict) else response.data
+        return {row["id"] for row in rows}
+
+    def test_save_as_homebrew_is_private(self):
+        response = self.share_sheet_item(self.player, self.pc, public=False)
+        self.assertEqual(response.status_code, 201, response.data)
+        item = EquipmentItem.objects.get(pk=response.data["id"])
+        self.assertFalse(item.is_public)
+        self.assertNotIn(item.id, self.browse_ids(self.player2))
+        self.assertIn(item.id, self.browse_ids(self.player))
+
+    def test_publishing_a_saved_item_publishes_the_same_row(self):
+        saved = self.share_sheet_item(self.player, self.pc, public=False).data["id"]
+        published = self.share_sheet_item(self.player, self.pc, public=True)
+        self.assertEqual(published.data["id"], saved)
+        self.assertTrue(EquipmentItem.objects.get(pk=saved).is_public)
+
+    def test_saving_again_does_not_unpublish(self):
+        item = self.make_shared()
+        again = self.share_sheet_item(self.player, self.pc, public=False)
+        self.assertEqual(again.data["id"], item.id)
+        item.refresh_from_db()
+        self.assertTrue(item.is_public)
+
+    def test_create_from_scratch(self):
+        response = self.as_user(self.player2).post(
+            f"{URL}share/",
+            {"name": "Scratch Lamp", "category": "gear", "load": 0, "quality": 2, "public": False},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        item = EquipmentItem.objects.get(pk=response.data["id"])
+        self.assertEqual(
+            (item.scope, item.created_by, item.is_public, item.load_slots, item.quality, item.campaign_id),
+            ("SHARED", self.player2, False, 0, 2, None),
+        )
+
+    def test_create_from_a_template_leaves_the_template_unchanged(self):
+        srd = EquipmentItem.objects.create(
+            name="Crowbar", description="SRD kit", category="tools", load_slots=1, quality=1, scope="TEMPLATE"
+        )
+        response = self.as_user(self.player).post(
+            f"{URL}share/", {"template": srd.id, "name": "Bent Crowbar", "public": False}, format="json"
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        item = EquipmentItem.objects.get(pk=response.data["id"])
+        self.assertEqual((item.name, item.description, item.category), ("Bent Crowbar", "SRD kit", "tools"))
+        srd.refresh_from_db()
+        self.assertEqual((srd.name, srd.scope, srd.created_by_id), ("Crowbar", "TEMPLATE", None))
+
+    def test_a_private_item_cannot_be_used_as_someone_elses_template(self):
+        private = self.share_sheet_item(self.player, self.pc, public=False).data["id"]
+        response = self.as_user(self.player2).post(
+            f"{URL}share/", {"template": private, "name": "Stolen"}, format="json"
+        )
+        self.assertIn(response.status_code, (403, 404))
+        self.assertFalse(EquipmentItem.objects.filter(name="Stolen").exists())
+
+    def test_publish_and_unpublish_by_the_creator_only(self):
+        item_id = self.share_sheet_item(self.player, self.pc, public=False).data["id"]
+        for user in (self.player2, self.gm):
+            with self.subTest(user=user.username):
+                self.assertEqual(self.as_user(user).post(f"{URL}{item_id}/publish/").status_code, 404)
+        self.assertEqual(self.as_user(self.player).post(f"{URL}{item_id}/publish/").status_code, 200)
+        self.assertTrue(EquipmentItem.objects.get(pk=item_id).is_public)
+        self.assertEqual(self.as_user(self.player2).post(f"{URL}{item_id}/unpublish/").status_code, 403)
+        self.assertEqual(self.as_user(self.player).post(f"{URL}{item_id}/unpublish/").status_code, 200)
+        self.assertFalse(EquipmentItem.objects.get(pk=item_id).is_public)
+
+    def test_staff_items_show_by_admin_and_rows_say_if_they_are_mine(self):
+        EquipmentItem.objects.create(name="Old Site Hook", scope="SITE")
+        self.make_shared()
+        response = self.as_user(self.player).get(URL)
+        rows = {r["name"]: r for r in (response.data["results"] if isinstance(response.data, dict) else response.data)}
+        self.assertEqual(rows["Old Site Hook"]["created_by_username"], "admin")
+        self.assertFalse(rows["Old Site Hook"]["is_mine"])
+        self.assertTrue(rows["Lucky Coin"]["is_mine"])

@@ -41,32 +41,40 @@ function renderSheet(props) {
   );
 }
 
-describe("making a sheet item public (S8)", () => {
+describe("making homebrew from a sheet item (S8)", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     equipmentAPI.list.mockResolvedValue([]);
   });
 
-  it("shares the owner's custom item and links the row to the shared copy", async () => {
+  it.each([
+    ["Save Lucky Coin as homebrew", false],
+    ["Publish Lucky Coin as homebrew", true],
+  ])("%s, then links the row to the homebrew item", async (label, isPublic) => {
     const onChange = jest.fn();
     const onShareItem = jest.fn().mockResolvedValue({ id: 99, scope: "SHARED" });
     renderSheet({ onChange, onShareItem });
 
-    fireEvent.click(screen.getByRole("button", { name: "Make Lucky Coin public" }));
+    fireEvent.click(screen.getByRole("button", { name: label }));
 
-    await waitFor(() => expect(onShareItem).toHaveBeenCalledWith(expect.objectContaining({ name: "Lucky Coin" })));
+    await waitFor(() =>
+      expect(onShareItem).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "Lucky Coin" }),
+        { public: isPublic },
+      ),
+    );
     await waitFor(() => expect(onChange).toHaveBeenCalled());
     const row = onChange.mock.calls[0][0].find((r) => r.id === "row-1");
     expect(row.catalog_id).toBe(99);
   });
 
-  it("offers no share button without the owner handler or on a catalog item", () => {
+  it("offers no homebrew buttons without the owner handler or on a catalog item", () => {
     const { unmount } = renderSheet({});
-    expect(screen.queryByRole("button", { name: /public/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /homebrew/ })).toBeNull();
     unmount();
 
     renderSheet({ inventory: [{ ...customRow, catalog_id: 5 }], onShareItem: jest.fn() });
-    expect(screen.queryByRole("button", { name: /public/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /homebrew/ })).toBeNull();
   });
 
   it("labels shared items in Add Item search with who shared them", async () => {

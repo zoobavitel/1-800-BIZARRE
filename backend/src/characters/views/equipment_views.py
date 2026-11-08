@@ -326,11 +326,23 @@ class EquipmentItemViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["post"], url_path="share")
     def share(self, request):
-        """Make one of your own items public: a custom item from your sheet
-        (name, detail, ... plus source_character) or an item from your
-        campaign library (item). Creates a SHARED copy; the source stays."""
+        """Make homebrew (S8). Sources, in order:
+
+        - item: one of your campaign library items.
+        - template: an SRD item or public homebrew item to start from; the
+          body's own fields override its fields. The template is unchanged.
+        - source_character: a custom item from your own sheet.
+        - none: an item from scratch (the Homebrew page's Create form).
+
+        public (default true) publishes it; false saves it as private
+        homebrew. Saving an item you already have never unpublishes it.
+        """
         user = request.user
+        public = _truthy(request.data.get("public", True))
         library_id = request.data.get("item")
+        template_id = request.data.get("template")
+        character_id = request.data.get("source_character")
+        overrides = self._homebrew_fields_from_body(request.data)
         if library_id not in (None, ""):
             source = (
                 EquipmentItem.objects.select_related("campaign")
@@ -345,17 +357,23 @@ class EquipmentItemViewSet(viewsets.ModelViewSet):
                 or (source.campaign_id and source.campaign.gm_id == user.id)
             ):
                 self.permission_denied(request, message="You can only share your own items.")
-            fields = {
-                "name": source.name,
-                "description": source.description,
-                "category": source.category,
-                "load_slots": source.load_slots,
-                "quality": source.quality,
-                "coin_value": source.coin_value,
-                "source_character_id": source.source_character_id,
-            }
-        else:
-            character_id = request.data.get("source_character")
+            fields = self._homebrew_fields_from_item(source)
+        elif template_id not in (None, ""):
+            source = (
+                EquipmentItem.objects.filter(pk=template_id)
+                .filter(
+                    models.Q(scope__in=("TEMPLATE", "SITE"))
+                    | models.Q(scope="SHARED", is_public=True)
+                    | models.Q(scope="SHARED", created_by=user)
+                )
+                .first()
+            )
+            if source is None:
+                return Response({"error": "Template not found."}, status=status.HTTP_404_NOT_FOUND)
+            fields = self._homebrew_fields_from_item(source)
+            fields["source_character_id"] = None
+            fields.update(overrides)
+        elif character_id not in (None, ""):
             try:
                 character = Character.objects.get(pk=character_id)
             except (Character.DoesNotExist, TypeError, ValueError):
@@ -366,14 +384,19 @@ class EquipmentItemViewSet(viewsets.ModelViewSet):
             if character.user_id != user.id:
                 self.permission_denied(request, message="You can only share items from your own sheet.")
             fields = {
-                "name": str(request.data.get("name") or "").strip(),
-                "description": str(request.data.get("detail") or request.data.get("description") or ""),
-                "category": str(request.data.get("category") or "other"),
-                "load_slots": _bounded_int(request.data.get("load"), 0, 2, 1),
-                "quality": _bounded_int(request.data.get("quality"), 0, 3, 1),
-                "coin_value": request.data.get("coin_value"),
+                "name": "", "description": "", "category": "other",
+                "load_slots": 1, "quality": 1, "coin_value": None,
+                **overrides,
                 "source_character_id": character.id,
             }
+        else:
+            fields = {
+                "name": "", "description": "", "category": "other",
+                "load_slots": 1, "quality": 1, "coin_value": None,
+                **overrides,
+                "source_character_id": None,
+            }
+        fields["name"] = str(fields.get("name") or "").strip()
         if not fields["name"]:
             return Response({"error": "name is required."}, status=status.HTTP_400_BAD_REQUEST)
         valid_categories = {value for value, _ in EquipmentItem.CATEGORY_CHOICES}
@@ -386,18 +409,56 @@ class EquipmentItemViewSet(viewsets.ModelViewSet):
             .first()
         )
         if existing:
-            if not existing.is_public:
+            if public and not existing.is_public:
                 existing.is_public = True
                 existing.save(update_fields=["is_public"])
             return self._shared_response(existing, created=False)
-        item = EquipmentItem.objects.create(scope="SHARED", is_public=True, created_by=user, **fields)
+        item = EquipmentItem.objects.create(scope="SHARED", is_public=public, created_by=user, **fields)
         return self._shared_response(item, created=True)
+
+    @staticmethod
+    def _homebrew_fields_from_item(source):
+        return {
+            "name": source.name,
+            "description": source.description,
+            "category": source.category,
+            "load_slots": source.load_slots,
+            "quality": source.quality,
+            "coin_value": source.coin_value,
+            "source_character_id": source.source_character_id,
+        }
+
+    @staticmethod
+    def _homebrew_fields_from_body(data):
+        """Only the fields the body sends, so a template's fields fill the rest."""
+        fields = {}
+        if "name" in data:
+            fields["name"] = str(data.get("name") or "")
+        if "detail" in data or "description" in data:
+            fields["description"] = str(data.get("detail") or data.get("description") or "")
+        if "category" in data:
+            fields["category"] = str(data.get("category") or "other")
+        if "load" in data or "load_slots" in data:
+            fields["load_slots"] = _bounded_int(data.get("load", data.get("load_slots")), 0, 2, 1)
+        if "quality" in data:
+            fields["quality"] = _bounded_int(data.get("quality"), 0, 3, 1)
+        if "coin_value" in data:
+            fields["coin_value"] = data.get("coin_value")
+        return fields
 
     def _assert_shared_owner(self, request, item):
         if not (request.user.is_staff or item.created_by_id == request.user.id):
             self.permission_denied(request, message="Only the item's creator or staff can do this.")
         if item.scope != "SHARED":
             raise ValidationError({"scope": ["Only shared items can be shared or unshared."]})
+
+    @action(detail=True, methods=["post"], url_path="unpublish")
+    def unpublish(self, request, pk=None):
+        return self.unshare(request, pk)
+
+    @action(detail=True, methods=["post"], url_path="publish")
+    def publish(self, request, pk=None):
+        return self.reshare(request, pk)
 
     @action(detail=True, methods=["post"], url_path="unshare")
     def unshare(self, request, pk=None):
@@ -446,6 +507,13 @@ class EquipmentItemViewSet(viewsets.ModelViewSet):
             campaign=campaign, item=item, defaults={"enabled": False}
         )
         return self._shared_response(copy, created=True)
+
+
+def _truthy(value):
+    """JSON true/false, or form strings like "false" and "0"."""
+    if isinstance(value, str):
+        return value.strip().lower() not in ("", "0", "false", "no", "off")
+    return bool(value)
 
 
 def _bounded_int(value, low, high, default):

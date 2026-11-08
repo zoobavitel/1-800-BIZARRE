@@ -3003,6 +3003,7 @@ class CrewCampaignSerializer(serializers.ModelSerializer):
 class EquipmentItemSerializer(serializers.ModelSerializer):
     enabled_for_campaign = serializers.SerializerMethodField()
     created_by_username = serializers.SerializerMethodField()
+    is_mine = serializers.SerializerMethodField()
 
     class Meta:
         model = EquipmentItem
@@ -3022,13 +3023,20 @@ class EquipmentItemSerializer(serializers.ModelSerializer):
             "available_when_adding",
             "enabled_for_campaign",
             "is_public",
+            "is_mine",
         ]
-        read_only_fields = ["created_by", "created_by_username", "is_public"]
+        read_only_fields = ["created_by", "created_by_username", "is_public", "is_mine"]
 
     def get_created_by_username(self, obj):
         if obj.created_by_id:
             return obj.created_by.username
-        return None
+        # Staff-made catalog items predate tracking a creator.
+        return "admin" if obj.scope in ("SITE", "TEMPLATE") else None
+
+    def get_is_mine(self, obj):
+        req = self.context.get("request")
+        user = getattr(req, "user", None)
+        return bool(user and user.is_authenticated and obj.created_by_id == user.id)
 
     def get_enabled_for_campaign(self, obj):
         campaign_id = self.context.get("campaign_id")

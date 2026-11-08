@@ -615,13 +615,17 @@ export function CampaignEquipmentPanel({ campaign, onRefresh }) {
     }
   };
 
-  const handleShare = async (item) => {
+  const handleShare = async (item, isPublic) => {
     setError(null);
     try {
-      await equipmentAPI.share({ item: item.id });
-      setNotice(`“${item.name}” is now public. Other GMs can turn it on for their campaigns.`);
+      await equipmentAPI.share({ item: item.id, public: isPublic });
+      setNotice(
+        isPublic
+          ? `“${item.name}” is published as homebrew.`
+          : `“${item.name}” is saved as homebrew. Find it under Homebrew, My creations.`,
+      );
     } catch (e) {
-      setError(e.message || "Could not make the item public.");
+      setError(e.message || "Could not make homebrew.");
     }
   };
 
@@ -709,16 +713,22 @@ export function CampaignEquipmentPanel({ campaign, onRefresh }) {
                 Edit
               </button>
             ) : null}
-            {canDeleteCatalogItem(item) ? (
-              <button
-                type="button"
-                aria-label={`Make ${item.name} public`}
-                style={{ ...S.btn, marginLeft: "12px", fontSize: "11px" }}
-                onClick={() => handleShare(item)}
-              >
-                Make public
-              </button>
-            ) : null}
+            {canDeleteCatalogItem(item)
+              ? [
+                  ["Save", false],
+                  ["Publish", true],
+                ].map(([verb, isPublic]) => (
+                  <button
+                    key={verb}
+                    type="button"
+                    aria-label={`${verb} ${item.name} as homebrew`}
+                    style={{ ...S.btn, marginLeft: "12px", fontSize: "11px" }}
+                    onClick={() => handleShare(item, isPublic)}
+                  >
+                    {verb} as homebrew
+                  </button>
+                ))
+              : null}
             {canDeleteCatalogItem(item) ? (
               <button
                 type="button"

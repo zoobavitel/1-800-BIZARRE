@@ -14,6 +14,7 @@ import AccountSettingsPage from "./pages/AccountSettingsPage.jsx";
 import PatchNotesPage from "./pages/PatchNotesPage.jsx";
 import RulesPage from "./pages/RulesPage.jsx";
 import LicensesPage from "./pages/LicensesPage.jsx";
+import HomebrewPage from "./pages/HomebrewPage.jsx";
 import UserMenu from "./components/UserMenu.jsx";
 import { AuthProvider, useAuth } from "./features/auth";
 import { ThemeProvider } from "./features/theme/ThemeContext";
@@ -39,6 +40,7 @@ const PAGE_TITLES = {
   "account-settings": "ACCOUNT SETTINGS",
   "patch-notes": "PATCH NOTES",
   licenses: "LICENSES",
+  homebrew: "HOMEBREW",
   rules: "GAME RULES",
 };
 
@@ -261,6 +263,8 @@ function routeStateFromHash(hash) {
     npcCampaignId: null,
     abilityFilter: null,
     rulesSection: null,
+    homebrewTab: null,
+    homebrewQuery: "",
   };
   if (!hash) return base;
   if (hash === "test") return { ...base, currentPage: "test" };
@@ -291,6 +295,16 @@ function routeStateFromHash(hash) {
     return { ...base, currentPage: "character-options" };
   if (hash === "patch-notes") return { ...base, currentPage: "patch-notes" };
   if (hash === "licenses") return { ...base, currentPage: "licenses" };
+  if (hash === "homebrew" || hash.startsWith("homebrew/")) {
+    const [, tab = null, q = ""] = hash.split("/");
+    let query = "";
+    try {
+      query = decodeURIComponent(q);
+    } catch {
+      query = q;
+    }
+    return { ...base, currentPage: "homebrew", homebrewTab: tab || null, homebrewQuery: query };
+  }
   if (hash === "rules" || hash.startsWith("rules-")) {
     return {
       ...base,
@@ -387,6 +401,10 @@ const App = () => {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [menuCharacters, setMenuCharacters] = useState([]);
   const [rulesSection, setRulesSection] = useState(initialRoute.rulesSection);
+  const [homebrewRoute, setHomebrewRoute] = useState({
+    tab: initialRoute.homebrewTab,
+    q: initialRoute.homebrewQuery,
+  });
   const navigationGuardRef = useRef(null);
   const setNavigationGuard = useCallback((guardFn) => {
     navigationGuardRef.current = typeof guardFn === "function" ? guardFn : null;
@@ -403,6 +421,7 @@ const App = () => {
     setNpcCampaignId(s.npcCampaignId);
     setAbilityFilter(s.abilityFilter);
     setRulesSection(s.rulesSection);
+    setHomebrewRoute({ tab: s.homebrewTab ?? null, q: s.homebrewQuery ?? "" });
   }, []);
 
   useEffect(() => {
@@ -698,6 +717,13 @@ const App = () => {
           <PatchNotesPage onBack={handleBack} />
         )}
         {currentPage === "licenses" && <LicensesPage onBack={handleBack} />}
+        {currentPage === "homebrew" && (
+          <HomebrewPage
+            tab={homebrewRoute.tab}
+            query={homebrewRoute.q}
+            onNavigate={(payload) => handlePageChange("homebrew", payload)}
+          />
+        )}
         {currentPage === "rules" && (
           <RulesPage
             onBack={handleBack}

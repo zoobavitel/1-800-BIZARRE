@@ -24,9 +24,9 @@ const inp = {
 };
 
 /**
- * Items the signed-in user made public (S8). The creator edits or unshares
- * them here. Unsharing hides an item from new adds; copies already on sheets
- * stay.
+ * My creations: the signed-in user's homebrew items (S8), private or
+ * published. The creator edits, publishes or unpublishes them here.
+ * Unpublishing hides an item from new adds; copies already on sheets stay.
  */
 export default function MySharedItems() {
   const [items, setItems] = useState([]);
@@ -78,7 +78,7 @@ export default function MySharedItems() {
       ) : null}
       {items.length === 0 ? (
         <div style={{ color: "var(--text-dim)", fontSize: "12px" }}>
-          You haven't made any items public. Use "Make public" under a custom item on your sheet.
+          No homebrew yet. Create an item here, or use "Save as homebrew" under a custom item on your sheet.
         </div>
       ) : (
         items.map((item) => (
@@ -89,7 +89,7 @@ export default function MySharedItems() {
             <strong style={{ color: "var(--text-primary)" }}>{item.name}</strong>
             <span style={{ color: "var(--text-dim)", marginLeft: "8px" }}>
               {categoryLabel(item.category)} · load {item.load_slots} · Q{item.quality}
-              {item.is_public ? "" : " · not shared"}
+              {item.is_public ? " · published" : " · private"}
             </span>
             <button type="button" style={btn} aria-label={`Edit ${item.name}`} onClick={() => setForm({ ...item })}>
               Edit
@@ -98,19 +98,19 @@ export default function MySharedItems() {
               <button
                 type="button"
                 style={btn}
-                aria-label={`Unshare ${item.name}`}
-                onClick={() => run(() => equipmentAPI.unshare(item.id), "Could not unshare.")}
+                aria-label={`Unpublish ${item.name}`}
+                onClick={() => run(() => equipmentAPI.unpublish(item.id), "Could not unpublish.")}
               >
-                Unshare
+                Unpublish
               </button>
             ) : (
               <button
                 type="button"
                 style={btn}
-                aria-label={`Share ${item.name} again`}
-                onClick={() => run(() => equipmentAPI.reshare(item.id), "Could not share.")}
+                aria-label={`Publish ${item.name}`}
+                onClick={() => run(() => equipmentAPI.publish(item.id), "Could not publish.")}
               >
-                Share again
+                Publish
               </button>
             )}
           </div>

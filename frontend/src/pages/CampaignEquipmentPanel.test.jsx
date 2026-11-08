@@ -122,10 +122,13 @@ describe("CampaignEquipmentPanel: public items (S8) and core catalog", () => {
     expect(equipmentAPI.update).not.toHaveBeenCalledWith(77, expect.anything());
   });
 
-  it("makes a library item public", async () => {
+  it.each([
+    ["Save GM Lockpicks as homebrew", false],
+    ["Publish GM Lockpicks as homebrew", true],
+  ])("%s from the library", async (label, isPublic) => {
     render(<CampaignEquipmentPanel campaign={campaign} />);
-    fireEvent.click(await screen.findByRole("button", { name: "Make GM Lockpicks public" }));
-    await waitFor(() => expect(equipmentAPI.share).toHaveBeenCalledWith({ item: 41 }));
+    fireEvent.click(await screen.findByRole("button", { name: label }));
+    await waitFor(() => expect(equipmentAPI.share).toHaveBeenCalledWith({ item: 41, public: isPublic }));
   });
 
   it("gives a non-staff GM no Delete on a site item they published long ago", async () => {

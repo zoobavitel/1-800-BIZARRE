@@ -11,7 +11,7 @@ import { equipmentAPI } from "../services/api";
 
 jest.mock("../services/api", () => ({
   ...jest.requireActual("../services/api"),
-  equipmentAPI: { list: jest.fn(), update: jest.fn(), unshare: jest.fn(), reshare: jest.fn() },
+  equipmentAPI: { list: jest.fn(), update: jest.fn(), unpublish: jest.fn(), publish: jest.fn() },
 }));
 
 const coin = {
@@ -19,11 +19,11 @@ const coin = {
   load_slots: 0, quality: 0, scope: "SHARED", is_public: true,
 };
 
-describe("My shared items (S8)", () => {
+describe("My creations (S8)", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     equipmentAPI.list.mockResolvedValue([coin]);
-    equipmentAPI.unshare.mockResolvedValue({ ...coin, is_public: false });
+    equipmentAPI.unpublish.mockResolvedValue({ ...coin, is_public: false });
     equipmentAPI.update.mockResolvedValue({ ...coin, name: "Luckier Coin" });
   });
 
@@ -33,10 +33,18 @@ describe("My shared items (S8)", () => {
     expect(equipmentAPI.list).toHaveBeenCalledWith({ scope: "SHARED", mine: true });
   });
 
-  it("unshares an item", async () => {
+  it("unpublishes a published item", async () => {
     render(<MySharedItems />);
-    fireEvent.click(await screen.findByRole("button", { name: "Unshare Lucky Coin" }));
-    await waitFor(() => expect(equipmentAPI.unshare).toHaveBeenCalledWith(99));
+    fireEvent.click(await screen.findByRole("button", { name: "Unpublish Lucky Coin" }));
+    await waitFor(() => expect(equipmentAPI.unpublish).toHaveBeenCalledWith(99));
+  });
+
+  it("publishes a private item", async () => {
+    equipmentAPI.list.mockResolvedValue([{ ...coin, is_public: false }]);
+    render(<MySharedItems />);
+    expect(await screen.findByText(/private/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Publish Lucky Coin" }));
+    await waitFor(() => expect(equipmentAPI.publish).toHaveBeenCalledWith(99));
   });
 
   it("edits an item's name", async () => {

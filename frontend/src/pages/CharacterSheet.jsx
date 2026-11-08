@@ -1373,9 +1373,10 @@ const CharacterSheetWrapper = ({
     [campaignId, characterId],
   );
 
-  // S8: the sheet's owner makes one of their custom items public.
+  // S8: the sheet's owner saves (private) or publishes one of their custom
+  // items as homebrew.
   const handleShareItem = useCallback(
-    async (item) => {
+    async (item, { public: isPublic = true } = {}) => {
       if (characterId == null || !String(item?.name || "").trim()) return null;
       try {
         return await equipmentAPI.share({
@@ -1386,9 +1387,10 @@ const CharacterSheetWrapper = ({
           quality: item.quality,
           coin_value: item.coin_value,
           source_character: characterId,
+          public: isPublic,
         });
       } catch (err) {
-        console.error("Make item public failed:", err);
+        console.error("Make homebrew failed:", err);
         return null;
       }
     },

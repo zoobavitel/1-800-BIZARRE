@@ -797,8 +797,9 @@ export const equipmentAPI = {
       method: "POST",
       body: JSON.stringify(data),
     }),
-  // Public items (S8): share your own sheet item ({name, ..., source_character})
-  // or campaign library item ({item}); unshare/reshare your own.
+  // Make homebrew (S8): from your sheet item ({name, ..., source_character}),
+  // your campaign library item ({item}), a template ({template, ...}) or from
+  // scratch. public: false saves it as private homebrew.
   share: (data) =>
     apiRequest("/equipment-items/share/", {
       method: "POST",
@@ -808,6 +809,10 @@ export const equipmentAPI = {
     apiRequest(`/equipment-items/${id}/unshare/`, { method: "POST" }),
   reshare: (id) =>
     apiRequest(`/equipment-items/${id}/reshare/`, { method: "POST" }),
+  publish: (id) =>
+    apiRequest(`/equipment-items/${id}/publish/`, { method: "POST" }),
+  unpublish: (id) =>
+    apiRequest(`/equipment-items/${id}/unpublish/`, { method: "POST" }),
   // A GM edits someone else's public item by copying it into their library.
   copyToCampaign: (id, campaignId) =>
     apiRequest(`/equipment-items/${id}/copy-to-campaign/`, {

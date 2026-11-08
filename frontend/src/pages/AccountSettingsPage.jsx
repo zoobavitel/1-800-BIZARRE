@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from "react";
+import { buildRouteHref } from "../utils/spaNavigation";
 import { authAPI, useAuth } from "../features/auth";
 import { useTheme } from "../features/theme/ThemeContext";
 import { resolveMediaUrl } from "../features/character-sheet/services/api";
 import AvatarCropModal from "../components/AvatarCropModal";
-import MySharedItems from "../features/character-sheet/components/MySharedItems";
 
 // The server signs out every other device when the password changes.
 export const PASSWORD_CHANGED_MESSAGE =
@@ -742,14 +742,14 @@ export default function AccountSettingsPage() {
         </section>
 
         <section style={S.section}>
-          <h2 style={S.sectionTitle}>My shared items</h2>
+          <h2 style={S.sectionTitle}>My homebrew</h2>
           <div style={S.card}>
             <p style={S.mutedSmall}>
-              Items you made public. A GM has to turn one on before it shows
-              in their campaign. Unsharing hides it from new adds; copies
-              already on sheets stay.
+              Your homebrew items moved to the Homebrew page.{" "}
+              <a href={buildRouteHref("homebrew", { tab: "creations" })} style={{ color: "inherit" }}>
+                Open My creations
+              </a>
             </p>
-            <MySharedItems />
           </div>
         </section>
 

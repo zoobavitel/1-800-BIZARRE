@@ -75,6 +75,12 @@ export function buildRouteHash(page, payload = {}) {
     if (payload.campaignId != null) return `npcs/new/${payload.campaignId}`;
     return "npcs";
   }
+  if (page === "homebrew") {
+    const tab = payload?.tab;
+    const q = String(payload?.q || "").trim();
+    if (!tab) return "homebrew";
+    return q ? `homebrew/${tab}/${encodeURIComponent(q)}` : `homebrew/${tab}`;
+  }
   if (!page || page === "home") return "";
   return page;
 }
