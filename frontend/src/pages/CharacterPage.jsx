@@ -15,7 +15,6 @@ import React, {
 } from "react";
 import {
   characterAPI,
-  crewAPI,
   npcAPI,
   referenceAPI,
   campaignAPI,
@@ -25,7 +24,6 @@ import {
   traumaObjectToIds,
   normalizeListResponse,
   resolveHeritagePkForSave,
-  normalizeStashSlots,
   resolveStashAfterCharacterSave,
   isImageUploadPayload,
   normalizeHarmObject,
@@ -1185,34 +1183,8 @@ export default function CharacterPage({
             saved.true_name || frontend.name,
           );
         const savedFrontend = transformBackendToFrontend(saved);
-        let stashMerged = null;
-        if (touches.stash && saved?.id && Array.isArray(frontend.stash)) {
-          const crewPk =
-            frontend.crewId != null && frontend.crewId !== ""
-              ? parseInt(String(frontend.crewId), 10)
-              : NaN;
-          if (Number.isFinite(crewPk) && crewPk > 0) {
-            const localStash = normalizeStashSlots(frontend.stash);
-            // User emptied stash while touch set → allow wipe (do not skip).
-            try {
-              const crewUpdated = await crewAPI.patchCrew(crewPk, {
-                stash_slots: localStash,
-              });
-              stashMerged = Array.isArray(crewUpdated?.stash_slots)
-                ? normalizeStashSlots(crewUpdated.stash_slots)
-                : localStash;
-            } catch (e) {
-              console.error("Crew stash save failed:", e);
-              // Keep parent draft dirty: fail the save so CharacterSheet retains
-              // stash field-touch and does not hydrate over local grid.
-              const err = new Error(
-                e?.message || "Crew stash save failed — try again",
-              );
-              err.cause = e;
-              throw err;
-            }
-          }
-        }
+        // Stash is personal and saves with the character (no crew PATCH).
+        const stashMerged = null;
         const serverEchoesFullHarm =
           saved &&
           Object.prototype.hasOwnProperty.call(saved, "harm_level1_slot2_used");
@@ -1301,7 +1273,6 @@ export default function CharacterPage({
               : (frontend.playbookXpArchetypes ??
                 payload.playbookXpArchetypes ??
                 savedFrontend.playbookXpArchetypes),
-          // Same class of bug as coin: empty character stash_slots must not beat crew effective_stash_slots.
           stash: resolveStashAfterCharacterSave({
             stashMerged,
             savedFrontend,
