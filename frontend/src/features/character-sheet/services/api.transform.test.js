@@ -10,7 +10,6 @@ import {
   normalizeCoinBoxes,
   normalizeStashSlots,
   resolveStashAfterCharacterSave,
-  shouldSkipEmptyCrewStashPatch,
   buildMultipartOrJson,
   isImageUploadPayload,
   sheetPostChargen,
@@ -438,7 +437,7 @@ describe("transformBackendToFrontend sheet notes and clocks", () => {
   });
 });
 
-describe("transformBackendToFrontend coin and crew stash", () => {
+describe("transformBackendToFrontend coin and stash", () => {
   test("maps XP-bought action dot count", () => {
     const fe = transformBackendToFrontend({
       action_dice_gained: 4,
@@ -475,14 +474,11 @@ describe("transformBackendToFrontend coin and crew stash", () => {
     expect(be.action_dice_gained).toBe(3);
   });
 
-  test("maps coin_boxes and crew.stash_slots", () => {
+  test("maps coin_boxes", () => {
     const fe = transformBackendToFrontend({
       coin_boxes: [true, false, false, false],
-      crew: { stash_slots: Array.from({ length: 40 }, (_, i) => i === 0) },
     });
     expect(fe.coin).toEqual([true, false, false, false]);
-    expect(fe.stash[0]).toBe(true);
-    expect(fe.stash[1]).toBe(false);
     expect(fe.stash.length).toBe(40);
   });
 
@@ -494,16 +490,17 @@ describe("transformBackendToFrontend coin and crew stash", () => {
     expect(fe.stash[0]).toBe(false);
   });
 
-  test("prefers crew stash_slots over character when both exist", () => {
+  test("stash is personal: a crewed PC reads its own stash_slots, not the crew's", () => {
     const fe = transformBackendToFrontend({
-      stash_slots: Array(40).fill(true),
+      stash_slots: Array.from({ length: 40 }, (_, i) => i === 3),
+      effective_stash_slots: Array.from({ length: 40 }, (_, i) => i === 0),
       crew: {
         id: 1,
         stash_slots: Array.from({ length: 40 }, (_, i) => i === 0),
       },
     });
-    expect(fe.stash[0]).toBe(true);
-    expect(fe.stash[1]).toBe(false);
+    expect(fe.stash[3]).toBe(true);
+    expect(fe.stash[0]).toBe(false);
   });
 
   test("maps trauma from trauma_details names", () => {
@@ -566,55 +563,15 @@ describe("transformFrontendToBackend stash_slots", () => {
     expect(out.stash_slots[0]).toBe(false);
   });
 
-  test("omits stash_slots when linked to a crew (crew PATCH handles grid)", () => {
+  test("sends stash_slots when linked to a crew (stash is personal)", () => {
     const out = transformFrontendToBackend(
       makeSheet({
         crewId: 99,
-        stash: Array(40).fill(false),
+        stash: Array.from({ length: 40 }, (_, i) => i === 4),
       }),
     );
-    expect(out.stash_slots).toBeUndefined();
-  });
-});
-
-describe("crew-linked save stash merge", () => {
-  test("untouched stash keeps effective_stash_slots when PATCH echoes empty stash_slots", () => {
-    const saved = {
-      stash_slots: Array(40).fill(false),
-      effective_stash_slots: Array.from({ length: 40 }, (_, i) => i < 3),
-      crew: {
-        id: 1,
-        stash_slots: Array.from({ length: 40 }, (_, i) => i < 3),
-      },
-    };
-    const savedFrontend = transformBackendToFrontend(saved);
-    expect(savedFrontend.stash.filter(Boolean).length).toBe(3);
-
-    const merged = resolveStashAfterCharacterSave({
-      stashMerged: null,
-      savedFrontend,
-      frontend: { stash: Array(40).fill(false) },
-    });
-    expect(merged.filter(Boolean).length).toBe(3);
-    expect(merged[0]).toBe(true);
-    expect(merged[1]).toBe(true);
-    expect(merged[2]).toBe(true);
-    expect(merged[3]).toBe(false);
-  });
-
-  test("shouldSkipEmptyCrewStashPatch blocks wipe when local empty but server filled", () => {
-    const local = Array(40).fill(false);
-    const server = Array.from({ length: 40 }, (_, i) => i < 3);
-    expect(shouldSkipEmptyCrewStashPatch(local, server)).toBe(true);
-    expect(shouldSkipEmptyCrewStashPatch(local, Array(40).fill(false))).toBe(
-      false,
-    );
-    expect(
-      shouldSkipEmptyCrewStashPatch(
-        Array.from({ length: 40 }, (_, i) => i < 1),
-        server,
-      ),
-    ).toBe(false);
+    expect(out.stash_slots[4]).toBe(true);
+    expect(out.stash_slots[0]).toBe(false);
   });
 });
 
