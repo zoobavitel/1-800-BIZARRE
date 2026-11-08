@@ -806,3 +806,13 @@ describe("transformFrontendToBackend post-allocation autosave omit", () => {
     expect(typeof be.action_dice_gained).toBe("number");
   });
 });
+
+describe("transformFrontendToBackend healing clock size", () => {
+  // The server sets healing_clock_segments from the saved detriments
+  // (Slower Recovery gives 5). When the sheet also sent it, a stale local
+  // pick made each save flip it 4/5 and the sheet autosaved in a loop.
+  test("does not send healing_clock_segments", () => {
+    const body = transformFrontendToBackend(makeSheet({ healingClockSegments: 5 }));
+    expect(body).not.toHaveProperty("healing_clock_segments");
+  });
+});
