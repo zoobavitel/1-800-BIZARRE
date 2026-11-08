@@ -30,7 +30,7 @@ describe("My creations (S8)", () => {
   it("lists only my shared items", async () => {
     render(<MySharedItems />);
     expect(await screen.findByText("Lucky Coin")).toBeInTheDocument();
-    expect(equipmentAPI.list).toHaveBeenCalledWith({ scope: "SHARED", mine: true });
+    expect(equipmentAPI.list).toHaveBeenCalledWith({ homebrew: "mine" });
   });
 
   it("unpublishes a published item", async () => {

@@ -11,7 +11,10 @@ import { equipmentAPI } from "../features/character-sheet/services/api";
 
 jest.mock("../features/character-sheet/services/api", () => ({
   ...jest.requireActual("../features/character-sheet/services/api"),
-  equipmentAPI: { list: jest.fn(), share: jest.fn(), publish: jest.fn(), unpublish: jest.fn(), update: jest.fn() },
+  equipmentAPI: {
+    list: jest.fn(), share: jest.fn(), publish: jest.fn(), unpublish: jest.fn(), update: jest.fn(),
+    collect: jest.fn(), uncollect: jest.fn(),
+  },
 }));
 
 const crowbar = {
@@ -65,6 +68,60 @@ describe("Homebrew page: make homebrew (S8)", () => {
 
   it("lists my creations on their own tab", async () => {
     render(<HomebrewPage tab="creations" />);
-    await waitFor(() => expect(equipmentAPI.list).toHaveBeenCalledWith({ scope: "SHARED", mine: true }));
+    await waitFor(() => expect(equipmentAPI.list).toHaveBeenCalledWith({ homebrew: "mine" }));
+  });
+});
+
+describe("Homebrew page: find homebrew (S9)", () => {
+  const lantern = {
+    id: 60, name: "Odd Lantern", description: "Glows near Stands", category: "gear",
+    load_slots: 1, quality: 2, scope: "SHARED", is_public: true,
+    created_by_username: "player1", in_my_collection: false,
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    equipmentAPI.list.mockResolvedValue([lantern]);
+    equipmentAPI.collect.mockResolvedValue({ ...lantern, in_my_collection: true });
+    equipmentAPI.uncollect.mockResolvedValue({ ...lantern, in_my_collection: false });
+  });
+
+  it("shows homebrew types, with only Items live for now", () => {
+    render(<HomebrewPage />);
+    expect(screen.getByRole("button", { name: "Items" })).toBeEnabled();
+    for (const kind of ["Heritages", "Standard abilities", "Spin abilities", "Hamon abilities"]) {
+      expect(screen.getByRole("button", { name: `${kind} (coming later)` })).toBeDisabled();
+    }
+  });
+
+  it("opens on Browse and searches published homebrew", async () => {
+    render(<HomebrewPage query="lantern" />);
+    await waitFor(() =>
+      expect(equipmentAPI.list).toHaveBeenCalledWith({ homebrew: "browse", q: "lantern" }),
+    );
+    expect(await screen.findByText("Odd Lantern")).toBeInTheDocument();
+    expect(screen.getByText(/by player1/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Search homebrew items")).toHaveValue("lantern");
+  });
+
+  it("adds a result to my collection and removes it again", async () => {
+    render(<HomebrewPage tab="browse" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Add Odd Lantern to my collection" }));
+    await waitFor(() => expect(equipmentAPI.collect).toHaveBeenCalledWith(60));
+    fireEvent.click(await screen.findByRole("button", { name: "Remove Odd Lantern from my collection" }));
+    await waitFor(() => expect(equipmentAPI.uncollect).toHaveBeenCalledWith(60));
+  });
+
+  it("uses a result as a template for a new item", async () => {
+    render(<HomebrewPage tab="browse" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Use Odd Lantern as template" }));
+    expect(await screen.findByLabelText("Homebrew item name")).toHaveValue("Odd Lantern");
+    expect(screen.getByText(/Starting from Odd Lantern/)).toBeInTheDocument();
+  });
+
+  it("lists my collection on its own tab", async () => {
+    render(<HomebrewPage tab="collection" />);
+    await waitFor(() => expect(equipmentAPI.list).toHaveBeenCalledWith({ homebrew: "collection" }));
+    expect(await screen.findByRole("button", { name: "Remove Odd Lantern from my collection" })).toBeInTheDocument();
   });
 });

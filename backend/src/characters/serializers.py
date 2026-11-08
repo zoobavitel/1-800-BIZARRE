@@ -3004,6 +3004,7 @@ class EquipmentItemSerializer(serializers.ModelSerializer):
     enabled_for_campaign = serializers.SerializerMethodField()
     created_by_username = serializers.SerializerMethodField()
     is_mine = serializers.SerializerMethodField()
+    in_my_collection = serializers.SerializerMethodField()
 
     class Meta:
         model = EquipmentItem
@@ -3024,14 +3025,33 @@ class EquipmentItemSerializer(serializers.ModelSerializer):
             "enabled_for_campaign",
             "is_public",
             "is_mine",
+            "in_my_collection",
         ]
-        read_only_fields = ["created_by", "created_by_username", "is_public", "is_mine"]
+        read_only_fields = [
+            "created_by", "created_by_username", "is_public", "is_mine", "in_my_collection",
+        ]
 
     def get_created_by_username(self, obj):
         if obj.created_by_id:
             return obj.created_by.username
         # Staff-made catalog items predate tracking a creator.
         return "admin" if obj.scope in ("SITE", "TEMPLATE") else None
+
+    def get_in_my_collection(self, obj):
+        if obj.scope not in ("SITE", "SHARED"):
+            return False
+        req = self.context.get("request")
+        user = getattr(req, "user", None)
+        if not (user and user.is_authenticated):
+            return False
+        # One query per request, not per row.
+        if "_collected_ids" not in self.context:
+            from .models import HomebrewCollectionEntry
+
+            self.context["_collected_ids"] = set(
+                HomebrewCollectionEntry.objects.filter(user=user).values_list("item_id", flat=True)
+            )
+        return obj.id in self.context["_collected_ids"]
 
     def get_is_mine(self, obj):
         req = self.context.get("request")

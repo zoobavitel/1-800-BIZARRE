@@ -35,7 +35,7 @@ export default function MySharedItems() {
 
   const load = useCallback(() => {
     equipmentAPI
-      .list({ scope: "SHARED", mine: true })
+      .list({ homebrew: "mine" })
       .then((list) => setItems(Array.isArray(list) ? list : []))
       .catch(() => setItems([]));
   }, []);

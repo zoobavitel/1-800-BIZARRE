@@ -769,6 +769,9 @@ export const equipmentAPI = {
     if (params.scope) q.set("scope", params.scope);
     if (params.available_for_campaign) q.set("available_for_campaign", "1");
     if (params.mine) q.set("mine", "1");
+    // Homebrew page lists (S9): "browse" (with q), "mine", "collection".
+    if (params.homebrew) q.set("homebrew", params.homebrew);
+    if (params.q) q.set("q", params.q);
     const qs = q.toString();
     return apiRequest(`/equipment-items/${qs ? `?${qs}` : ""}`);
   },
@@ -811,6 +814,10 @@ export const equipmentAPI = {
     apiRequest(`/equipment-items/${id}/reshare/`, { method: "POST" }),
   publish: (id) =>
     apiRequest(`/equipment-items/${id}/publish/`, { method: "POST" }),
+  collect: (id) =>
+    apiRequest(`/equipment-items/${id}/collect/`, { method: "POST" }),
+  uncollect: (id) =>
+    apiRequest(`/equipment-items/${id}/uncollect/`, { method: "POST" }),
   unpublish: (id) =>
     apiRequest(`/equipment-items/${id}/unpublish/`, { method: "POST" }),
   // A GM edits someone else's public item by copying it into their library.

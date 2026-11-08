@@ -708,6 +708,7 @@ const App = () => {
             onNavigateToAbilities={(filter) =>
               handlePageChange("abilities", { filter })
             }
+            onNavigateToHomebrew={(payload) => handlePageChange("homebrew", payload)}
           />
         )}
         {currentPage === "notifications" && <NotificationsPage />}
