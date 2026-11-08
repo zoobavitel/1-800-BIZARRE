@@ -88,6 +88,7 @@ import {
   isPlaybookFoundationAbility,
   shouldSkipSheetDraftHydration,
   shouldSkipServerOwnedFieldHydration,
+  freshFieldTouches,
   applyHarmSlotTextChange,
   computeHealingClockAfterSegments,
   normalizeCrewFromCharacter,
@@ -200,6 +201,10 @@ import {
 } from "../features/character-sheet/utils/heritageRollBonusMeta";
 import { derivePartyFacingSessionNpc } from "../features/character-sheet/utils/sessionNpcPartyFace";
 import { getResistanceResultSheetAbilityReminders } from "../features/character-sheet/utils/sheetAbilityResistanceReminders";
+import {
+  sheetPayloadDedupeKey,
+  withResolvedHeritage,
+} from "../features/character-sheet/utils/sheetDedupeKey";
 
 function archetypesEqual(a, b) {
   if (a === b) return true;
@@ -781,16 +786,6 @@ function inventorySyncFingerprint(inv) {
   );
 }
 
-/** Stable autosave dedupe key — File stringifies as {}, which falsely matched "already saved". */
-function sheetPayloadDedupeKey(payload, { ignorePendingImageFile = false } = {}) {
-  const { lastModified, _fieldTouches, ...rest } = payload || {};
-  const file = rest.imageFile;
-  let imageFileKey = null;
-  if (!ignorePendingImageFile && isImageUploadPayload(file)) {
-    imageFileKey = `pending:${file.name || "blob"}:${file.size}:${file.type || ""}`;
-  }
-  return JSON.stringify({ ...rest, imageFile: imageFileKey });
-}
 
 function hasMeaningfulDraftChanges(payload) {
   if (!payload || payload.id) return false;
@@ -1086,16 +1081,7 @@ const CharacterSheetWrapper = ({
     dirtyIntent: false,
   });
   /** User touched server-owned field controls this draft; gates hydrate omit + PATCH include. */
-  const fieldTouchRef = useRef({
-    stress: false,
-    trauma: false,
-    xp: false,
-    healingClock: false,
-    inventory: false,
-    coin: false,
-    stash: false,
-    heritage: false,
-  });
+  const fieldTouchRef = useRef(freshFieldTouches());
   const markDirtyIntent = useCallback(() => {
     dirtyIntentRef.current = true;
     const nextMeta = {
@@ -1279,13 +1265,15 @@ const CharacterSheetWrapper = ({
   }, [charCampaign?.active_session_detail, characterId]);
 
   const handleLoadoutChange = useCallback(
-    async (nextEntry) => {
+    async (nextEntry, { auto = false } = {}) => {
       if (!activeSessionId || characterId == null) return;
       try {
         await sessionAPI.patchSession(activeSessionId, {
           loadout_by_character: { [String(characterId)]: nextEntry },
         });
-        onCampaignRefresh?.();
+        // The automatic load save needs no refresh: the sheet works the load
+        // out from the items. Rigging ticks show the session copy, so refresh.
+        if (!auto) onCampaignRefresh?.();
       } catch (err) {
         console.error("Loadout save failed:", err);
       }
@@ -1451,15 +1439,9 @@ const CharacterSheetWrapper = ({
   }, [character?.id]);
 
   useEffect(() => {
-    fieldTouchRef.current = {
-      stress: false,
-      trauma: false,
-      xp: false,
-      healingClock: false,
-      inventory: false,
-      coin: false,
-      stash: false,
-    };
+    // Built from the shared key list: a hand-written copy here once left out
+    // "heritage", so benefit/detriment picks were undone by the next sync.
+    fieldTouchRef.current = freshFieldTouches();
   }, [character?.id]);
 
   // A server sync resets the dedupe baseline, so the next render's payload,
@@ -10227,6 +10209,18 @@ const CharacterSheetWrapper = ({
         ignorePendingImageFile: true,
       });
       cleanPayloadRef.current = payload;
+    } else if (
+      payload.id &&
+      lastSavedPayloadRef.current != null &&
+      character?.heritage != null &&
+      payload.heritage === Number(character.heritage)
+    ) {
+      // The baseline was taken before the heritage list loaded. Only the
+      // server's own heritage is filled in, so a first pick still saves.
+      lastSavedPayloadRef.current = withResolvedHeritage(
+        lastSavedPayloadRef.current,
+        payload.heritage,
+      );
     }
     const isDirty = !payload.id
       ? hasMeaningfulDraftChanges(payload)
@@ -10247,7 +10241,7 @@ const CharacterSheetWrapper = ({
     };
     lastDraftMetaRef.current = meta;
     onDraftMetaChange(meta);
-  }, [onDraftMetaChange, buildPayload, saveStatus]);
+  }, [onDraftMetaChange, buildPayload, saveStatus, character?.heritage]);
 
   // Debounced auto-save (busy-collision queues via pendingResaveRef; drain rebuilds payload fresh)
   useEffect(() => {

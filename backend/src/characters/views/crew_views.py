@@ -1,5 +1,5 @@
 from django.db import models
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import FieldDoesNotExist, PermissionDenied
 from rest_framework import viewsets, status
 from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.permissions import IsAuthenticated
@@ -41,6 +41,32 @@ _CREW_GM_ONLY_STAT_FIELDS = frozenset(
 # `credited` is set server-side by the settlement service and must NOT be
 # changed via PATCH (we strip it before saving in the view).
 _CREW_XP_TRIGGER_BOOL_KEYS = frozenset({"challenge", "reputation", "goals"})
+
+
+def _patch_changes_nothing(crew, validated):
+    """True when every field in the PATCH already has that value on the crew.
+
+    Skipping the save also skips the crew event, which every open sheet
+    refetches on. An old sheet that re-sends unchanged values after each
+    refetch then can't loop (2026-11-03). `name` always saves: it clears
+    pending name proposals. Files and many-to-many fields always save.
+    """
+    if "name" in validated:
+        return False
+    for key, value in validated.items():
+        try:
+            field = crew._meta.get_field(key)
+        except FieldDoesNotExist:
+            return False
+        if (
+            not getattr(field, "concrete", False)
+            or field.many_to_many
+            or isinstance(field, models.FileField)
+        ):
+            return False
+        if getattr(crew, key) != value:
+            return False
+    return True
 
 
 class CrewViewSet(viewsets.ModelViewSet):
@@ -191,6 +217,8 @@ class CrewViewSet(viewsets.ModelViewSet):
                 user, crew, serializer.validated_data, is_gm_or_staff
             )
         if is_gm_or_staff:
+            if _patch_changes_nothing(crew, serializer.validated_data):
+                return
             serializer.save()
             crew.refresh_from_db()
             if "name" in serializer.validated_data:
@@ -215,6 +243,8 @@ class CrewViewSet(viewsets.ModelViewSet):
             if set(validated.keys()) - unchanged_stats <= _CREW_MEMBER_ALLOWED_PATCH_FIELDS:
                 for key in unchanged_stats:
                     validated.pop(key)
+                if _patch_changes_nothing(crew, validated):
+                    return
                 serializer.save()
                 crew.refresh_from_db()
                 if "name" in validated:
