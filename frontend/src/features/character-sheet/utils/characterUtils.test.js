@@ -626,3 +626,16 @@ describe("pickCrewFactionRowImage", () => {
     ).toBe("");
   });
 });
+
+describe("freshFieldTouches", () => {
+  // The sheet reset its touch map on character change and left out
+  // "heritage", so benefit/detriment clicks were never marked as edits and a
+  // server sync undid them.
+  test("has every server-owned touch key, all false", () => {
+    const { freshFieldTouches, SERVER_OWNED_FIELD_TOUCH_KEYS } = require("./characterUtils");
+    const touches = freshFieldTouches();
+    expect(Object.keys(touches).sort()).toEqual([...SERVER_OWNED_FIELD_TOUCH_KEYS].sort());
+    expect(Object.values(touches).every((v) => v === false)).toBe(true);
+    expect(touches).toHaveProperty("heritage", false);
+  });
+});
