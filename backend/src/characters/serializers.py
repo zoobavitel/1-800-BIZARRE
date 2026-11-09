@@ -3003,6 +3003,7 @@ class EquipmentItemSerializer(serializers.ModelSerializer):
     created_by_username = serializers.SerializerMethodField()
     is_mine = serializers.SerializerMethodField()
     in_my_collection = serializers.SerializerMethodField()
+    homebrew_source = serializers.SerializerMethodField()
 
     class Meta:
         model = EquipmentItem
@@ -3024,9 +3025,11 @@ class EquipmentItemSerializer(serializers.ModelSerializer):
             "is_public",
             "is_mine",
             "in_my_collection",
+            "homebrew_source",
         ]
         read_only_fields = [
             "created_by", "created_by_username", "is_public", "is_mine", "in_my_collection",
+            "homebrew_source",
         ]
 
     def get_created_by_username(self, obj):
@@ -3034,6 +3037,14 @@ class EquipmentItemSerializer(serializers.ModelSerializer):
             return obj.created_by.username
         # Staff-made catalog items predate tracking a creator.
         return "admin" if obj.scope in ("SITE", "TEMPLATE") else None
+
+    def get_homebrew_source(self, obj):
+        """In the sheet's owned-homebrew list only: "mine" (the owner's
+        creation or collection) or "gm" (turned on by the campaign's GM)."""
+        owner_ids = self.context.get("homebrew_owner_ids")
+        if owner_ids is None:
+            return None
+        return "mine" if obj.id in owner_ids else "gm"
 
     def get_in_my_collection(self, obj):
         if obj.scope not in ("SITE", "SHARED"):

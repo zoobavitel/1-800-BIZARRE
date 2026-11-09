@@ -28,7 +28,7 @@ const inp = {
  * published. The creator edits, publishes or unpublishes them here.
  * Unpublishing hides an item from new adds; copies already on sheets stay.
  */
-export default function MySharedItems() {
+export default function MySharedItems({ renderActions } = {}) {
   const [items, setItems] = useState([]);
   const [form, setForm] = useState(null);
   const [error, setError] = useState(null);
@@ -113,6 +113,7 @@ export default function MySharedItems() {
                 Publish
               </button>
             )}
+            {renderActions ? renderActions(item) : null}
           </div>
         ))
       )}

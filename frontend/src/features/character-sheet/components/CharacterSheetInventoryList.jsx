@@ -46,11 +46,21 @@ const btnStyle = {
   cursor: "pointer",
 };
 
+function catalogSourceLabel(c) {
+  if (c.homebrew_source === "gm") return "Homebrew from your GM";
+  if (c.homebrew_source === "mine") return `Homebrew by ${c.created_by_username || "admin"}`;
+  if (c.scope === "CAMPAIGN") return "Campaign";
+  if (c.scope === "SITE" || c.scope === "SHARED") return `Homebrew by ${c.created_by_username || "admin"}`;
+  return "Template";
+}
+
 function CatalogSearchCard({
   catalogItems,
   readOnly,
   onPick,
   onCancel,
+  label = "catalog",
+  emptyText = "No catalog items available.",
 }) {
   const [query, setQuery] = useState("");
   const q = String(query || "").trim().toLowerCase();
@@ -77,18 +87,18 @@ function CatalogSearchCard({
     >
       <input
         type="search"
-        aria-label="Search catalog"
+        aria-label={`Search ${label}`}
         autoFocus
         readOnly={readOnly}
         disabled={readOnly}
         value={query}
-        placeholder="Search catalog…"
+        placeholder={`Search ${label}…`}
         onChange={(e) => setQuery(e.target.value)}
         style={{ ...rowInputStyle, width: "100%", marginBottom: "6px" }}
       />
       <div
         role="listbox"
-        aria-label="Catalog search results"
+        aria-label={`${label} search results`}
         style={{
           maxHeight: "180px",
           overflowY: "auto",
@@ -99,7 +109,7 @@ function CatalogSearchCard({
       >
         {matches.length === 0 ? (
           <div style={{ color: "var(--text-dim)", fontSize: "11px", padding: "8px" }}>
-            {q ? "No catalog matches." : "No catalog items available."}
+            {q ? `No ${label} matches.` : emptyText}
           </div>
         ) : (
           matches.map((c) => (
@@ -125,14 +135,7 @@ function CatalogSearchCard({
               }}
             >
               <span style={{ color: "var(--text-muted)" }}>
-                {c.scope === "CAMPAIGN"
-                  ? "Campaign"
-                  : c.scope === "SITE"
-                    ? "Site"
-                    : c.scope === "SHARED"
-                      ? `Shared by ${c.created_by_username || "a player"}`
-                      : "Template"}{" "}
-                · {categoryLabel(c.category)} · load {c.load_slots ?? 1}
+                {catalogSourceLabel(c)} · {categoryLabel(c.category)} · load {c.load_slots ?? 1}
               </span>
               <span style={{ display: "block", fontWeight: "bold" }}>{c.name}</span>
               {c.description ? (
@@ -432,6 +435,7 @@ export default function CharacterSheetInventoryList({
   const [editingIndex, setEditingIndex] = useState(null);
   const [editDraft, setEditDraft] = useState(null);
   const [catalogItems, setCatalogItems] = useState([]);
+  const [ownedHomebrew, setOwnedHomebrew] = useState([]);
   const [catalogError, setCatalogError] = useState(null);
 
   // Session load save. Keyed on plain values, not the loadout object (rebuilt
@@ -489,6 +493,19 @@ export default function CharacterSheetInventoryList({
   useEffect(() => {
     refreshCatalog();
   }, [refreshCatalog]);
+
+  // "Add owned homebrew item" (S10): the owner's creations and collection,
+  // plus homebrew the GM turned on. Loaded when the picker opens.
+  const openHomebrewPicker = () => {
+    cancelEdit();
+    setAddMode("homebrew");
+    setAddDraft(null);
+    setOwnedHomebrew([]);
+    equipmentAPI
+      .list({ homebrew: "owned", character: characterId })
+      .then((list) => setOwnedHomebrew(Array.isArray(list) ? list : []))
+      .catch(() => setOwnedHomebrew([]));
+  };
 
   const patchLoadout = useCallback(
     (patch) => {
@@ -598,6 +615,7 @@ export default function CharacterSheetInventoryList({
   const addingArmor = addMode === "armor";
   const addingCustom = addMode === "custom";
   const addingCatalog = addMode === "catalog";
+  const addingHomebrew = addMode === "homebrew";
 
   return (
     <div
@@ -864,6 +882,16 @@ export default function CharacterSheetInventoryList({
           onCancel={cancelAdd}
         />
       ) : null}
+      {addingHomebrew ? (
+        <CatalogSearchCard
+          catalogItems={ownedHomebrew}
+          readOnly={readOnly}
+          onPick={addFromCatalog}
+          onCancel={cancelAdd}
+          label="homebrew"
+          emptyText="No homebrew yet. Make some, or add items to your collection, on the Homebrew page."
+        />
+      ) : null}
 
       {!readOnly && !addMode && editingIndex == null ? (
         <div
@@ -896,6 +924,11 @@ export default function CharacterSheetInventoryList({
           >
             Add Custom Item
           </button>
+          {characterId != null ? (
+            <button type="button" style={btnStyle} onClick={openHomebrewPicker}>
+              Add owned homebrew item
+            </button>
+          ) : null}
           {allowArmor ? (
             <button
               type="button"

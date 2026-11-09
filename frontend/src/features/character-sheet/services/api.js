@@ -760,6 +760,8 @@ export const equipmentAPI = {
     // Homebrew page lists (S9): "browse" (with q), "mine", "collection".
     if (params.homebrew) q.set("homebrew", params.homebrew);
     if (params.q) q.set("q", params.q);
+    // "owned" (S10) needs the sheet: its owner's homebrew plus the GM's.
+    if (params.character != null) q.set("character", String(params.character));
     const qs = q.toString();
     return apiRequest(`/equipment-items/${qs ? `?${qs}` : ""}`);
   },
@@ -800,6 +802,11 @@ export const equipmentAPI = {
     apiRequest(`/equipment-items/${id}/reshare/`, { method: "POST" }),
   publish: (id) =>
     apiRequest(`/equipment-items/${id}/publish/`, { method: "POST" }),
+  addToCharacter: (id, characterId) =>
+    apiRequest(`/equipment-items/${id}/add-to-character/`, {
+      method: "POST",
+      body: JSON.stringify({ character: characterId }),
+    }),
   collect: (id) =>
     apiRequest(`/equipment-items/${id}/collect/`, { method: "POST" }),
   uncollect: (id) =>
