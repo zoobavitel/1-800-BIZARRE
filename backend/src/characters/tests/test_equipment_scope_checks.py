@@ -103,13 +103,14 @@ class SiteCatalogAndKitItemTests(TestCase):
         self.client.force_authenticate(user)
         return self.client.post(f"/api/equipment-items/{self.item.id}/publish-to-site/", {}, format="json")
 
-    def test_a_gm_cannot_publish_to_the_site_catalog(self):
-        response = self.publish(self.gm)
-        self.assertEqual(response.status_code, 403, getattr(response, "data", None))
+    def test_nobody_publishes_to_the_site_catalog(self):
+        """publish-to-site is gone (2026-11-08): staff get no special access
+        on the site, and only a creator publishes their own homebrew."""
+        for user in (self.gm, self.staff):
+            with self.subTest(user=user.username):
+                response = self.publish(user)
+                self.assertIn(response.status_code, (404, 405), getattr(response, "data", None))
         self.assertFalse(EquipmentItem.objects.filter(scope="SITE", name="Pub item unique").exists())
-
-    def test_staff_can_publish_to_the_site_catalog(self):
-        self.assertEqual(self.publish(self.staff).status_code, 201)
 
     def test_save_to_campaign_library_rejects_a_character_from_another_campaign(self):
         self.client.force_authenticate(self.gm)
