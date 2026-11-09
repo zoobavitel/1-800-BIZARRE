@@ -1,6 +1,7 @@
 from django.core.management.base import BaseCommand
 from django.contrib.auth.models import User
 from characters.models import Character, Campaign, Heritage, Vice
+from characters.management.seed_passwords import seed_password
 
 class Command(BaseCommand):
     help = 'Create the character Clean Bandit and assign to campaign and user.'
@@ -9,10 +10,10 @@ class Command(BaseCommand):
         # Create or get user laBoogy
         user_laboogy, created = User.objects.get_or_create(
             username='laBoogy',
-            defaults={'email': 'laboogy@example.com', 'password': 'password123'}
+            defaults={'email': 'laboogy@example.com'}
         )
         if created:
-            user_laboogy.set_password('password123')
+            user_laboogy.set_password(seed_password(self.stdout, user_laboogy.username))
             user_laboogy.save()
             self.stdout.write(self.style.SUCCESS('Created user laBoogy'))
         else:
@@ -23,8 +24,8 @@ class Command(BaseCommand):
         try:
             gm_user = User.objects.get(username='Pooj')
         except User.DoesNotExist:
-            gm_user, _ = User.objects.get_or_create(username='default_gm', defaults={'email': 'default_gm@example.com', 'password': 'password123'})
-            gm_user.set_password('password123')
+            gm_user, _ = User.objects.get_or_create(username='default_gm', defaults={'email': 'default_gm@example.com'})
+            gm_user.set_password(seed_password(self.stdout, gm_user.username))
             gm_user.save()
             self.stdout.write(self.style.WARNING('Created default_gm as Pooj not found.'))
 
