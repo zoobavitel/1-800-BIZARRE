@@ -165,7 +165,7 @@ export default function HamburgerMenu({
               className="nav-item"
               onClick={() => handleNav("homebrew")}
             >
-              Homebrew
+              View Homebrew
             </button>
             <span className="nav-item nav-item-soon">Virtual Table</span>
           </div>
