@@ -60,7 +60,7 @@ const KINDS = [
   { id: "heritages", one: "heritage", label: "Heritages", oneLabel: "Heritage" },
   { id: "abilities", one: "ability", label: "Abilities", oneLabel: "Ability" },
   { id: "items", one: "item", label: "Items", oneLabel: "Item", live: true },
-  { id: "monsters", one: "monster", label: "Monsters", oneLabel: "Monster" },
+  { id: "npcs", one: "npc", label: "NPCs", oneLabel: "NPC" },
   { id: "playbooks", one: "playbook", label: "Playbooks", oneLabel: "Playbook" },
 ];
 

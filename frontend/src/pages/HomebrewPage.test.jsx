@@ -177,7 +177,7 @@ describe("Homebrew landing page, like D&D Beyond's (2026-11-09)", () => {
 
   it("shows a card per kind with View and Create", () => {
     render(<HomebrewPage />);
-    for (const kind of ["Heritages", "Abilities", "Items", "Monsters", "Playbooks"]) {
+    for (const kind of ["Heritages", "Abilities", "Items", "NPCs", "Playbooks"]) {
       expect(screen.getByRole("heading", { name: kind })).toBeInTheDocument();
     }
     expect(screen.getByText(/View the homebrew items that users around the world have created and shared/)).toBeInTheDocument();
