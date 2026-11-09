@@ -117,10 +117,9 @@ function npcCreatorId(npc) {
   return Number.isFinite(n) ? n : null;
 }
 
-/** Campaign GM, NPC creator, or staff may adjust stand coin from this panel. */
+/** Campaign GM or NPC creator may adjust stand coin from this panel. */
 function canEditNpcStandCoin(user, campaign, npc) {
   if (!user?.id) return false;
-  if (user.is_staff) return true;
   const gmRaw = campaign?.gm;
   const gmId =
     gmRaw && typeof gmRaw === "object" ? gmRaw.id : gmRaw ?? null;

@@ -520,7 +520,6 @@ function CampaignEquipmentPanel({ campaign, onRefresh }) {
 
   const canDeleteCatalogItem = (item) => {
     if (!user) return false;
-    if (user.is_staff) return true;
     if (item.scope === "TEMPLATE") return false;
     if (item.created_by != null && Number(item.created_by) === Number(user.id)) {
       return true;

@@ -777,8 +777,6 @@ export const equipmentAPI = {
       method: "POST",
       body: JSON.stringify({ campaign: campaignId, enabled }),
     }),
-  publishToSite: (id) =>
-    apiRequest(`/equipment-items/${id}/publish-to-site/`, { method: "POST" }),
   fromKitItem: (data) =>
     apiRequest("/equipment-items/from-kit-item/", {
       method: "POST",

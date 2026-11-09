@@ -2275,34 +2275,6 @@ const NPCSheet = ({
     [campaignId],
   );
 
-  const handlePublishItemToSite = useCallback(
-    async (item) => {
-      const cid =
-        campaignId != null && campaignId !== ""
-          ? parseInt(String(campaignId), 10)
-          : NaN;
-      if (!Number.isFinite(cid)) return;
-      if (!String(item?.name || "").trim()) return;
-      try {
-        const created = await equipmentAPI.fromKitItem({
-          campaign: cid,
-          name: item.name,
-          detail: item.detail,
-          category: item.category,
-          load: item.load,
-          quality: item.quality,
-          coin_value: item.coin_value,
-        });
-        const scope = String(created?.scope || "").toUpperCase();
-        if (scope === "TEMPLATE" || scope === "SITE") return;
-        if (created?.id) await equipmentAPI.publishToSite(created.id);
-      } catch (err) {
-        console.error("Publish to site catalog failed:", err);
-      }
-    },
-    [campaignId],
-  );
-
   // Auto-save state
   const [saveStatus, setSaveStatus] = useState(null);
   /** Last autosave failure (API message); cleared on next successful save attempt. */
@@ -4725,9 +4697,6 @@ const NPCSheet = ({
                       onChange={setInventory}
                       onPromoteToCampaign={
                         isGM ? handlePromoteItemToCampaign : undefined
-                      }
-                      onPublishToSite={
-                        isGM ? handlePublishItemToSite : undefined
                       }
                     />
                   </div>
@@ -8265,9 +8234,6 @@ const NPCSheet = ({
                     onPromoteToCampaign={
                       isGM ? handlePromoteItemToCampaign : undefined
                     }
-                    onPublishToSite={
-                      isGM ? handlePublishItemToSite : undefined
-                    }
                   />
                 </div>
               ) : (
@@ -8283,9 +8249,6 @@ const NPCSheet = ({
                     onChange={setFactionInventory}
                     onPromoteToCampaign={
                       isGM ? handlePromoteItemToCampaign : undefined
-                    }
-                    onPublishToSite={
-                      isGM ? handlePublishItemToSite : undefined
                     }
                   />
                 </div>

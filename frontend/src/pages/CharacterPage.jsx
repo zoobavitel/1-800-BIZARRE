@@ -56,10 +56,9 @@ const SHEET_SYNC_INTERVAL_MS = 30000;
 /** Coalesce SSE campaign_update bursts into one sheet sync (ms). */
 const SHEET_SSE_DEBOUNCE_MS = 1000;
 
-/** Staff / creator / campaign GM may edit; campaign players view See-on NPCs read-only. */
+/** Creator / campaign GM may edit; campaign players view See-on NPCs read-only. */
 function userCanEditNpcSheet(user, npc, campaigns) {
   if (!user?.id) return false;
-  if (user.is_staff) return true;
   if (!npc?.id) return true;
   const creatorId = npc.creator ?? npc.creator_id;
   if (creatorId != null && Number(creatorId) === Number(user.id)) return true;
@@ -74,7 +73,6 @@ function userCanEditNpcSheet(user, npc, campaigns) {
 
 function userIsNpcCampaignGm(user, npc, campaigns) {
   if (!user?.id) return false;
-  if (user.is_staff) return true;
   const campaignId = npc?.campaign ?? npc?.campaign_id;
   if (campaignId == null) return false;
   const camp = (campaigns || []).find(

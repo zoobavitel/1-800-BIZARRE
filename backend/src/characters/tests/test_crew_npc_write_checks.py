@@ -48,12 +48,13 @@ class CrewWriteTests(TestCase):
         self.assertEqual(response.status_code, 403, response.content)
         self.assertTrue(Crew.objects.filter(pk=self.crew.pk).exists())
 
-    def test_gm_and_staff_can_delete_the_crew(self):
-        # Staff may delete any time; the GM only once no players remain
-        # (2026-10-29 rule, see test_crew_delete_rule).
+    def test_gm_can_delete_the_crew_and_staff_cannot(self):
+        # Staff get no special access on the site (2026-11-08). The GM may
+        # delete once no players remain (2026-10-29, see test_crew_delete_rule).
         other = Crew.objects.create(name="CW Crew 2", campaign=self.campaign)
         self.client.force_authenticate(self.staff)
-        self.assertEqual(self.client.delete(f"/api/crews/{other.pk}/").status_code, 204)
+        self.assertIn(self.client.delete(f"/api/crews/{other.pk}/").status_code, (403, 404))
+        self.assertTrue(Crew.objects.filter(pk=other.pk).exists())
         self.campaign.players.clear()
         self.client.force_authenticate(self.gm)
         self.assertEqual(self.client.delete(f"/api/crews/{self.crew.pk}/").status_code, 204)
@@ -133,9 +134,10 @@ class NpcCampaignGmOnlyTests(TestCase):
         self.assertEqual(self._create(self.stranger, self.campaign).status_code, 403)
         self.assertFalse(NPC.objects.filter(campaign=self.campaign).exists())
 
-    def test_gm_and_staff_can_create_campaign_npcs(self):
+    def test_gm_can_create_campaign_npcs_and_staff_cannot(self):
         self.assertEqual(self._create(self.gm, self.campaign).status_code, 201)
-        self.assertEqual(self._create(self.staff, self.campaign).status_code, 201)
+        # Staff get no special access on the site (2026-11-08).
+        self.assertEqual(self._create(self.staff, self.campaign).status_code, 403)
 
     def test_anyone_can_create_an_npc_without_a_campaign(self):
         self.assertEqual(self._create(self.player).status_code, 201)
