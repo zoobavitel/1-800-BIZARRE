@@ -113,7 +113,7 @@ EXPECTED = {
     **_both("POST", "/api/campaigns/", OPEN, "BY DESIGN: anyone may create their own campaign and becomes its GM"),
     "POST /api/characters/ as member": (OPEN, "BY DESIGN: a player may add a PC to a campaign they play in"),
     "POST /api/crews/ as member": (OPEN, "BY DESIGN: a player may create a crew in their campaign"),
-    "PATCH /api/crews/{id}/ as member": (OPEN, "BY DESIGN: crew members edit name, stash, description, notes and upgrade progress; level, xp, coin, rep, hold, turf and wanted_level are GM only since S5 (see test_member_crew_stat_patch)"),
+    "PATCH /api/crews/{id}/ as member": (OPEN, "BY DESIGN: crew members edit the shared crew sheet, including level, xp, coin, rep, hold, turf and wanted_level (user, 2026-11-02; see test_member_crew_stat_patch)"),
     "POST /api/crews/{id}/propose-name/ as member": (OPEN, "BY DESIGN: crew members propose crew names"),
     "POST /api/crews/{id}/approve-name/ as member": (OPEN, "BY DESIGN: crew members approve a proposed crew name"),
     "POST /api/campaigns/{id}/increment-wanted/ as member": (OPEN, "BY DESIGN (U4): any member may bump the wanted level"),
@@ -421,8 +421,8 @@ class PermissionMatrixTests(TestCase):
         self.assertEqual(problems, [], "\n" + "\n".join(problems))
 
     def test_member_crew_stat_patch(self):
-        """S5: level, xp, coin, rep, hold, turf and wanted_level are GM only
-        (user, 2026-10-26). A member's PATCH of coin is refused and coin stays."""
+        """Crew members may change the crew's stats (user, 2026-11-02; S5 had
+        made them GM only). A member's PATCH of coin saves."""
         with transaction.atomic():
             member = self.fresh_actor("member")
             coin_before = self.crew.coin
@@ -430,5 +430,5 @@ class PermissionMatrixTests(TestCase):
             self.crew.refresh_from_db()
             coin_after = self.crew.coin
             transaction.set_rollback(True)
-        self.assertEqual(response.status_code, 403, response.content)
-        self.assertEqual(coin_after, coin_before)
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(coin_after, coin_before + 3)
