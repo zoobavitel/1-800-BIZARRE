@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "../features/auth";
 import {
-  campaignAPI,
   characterAPI,
   equipmentAPI,
 } from "../features/character-sheet/services/api";
@@ -248,12 +247,11 @@ function CreateHomebrewItem({ initialTemplate = null, renderActions }) {
 }
 
 /**
- * Use a homebrew item (S10): put it on one of my sheets, or turn it on for a
- * campaign I run so its players can add it.
+ * Use a homebrew item (S10): put it on one of my sheets. Saving homebrew to
+ * your collection shares it with your table when homebrew is on (S11).
  */
-function HomebrewItemActions({ item, sheets, campaigns }) {
+function HomebrewItemActions({ item, sheets }) {
   const [sheetId, setSheetId] = useState("");
-  const [campaignId, setCampaignId] = useState("");
   const [message, setMessage] = useState(null);
 
   const run = async (fn, done, failMsg) => {
@@ -266,9 +264,8 @@ function HomebrewItemActions({ item, sheets, campaigns }) {
     }
   };
 
-  if (!sheets.length && !campaigns.length) return null;
+  if (!sheets.length) return null;
   const sheetName = (id) => sheets.find((c) => String(c.id) === String(id))?.true_name || "the sheet";
-  const campaignName = (id) => campaigns.find((c) => String(c.id) === String(id))?.name || "the campaign";
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginTop: "6px" }}>
@@ -301,38 +298,6 @@ function HomebrewItemActions({ item, sheets, campaigns }) {
             }
           >
             Add to a character
-          </button>
-        </div>
-      ) : null}
-      {campaigns.length ? (
-        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
-          <select
-            style={S.inp}
-            aria-label={`Campaign for ${item.name}`}
-            value={campaignId}
-            onChange={(e) => setCampaignId(e.target.value)}
-          >
-            <option value="">Choose a campaign you run…</option>
-            {campaigns.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            style={S.btn}
-            disabled={!campaignId}
-            aria-label={`Use ${item.name} in the campaign`}
-            onClick={() =>
-              run(
-                () => equipmentAPI.setCampaignAccess(item.id, Number(campaignId), true),
-                `Turned on for ${campaignName(campaignId)}. Its players can add it with "Add owned homebrew item".`,
-                "Could not turn it on for the campaign.",
-              )
-            }
-          >
-            Use in a campaign
           </button>
         </div>
       ) : null}
@@ -456,29 +421,21 @@ export default function HomebrewPage({ tab, query = "", onNavigate }) {
   const [template, setTemplate] = useState(null);
   const { user } = useAuth();
   const [sheets, setSheets] = useState([]);
-  const [campaigns, setCampaigns] = useState([]);
 
   useEffect(() => {
     if (ITEM_TABS.some((t) => t.id === tab)) setCurrent(tab);
   }, [tab]);
 
-  // For the S10 actions: my sheets, and the campaigns I run.
+  // For the S10 action: my sheets.
   useEffect(() => {
     characterAPI
       .getCharacters({ mine: true })
       .then((list) => setSheets(Array.isArray(list) ? list : list?.results || []))
       .catch(() => setSheets([]));
-    campaignAPI
-      .getCampaigns()
-      .then((list) => {
-        const all = Array.isArray(list) ? list : list?.results || [];
-        setCampaigns(all.filter((c) => user?.id != null && Number(c.gm?.id) === Number(user.id)));
-      })
-      .catch(() => setCampaigns([]));
   }, [user?.id]);
 
   const renderActions = (item) => (
-    <HomebrewItemActions item={item} sheets={sheets} campaigns={campaigns} />
+    <HomebrewItemActions item={item} sheets={sheets} />
   );
 
   const go = (id, extra) => {
