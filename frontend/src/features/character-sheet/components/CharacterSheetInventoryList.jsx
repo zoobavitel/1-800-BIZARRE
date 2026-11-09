@@ -47,7 +47,7 @@ const btnStyle = {
 };
 
 function catalogSourceLabel(c) {
-  if (c.homebrew_source === "gm") return "Homebrew from your GM";
+  if (c.homebrew_source === "campaign") return `Homebrew by ${c.created_by_username || "admin"} · from your table`;
   if (c.homebrew_source === "mine") return `Homebrew by ${c.created_by_username || "admin"}`;
   if (c.scope === "CAMPAIGN") return "Campaign";
   if (c.scope === "SITE" || c.scope === "SHARED") return `Homebrew by ${c.created_by_username || "admin"}`;
@@ -392,6 +392,10 @@ export default function CharacterSheetInventoryList({
   abilities = [],
   campaignId,
   characterId,
+  // S11: whether this sheet gets homebrew (the campaign's switch, or the
+  // sheet's own with no campaign). onHomebrewChange flips the sheet's own.
+  homebrewEnabled = false,
+  onHomebrewChange,
   isGM = false,
   onPromoteToCampaign,
   onShareItem,
@@ -878,6 +882,23 @@ export default function CharacterSheetInventoryList({
         />
       ) : null}
 
+      {!readOnly && !addMode && editingIndex == null && characterId != null ? (
+        <div style={{ marginTop: inv.length ? "8px" : 0, fontSize: "11px", color: "var(--text-muted)" }}>
+          {campaignId ? (
+            <span>Homebrew: {homebrewEnabled ? "on" : "off"} (your GM sets this)</span>
+          ) : (
+            <label style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+              <input
+                type="checkbox"
+                aria-label="Enable homebrew for this sheet"
+                checked={Boolean(homebrewEnabled)}
+                onChange={(e) => onHomebrewChange?.(e.target.checked)}
+              />
+              Enable homebrew
+            </label>
+          )}
+        </div>
+      ) : null}
       {!readOnly && !addMode && editingIndex == null ? (
         <div
           style={{
@@ -909,7 +930,7 @@ export default function CharacterSheetInventoryList({
           >
             Add Custom Item
           </button>
-          {characterId != null ? (
+          {characterId != null && homebrewEnabled ? (
             <button type="button" style={btnStyle} onClick={openHomebrewPicker}>
               Add owned homebrew item
             </button>

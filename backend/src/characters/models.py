@@ -31,6 +31,13 @@ class Campaign(models.Model):
     )
     wanted_stars = models.IntegerField(default=0)
     is_active = models.BooleanField(default=True)
+    homebrew_enabled = models.BooleanField(
+        default=False,
+        help_text=(
+            "S11: when false, no sheet in this campaign gets homebrew (the "
+            "Add owned homebrew item list is empty). Set by the GM."
+        ),
+    )
     allow_character_assignment = models.BooleanField(
         default=False,
         help_text=(
@@ -1095,6 +1102,13 @@ class Character(models.Model):
     )
     inventory = models.JSONField(
         default=list, blank=True, help_text="List of items the character possesses"
+    )
+    homebrew_enabled = models.BooleanField(
+        default=False,
+        help_text=(
+            "S11: homebrew switch for a sheet with no campaign, set by its "
+            "owner. In a campaign, the campaign's switch decides."
+        ),
     )
     reputation_status = models.JSONField(
         default=dict,

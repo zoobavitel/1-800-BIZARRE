@@ -1342,6 +1342,7 @@ const CharacterSheetWrapper = ({
     inventory: normalizeCharacterInventory(character?.inventory),
     fed_today:
       typeof character?.fed_today === "boolean" ? character.fed_today : null,
+    homebrew_enabled: Boolean(character?.homebrew_enabled),
     disguised_as_human:
       typeof character?.disguised_as_human === "boolean"
         ? character.disguised_as_human
@@ -1712,6 +1713,13 @@ const CharacterSheetWrapper = ({
       prev.fed_today !== fedToday ? { ...prev, fed_today: fedToday } : prev,
     );
   }, [character?.id, character?.fed_today]);
+
+  useEffect(() => {
+    const on = Boolean(character?.homebrew_enabled);
+    setCharData((prev) =>
+      prev.homebrew_enabled !== on ? { ...prev, homebrew_enabled: on } : prev,
+    );
+  }, [character?.id, character?.homebrew_enabled]);
 
   useEffect(() => {
     const v =
@@ -15872,6 +15880,16 @@ const CharacterSheetWrapper = ({
                             ? handleShareItem
                             : undefined
                         }
+                        // S11: in a campaign its switch decides; otherwise the sheet's own.
+                        homebrewEnabled={
+                          campaignId
+                            ? Boolean(character?.campaign_homebrew_enabled)
+                            : Boolean(charData.homebrew_enabled)
+                        }
+                        onHomebrewChange={(on) => {
+                          markDirtyIntent();
+                          setCharData((p) => ({ ...p, homebrew_enabled: on }));
+                        }}
                       />
                     ) : null}
                   </div>
