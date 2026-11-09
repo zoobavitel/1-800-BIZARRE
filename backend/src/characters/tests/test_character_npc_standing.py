@@ -59,9 +59,11 @@ class CharacterNpcStandingSerializerTest(TestCase):
         )
 
     def test_campaign_change_prunes_npc_standing(self):
+        # A PC can't move straight to another campaign; it leaves first.
+        # Leaving clears standing with the old campaign's NPCs.
         ser = CharacterSerializer(
             self.pc,
-            data={"campaign": self.other.id},
+            data={"campaign": None},
             partial=True,
             context={"request": self._request(self.gm)},
         )
