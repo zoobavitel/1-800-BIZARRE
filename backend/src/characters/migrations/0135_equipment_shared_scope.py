@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('characters', '0132_character_version'),
+        ('characters', '0134_campaign_delete_keeps_characters'),
     ]
 
     operations = [

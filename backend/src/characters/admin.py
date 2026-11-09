@@ -123,10 +123,24 @@ admin.site.register(Crew)
 # special access in the app; support work happens in Django admin).
 @admin.register(EquipmentItem)
 class EquipmentItemAdmin(admin.ModelAdmin):
-    list_display = ("name", "scope", "category", "load_slots", "quality", "campaign", "created_by")
-    list_filter = ("scope", "category", "campaign")
+    list_display = ("name", "scope", "is_public", "category", "load_slots", "quality", "campaign", "created_by")
+    list_filter = ("scope", "is_public", "category", "campaign")
     search_fields = ("name", "description", "created_by__username")
     raw_id_fields = ("campaign", "created_by", "source_character")
+    actions = ("publish_homebrew", "unpublish_homebrew")
+
+    # Publishing homebrew on a user's behalf (for a user who can't do it
+    # themselves). Only homebrew (SHARED) rows change; the creator stays
+    # the owner.
+    @admin.action(description="Publish selected homebrew (owner unchanged)")
+    def publish_homebrew(self, request, queryset):
+        n = queryset.filter(scope="SHARED").update(is_public=True)
+        self.message_user(request, f"Published {n} homebrew item(s).")
+
+    @admin.action(description="Unpublish selected homebrew (owner unchanged)")
+    def unpublish_homebrew(self, request, queryset):
+        n = queryset.filter(scope="SHARED").update(is_public=False)
+        self.message_user(request, f"Unpublished {n} homebrew item(s).")
 
 
 @admin.register(CampaignEquipmentAccess)

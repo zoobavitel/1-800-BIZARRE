@@ -1286,6 +1286,9 @@ class RollSerializer(serializers.ModelSerializer):
             "recovery_target_character_name",
         ]
         read_only_fields = ["timestamp", "rolled_by"]
+        # Old rolls may lose their session when a campaign is deleted, but a
+        # new roll always needs one.
+        extra_kwargs = {"session": {"required": True, "allow_null": False}}
 
     def get_recovery_target_character_name(self, obj):
         t = getattr(obj, "recovery_target", None)
@@ -1392,7 +1395,7 @@ class RollSerializer(serializers.ModelSerializer):
         is_gm = bool(
             user
             and getattr(user, "is_authenticated", False)
-            and instance.session.campaign.gm_id == user.id
+            and bool(instance.session_id and instance.session.campaign.gm_id == user.id)
         )
         if (
             (instance.roll_type or "").upper() == "FORTUNE"
