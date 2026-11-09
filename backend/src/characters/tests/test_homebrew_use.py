@@ -166,3 +166,14 @@ class UseHomebrewTests(TestCase):
         names = {r["name"] for r in rows(response)}
         self.assertIn("Crowbar", names)
         self.assertFalse({"GM Charm", "Admin Rope"} & names)
+
+    # Staff get no exception on the site (2026-11-08).
+
+    def test_staff_cannot_read_a_sheets_homebrew_or_add_to_it(self):
+        staff = User.objects.create_user(username="uh_staff", password="pw-uh-staff-1", is_staff=True)
+        response, _ = self.owned(staff, self.pc)
+        self.assertEqual(response.status_code, 403)
+        response = self.as_user(staff).post(
+            f"{URL}{self.my_public.id}/add-to-character/", {"character": self.pc.id}, format="json"
+        )
+        self.assertEqual(response.status_code, 403)

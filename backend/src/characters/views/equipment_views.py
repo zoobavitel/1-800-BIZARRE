@@ -134,7 +134,7 @@ class EquipmentItemViewSet(viewsets.ModelViewSet):
     def _owned_homebrew(self, user):
         """The sheet's "Add owned homebrew item" list (S10): the owner's
         creations and collection, plus homebrew the campaign's GM turned on,
-        minus items the GM blocked. The sheet's owner, its GM or staff."""
+        minus items the GM blocked. The sheet's owner or its GM."""
         try:
             character = Character.objects.select_related("campaign").get(
                 pk=self.request.query_params.get("character")
@@ -143,8 +143,7 @@ class EquipmentItemViewSet(viewsets.ModelViewSet):
             raise NotFound("Character not found.")
         campaign = character.campaign
         if not (
-            user.is_staff
-            or character.user_id == user.id
+            character.user_id == user.id
             or (campaign is not None and campaign.gm_id == user.id)
         ):
             raise PermissionDenied("Only the sheet's owner or GM can see its homebrew.")
@@ -185,7 +184,7 @@ class EquipmentItemViewSet(viewsets.ModelViewSet):
         owner_id = Character.objects.filter(pk=character_id).values_list("user_id", flat=True).first()
         if owner_id is None and not Character.objects.filter(pk=character_id).exists():
             raise NotFound("Character not found.")
-        if not (request.user.is_staff or owner_id == request.user.id):
+        if owner_id != request.user.id:
             self.permission_denied(request, message="You can only add items to your own sheet.")
         item = self._collectable(request)
         with transaction.atomic():
