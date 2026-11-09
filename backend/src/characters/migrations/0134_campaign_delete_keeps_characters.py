@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('characters', '0132_character_version'),
+        ('characters', '0133_copy_crew_stash_to_members'),
     ]
 
     operations = [
