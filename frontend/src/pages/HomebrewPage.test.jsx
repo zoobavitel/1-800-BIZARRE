@@ -45,7 +45,8 @@ describe("Homebrew page: make homebrew (S8)", () => {
   });
 
   it("creates an item from scratch as private homebrew", async () => {
-    render(<HomebrewPage tab="create" />);
+    render(<HomebrewPage tab="create-item" />);
+    fireEvent.click(screen.getByRole("button", { name: "Start from scratch" }));
     fireEvent.change(screen.getByLabelText("Homebrew item name"), { target: { value: "Lamp" } });
     fireEvent.click(screen.getByRole("button", { name: "Save as homebrew" }));
     await waitFor(() =>
@@ -58,7 +59,8 @@ describe("Homebrew page: make homebrew (S8)", () => {
   });
 
   it("publishes a new item straight away", async () => {
-    render(<HomebrewPage tab="create" />);
+    render(<HomebrewPage tab="create-item" />);
+    fireEvent.click(screen.getByRole("button", { name: "Start from scratch" }));
     fireEvent.change(screen.getByLabelText("Homebrew item name"), { target: { value: "Lamp" } });
     fireEvent.click(screen.getByRole("button", { name: "Publish as homebrew" }));
     await waitFor(() =>
@@ -67,7 +69,8 @@ describe("Homebrew page: make homebrew (S8)", () => {
   });
 
   it("starts from an existing item as a template", async () => {
-    render(<HomebrewPage tab="create" />);
+    render(<HomebrewPage tab="create-item" />);
+    fireEvent.click(screen.getByRole("button", { name: "Start from a template" }));
     fireEvent.change(screen.getByLabelText("Start from an existing item"), { target: { value: "Crow" } });
     fireEvent.click(await screen.findByRole("button", { name: "Use Crowbar as template" }));
     expect(screen.getByLabelText("Homebrew item name")).toHaveValue("Crowbar");
@@ -112,7 +115,7 @@ describe("Homebrew page: find homebrew (S9)", () => {
   });
 
   it("adds a result to my collection and removes it again", async () => {
-    render(<HomebrewPage tab="browse" />);
+    render(<HomebrewPage tab="items" />);
     fireEvent.click(await screen.findByRole("button", { name: "Add Odd Lantern to my collection" }));
     await waitFor(() => expect(equipmentAPI.collect).toHaveBeenCalledWith(60));
     fireEvent.click(await screen.findByRole("button", { name: "Remove Odd Lantern from my collection" }));
@@ -120,7 +123,7 @@ describe("Homebrew page: find homebrew (S9)", () => {
   });
 
   it("uses a result as a template for a new item", async () => {
-    render(<HomebrewPage tab="browse" />);
+    render(<HomebrewPage tab="items" />);
     fireEvent.click(await screen.findByRole("button", { name: "Use Odd Lantern as template" }));
     expect(await screen.findByLabelText("Homebrew item name")).toHaveValue("Odd Lantern");
     expect(screen.getByText(/Starting from Odd Lantern/)).toBeInTheDocument();
@@ -177,23 +180,35 @@ describe("Homebrew landing page, like D&D Beyond's (2026-11-09)", () => {
     for (const kind of ["Heritages", "Abilities", "Items", "Monsters", "Playbooks"]) {
       expect(screen.getByRole("heading", { name: kind })).toBeInTheDocument();
     }
-    expect(screen.getByRole("link", { name: "View homebrew items" })).toHaveAttribute("href", "#homebrew/items");
-    expect(screen.getByRole("link", { name: "Create homebrew item" })).toHaveAttribute(
+    expect(screen.getByText(/View the homebrew items that users around the world have created and shared/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "View Homebrew Items" })).toHaveAttribute("href", "#homebrew/items");
+    expect(screen.getByRole("link", { name: "Create Homebrew Item" })).toHaveAttribute(
       "href",
-      "#homebrew/create/item",
+      "#homebrew/create-item",
     );
   });
 
   it("marks the kinds that aren't built yet as coming soon", () => {
     render(<HomebrewPage />);
-    expect(screen.getByRole("button", { name: "View homebrew heritages (coming soon)" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Create homebrew heritage (coming soon)" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "View Homebrew Heritages" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Create Homebrew Heritage" })).toBeDisabled();
   });
 
   it("links to my collection and my creations", () => {
     render(<HomebrewPage />);
-    expect(screen.getByRole("link", { name: "My collection" })).toHaveAttribute("href", "#homebrew/collection");
-    expect(screen.getByRole("link", { name: "My creations" })).toHaveAttribute("href", "#homebrew/creations");
+    expect(screen.getByRole("link", { name: "View My Homebrew Collection" })).toHaveAttribute(
+      "href",
+      "#homebrew/collection",
+    );
+    expect(screen.getByRole("link", { name: "View My Homebrew Creations" })).toHaveAttribute(
+      "href",
+      "#homebrew/creations",
+    );
+  });
+
+  it("#homebrew/browse is the landing page too", () => {
+    render(<HomebrewPage tab="browse" />);
+    expect(screen.getByRole("link", { name: "View Homebrew Items" })).toBeInTheDocument();
   });
 
   it("opens the items search page from its route", async () => {
@@ -202,9 +217,28 @@ describe("Homebrew landing page, like D&D Beyond's (2026-11-09)", () => {
     expect(screen.getByLabelText("Search homebrew items")).toBeInTheDocument();
   });
 
-  it("opens the item create page from its route", () => {
+  it("the create route asks how to start first", () => {
+    render(<HomebrewPage tab="create-item" />);
+    expect(screen.getByRole("button", { name: "Start from scratch" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start from a template" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Homebrew item name")).toBeNull();
+  });
+
+  it("starting from scratch gives an empty form", () => {
+    render(<HomebrewPage tab="create-item" />);
+    fireEvent.click(screen.getByRole("button", { name: "Start from scratch" }));
+    expect(screen.getByLabelText("Homebrew item name")).toHaveValue("");
+    expect(screen.getByText(/Starting from scratch/)).toBeInTheDocument();
+  });
+
+  it("the old create route still works", () => {
     render(<HomebrewPage tab="create" query="item" />);
-    expect(screen.getByLabelText("Homebrew item name")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start from scratch" })).toBeInTheDocument();
+  });
+
+  it("create routes for kinds not built yet show coming soon", () => {
+    render(<HomebrewPage tab="create-heritage" />);
+    expect(screen.getByText(/Homebrew heritages are coming soon/)).toBeInTheDocument();
   });
 
   it("shows coming soon for a kind that isn't built yet", () => {

@@ -57,12 +57,11 @@ const ITEM_TABS = [
 // Homebrew kinds on the landing page, like D&D Beyond's homebrew page. Only
 // items are built; the rest are planned stories (S13 onward).
 const KINDS = [
-  { id: "heritages", one: "heritage", label: "Heritages",
-    blurb: "New heritages, or variations of existing ones, with their own benefits and detriments." },
-  { id: "abilities", one: "ability", label: "Abilities", blurb: "Standard abilities anyone can take." },
-  { id: "items", one: "item", label: "Items", blurb: "Gear, implements, weapons and other equipment.", live: true },
-  { id: "monsters", one: "monster", label: "Monsters", blurb: "Enemies and creatures for GMs to use as NPCs." },
-  { id: "playbooks", one: "playbook", label: "Playbooks", blurb: "Stand, Spin and Hamon playbooks and their abilities." },
+  { id: "heritages", one: "heritage", label: "Heritages", oneLabel: "Heritage" },
+  { id: "abilities", one: "ability", label: "Abilities", oneLabel: "Ability" },
+  { id: "items", one: "item", label: "Items", oneLabel: "Item", live: true },
+  { id: "monsters", one: "monster", label: "Monsters", oneLabel: "Monster" },
+  { id: "playbooks", one: "playbook", label: "Playbooks", oneLabel: "Playbook" },
 ];
 
 const linkBtn = { display: "inline-block", textDecoration: "none" };
@@ -81,6 +80,9 @@ function formFromItem(item) {
 
 /** Create a homebrew item from scratch or from an existing item (S8). */
 function CreateHomebrewItem({ initialTemplate = null, renderActions }) {
+  // Step 1 ("choose"): from scratch or from a template, like D&D Beyond's
+  // create pages. "template" searches for one. Step 2 ("form"): the form.
+  const [step, setStep] = useState(initialTemplate ? "form" : "choose");
   const [form, setForm] = useState(EMPTY_FORM);
   const [template, setTemplate] = useState(null);
   const [search, setSearch] = useState("");
@@ -107,6 +109,13 @@ function CreateHomebrewItem({ initialTemplate = null, renderActions }) {
     setTemplate(item);
     setSearch("");
     setForm(formFromItem(item));
+    setStep("form");
+  };
+
+  const startFromScratch = () => {
+    setTemplate(null);
+    setForm(EMPTY_FORM);
+    setStep("form");
   };
 
   useEffect(() => {
@@ -114,6 +123,7 @@ function CreateHomebrewItem({ initialTemplate = null, renderActions }) {
     setTemplate(initialTemplate);
     setSearch("");
     setForm(formFromItem(initialTemplate));
+    setStep("form");
   }, [initialTemplate]);
 
   const save = async (isPublic) => {
@@ -141,6 +151,7 @@ function CreateHomebrewItem({ initialTemplate = null, renderActions }) {
       );
       setForm(EMPTY_FORM);
       setTemplate(null);
+      setStep("choose");
     } catch (e) {
       setError(e.message || "Could not save the item.");
     }
@@ -148,45 +159,75 @@ function CreateHomebrewItem({ initialTemplate = null, renderActions }) {
 
   const set = (key) => (e) => setForm((p) => ({ ...p, [key]: e.target.value }));
 
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-      <label style={S.label}>
-        Start from an existing item (optional)
-        <input
-          style={S.inp}
-          aria-label="Start from an existing item"
-          placeholder="Search SRD and homebrew items"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-      </label>
-      {matches.length > 0 ? (
-        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-          {matches.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              style={{ ...S.btn, textAlign: "left" }}
-              aria-label={`Use ${item.name} as template`}
-              onClick={() => pickTemplate(item)}
-            >
-              {item.name}
-              <span style={{ ...S.muted, marginLeft: "8px" }}>
-                {item.scope === "TEMPLATE" ? "SRD" : `by ${item.created_by_username || "admin"}`} ·{" "}
-                {categoryLabel(item.category)}
-              </span>
-            </button>
-          ))}
-        </div>
-      ) : null}
-      {template ? (
-        <div style={S.muted}>
-          Starting from {template.name}. The original stays as it is.{" "}
-          <button type="button" style={S.btn} onClick={() => setTemplate(null)}>
+  if (step === "choose") {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+        {notice ? <div style={{ color: "var(--text-muted)", fontSize: "12px" }}>{notice}</div> : null}
+        {made && renderActions ? renderActions(made) : null}
+        <div style={S.muted}>How do you want to start?</div>
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+          <button type="button" style={S.btn} onClick={startFromScratch}>
             Start from scratch
           </button>
+          <button type="button" style={S.btn} onClick={() => setStep("template")}>
+            Start from a template
+          </button>
         </div>
-      ) : null}
+      </div>
+    );
+  }
+
+  if (step === "template") {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+        <label style={S.label}>
+          Start from an existing item
+          <input
+            style={S.inp}
+            aria-label="Start from an existing item"
+            placeholder="Search SRD and homebrew items"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </label>
+        {matches.length > 0 ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+            {matches.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                style={{ ...S.btn, textAlign: "left" }}
+                aria-label={`Use ${item.name} as template`}
+                onClick={() => pickTemplate(item)}
+              >
+                {item.name}
+                <span style={{ ...S.muted, marginLeft: "8px" }}>
+                  {item.scope === "TEMPLATE" ? "SRD" : `by ${item.created_by_username || "admin"}`} ·{" "}
+                  {categoryLabel(item.category)}
+                </span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div style={S.muted}>Type to search SRD items, published homebrew and your own homebrew.</div>
+        )}
+        <div>
+          <button type="button" style={S.btn} onClick={() => setStep("choose")}>
+            ← Back
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+      <div style={S.muted}>
+        {template ? `Starting from ${template.name}. The original stays as it is. ` : "Starting from scratch. "}
+        <button type="button" style={S.btn} onClick={() => setStep("choose")}>
+          Change starting point
+        </button>
+      </div>
       <label style={S.label}>
         Name
         <input style={S.inp} aria-label="Homebrew item name" value={form.name} onChange={set("name")} />
@@ -421,61 +462,90 @@ function HomebrewItemList({ which, initialQuery = "", onUseTemplate, onSearch, r
  * published homebrew, keep a collection, manage your creations or create
  * one (S8, S9). Only items exist so far.
  */
+const landing = {
+  actions: { display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "flex-end", marginBottom: "16px" },
+  grid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "16px" },
+  card: {
+    background: "var(--bg-card)",
+    border: "1px solid var(--border)",
+    borderRadius: "4px",
+    overflow: "hidden",
+    display: "flex",
+    flexDirection: "column",
+  },
+  header: {
+    background: "linear-gradient(135deg, var(--hftf-purple, #5b2a86), var(--bg-header, #1f2937))",
+    padding: "28px 14px 10px",
+    borderBottom: "1px solid var(--border)",
+  },
+  headerText: { margin: 0, fontSize: "16px", fontWeight: "bold", color: "#fff", letterSpacing: "0.5px" },
+  body: { padding: "12px 14px 14px", display: "flex", flexDirection: "column", gap: "12px", flex: 1 },
+  text: { color: "var(--text-dim)", fontSize: "12px", lineHeight: 1.5, flex: 1 },
+  buttons: { display: "flex", flexDirection: "column", gap: "6px" },
+  button: {
+    display: "block",
+    textAlign: "center",
+    textDecoration: "none",
+    background: "transparent",
+    border: "1px solid var(--sheet-label)",
+    borderRadius: "4px",
+    color: "var(--text-primary)",
+    padding: "6px 10px",
+    fontSize: "12px",
+    cursor: "pointer",
+  },
+};
+
+/** The homebrew landing page, laid out like dndbeyond.com/homebrew. */
 function HomebrewLanding() {
   return (
     <div style={S.page}>
-      <div style={S.card}>
-        <h2 style={S.title}>Homebrew</h2>
-        <div style={S.muted}>
-          Make your own content, find what other players and GMs published, and keep the ones you like in your
-          collection.
-        </div>
-        <div style={{ ...S.tabs, marginTop: "10px", marginBottom: 0 }}>
-          <a style={{ ...S.btn, ...linkBtn }} href={buildRouteHref("homebrew", { tab: "collection" })}>
-            My collection
-          </a>
-          <a style={{ ...S.btn, ...linkBtn }} href={buildRouteHref("homebrew", { tab: "creations" })}>
-            My creations
-          </a>
-        </div>
+      <div style={landing.actions}>
+        <a style={landing.button} href={buildRouteHref("homebrew", { tab: "collection" })}>
+          View My Homebrew Collection
+        </a>
+        <a style={landing.button} href={buildRouteHref("homebrew", { tab: "creations" })}>
+          View My Homebrew Creations
+        </a>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "12px" }}>
-        {KINDS.map((k) => (
-          <div key={k.id} style={{ ...S.card, marginBottom: 0, opacity: k.live ? 1 : 0.7 }}>
-            <h3 style={{ ...S.title, fontSize: "14px" }}>{k.label}</h3>
-            <div style={{ ...S.muted, minHeight: "34px" }}>{k.blurb}</div>
-            <div style={{ display: "flex", gap: "6px", marginTop: "10px", flexWrap: "wrap" }}>
-              {k.live ? (
-                <>
-                  <a
-                    style={{ ...S.btn, ...linkBtn }}
-                    aria-label={`View homebrew ${k.id}`}
-                    href={buildRouteHref("homebrew", { tab: k.id })}
-                  >
-                    View homebrew
-                  </a>
-                  <a
-                    style={{ ...S.btn, ...linkBtn }}
-                    aria-label={`Create homebrew ${k.one}`}
-                    href={buildRouteHref("homebrew", { tab: "create", q: k.one })}
-                  >
-                    Create homebrew
-                  </a>
-                </>
-              ) : (
-                <>
-                  <button type="button" style={S.btn} disabled aria-label={`View homebrew ${k.id} (coming soon)`}>
-                    View homebrew
-                  </button>
-                  <button type="button" style={S.btn} disabled aria-label={`Create homebrew ${k.one} (coming soon)`}>
-                    Create homebrew
-                  </button>
-                </>
-              )}
+      <div style={landing.grid}>
+        {KINDS.map((k) => {
+          const name = k.label.toLowerCase();
+          return (
+            <div key={k.id} style={{ ...landing.card, opacity: k.live ? 1 : 0.75 }}>
+              <div style={landing.header}>
+                <h3 style={landing.headerText}>{k.label}</h3>
+              </div>
+              <div style={landing.body}>
+                <div style={landing.text}>
+                  View the homebrew {name} that users around the world have created and shared, or create your own.
+                  {k.live ? "" : " Coming soon."}
+                </div>
+                <div style={landing.buttons}>
+                  {k.live ? (
+                    <>
+                      <a style={landing.button} href={buildRouteHref("homebrew", { tab: k.id })}>
+                        View Homebrew {k.label}
+                      </a>
+                      <a style={landing.button} href={buildRouteHref("homebrew", { tab: `create-${k.one}` })}>
+                        Create Homebrew {k.oneLabel}
+                      </a>
+                    </>
+                  ) : (
+                    <>
+                      <button type="button" style={{ ...landing.button, opacity: 0.6, cursor: "default" }} disabled>
+                        View Homebrew {k.label}
+                      </button>
+                      <button type="button" style={{ ...landing.button, opacity: 0.6, cursor: "default" }} disabled>
+                        Create Homebrew {k.oneLabel}
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
             </div>
-            {k.live ? null : <div style={{ ...S.muted, marginTop: "6px" }}>Coming soon</div>}
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -498,11 +568,15 @@ function ComingSoon({ kind }) {
 
 /** Which page a #homebrew route opens. */
 function homebrewView(tab, query) {
-  if (!tab) return { page: "landing" };
-  if (tab === "browse" || tab === "items") return { page: "items", sub: "items" };
+  // #homebrew and #homebrew/browse are the landing page.
+  if (!tab || tab === "browse") return { page: "landing" };
+  if (tab === "items") return { page: "items", sub: "items" };
   if (tab === "collection" || tab === "creations") return { page: "items", sub: tab };
-  if (tab === "create") {
-    const kind = KINDS.find((k) => k.one === (query || "item"));
+  // #homebrew/create-<kind>, like D&D Beyond's create pages. The older
+  // #homebrew/create/<kind> still works.
+  const createOf = tab.startsWith("create-") ? tab.slice("create-".length) : tab === "create" ? query || "item" : null;
+  if (createOf != null) {
+    const kind = KINDS.find((k) => k.one === createOf);
     if (!kind || kind.live) return { page: "items", sub: "create" };
     return { page: "soon", kind };
   }
@@ -513,14 +587,15 @@ function homebrewView(tab, query) {
 
 /**
  * Homebrew pages, modelled on D&D Beyond's (2026-11-09):
- * #homebrew (landing cards), #homebrew/items (search),
- * #homebrew/create/item, #homebrew/collection, #homebrew/creations.
+ * #homebrew and #homebrew/browse (landing cards), #homebrew/items (search),
+ * #homebrew/create-item (choose scratch or template, then the form),
+ * #homebrew/collection, #homebrew/creations.
  */
 export default function HomebrewPage({ tab, query = "", onNavigate }) {
   const view = homebrewView(tab, query);
   if (view.page === "landing") return <HomebrewLanding />;
   if (view.page === "soon") return <ComingSoon kind={view.kind} />;
-  return <HomebrewItemsPage sub={view.sub} query={tab === "create" ? "" : query} onNavigate={onNavigate} />;
+  return <HomebrewItemsPage sub={view.sub} query={view.sub === "items" ? query : ""} onNavigate={onNavigate} />;
 }
 
 /** Homebrew items: search (browse), create, my collection, my creations. */
@@ -548,7 +623,7 @@ function HomebrewItemsPage({ sub, query = "", onNavigate }) {
 
   const go = (id, extra) => {
     setCurrent(id);
-    onNavigate?.(id === "create" ? { tab: "create", q: "item" } : { tab: id, ...extra });
+    onNavigate?.(id === "create" ? { tab: "create-item" } : { tab: id, ...extra });
   };
 
   const startFromTemplate = (item) => {
