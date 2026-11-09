@@ -73,8 +73,6 @@ class XPHistoryViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         qs = XPHistory.objects.all().select_related('character', 'session', 'character__campaign')
         user = self.request.user
-        if user.is_staff:
-            return qs
         char_id = self.request.query_params.get('character')
         if char_id:
             char = Character.objects.filter(pk=char_id).select_related('campaign').first()
@@ -100,7 +98,7 @@ def _check_clock_links(user, data, instance=None, is_gm=False):
     from .character_views import _user_may_edit_character
 
     if instance is not None and "campaign" in data and data["campaign"] != instance.campaign:
-        if not (is_gm or user.is_staff):
+        if not is_gm:
             raise PermissionDenied("Only the GM can move a clock to another campaign.")
     campaign = data["campaign"] if "campaign" in data else getattr(instance, "campaign", None)
     campaign_moved = instance is not None and campaign != instance.campaign
@@ -159,58 +157,57 @@ class ProgressClockViewSet(viewsets.ModelViewSet):
         ):
             qs = qs.filter(dismissed_at__isnull=True)
         user = self.request.user
-        if not user.is_staff:
-            qs = qs.filter(
-                models.Q(campaign__gm=user) |
-                models.Q(campaign__characters__user=user) |
-                models.Q(campaign__players=user)
-            ).distinct()
-            if campaign_id:
-                try:
-                    campaign = Campaign.objects.get(id=campaign_id)
-                    if campaign.gm_id != user.id:
-                        # Non-GM completed filter: own character / created clocks.
-                        if completed in ("1", "true", "True"):
-                            qs = qs.filter(
-                                models.Q(character__user=user)
-                                | models.Q(crew__members__user=user)
-                                | models.Q(created_by=user)
-                            )
-                        showcased_npc_ids = list(campaign.showcased_npcs.values_list('npc_id', flat=True))
-                        campaign_player_ids = list(campaign.players.values_list('id', flat=True)) + list(
-                            campaign.characters.values_list('user_id', flat=True).distinct()
-                        )
-                        active_sid = getattr(campaign, "active_session_id", None)
-                        gm_public_session = Q(session__isnull=True)
-                        if active_sid:
-                            gm_public_session |= Q(session_id=active_sid)
-                        legacy_gm_session_visible = (
-                            Q(
-                                created_by__isnull=True,
-                                visible_to_players=True,
-                                session_id=active_sid,
-                            )
-                            if active_sid
-                            else Q(pk__in=[])
-                        )
+        qs = qs.filter(
+            models.Q(campaign__gm=user) |
+            models.Q(campaign__characters__user=user) |
+            models.Q(campaign__players=user)
+        ).distinct()
+        if campaign_id:
+            try:
+                campaign = Campaign.objects.get(id=campaign_id)
+                if campaign.gm_id != user.id:
+                    # Non-GM completed filter: own character / created clocks.
+                    if completed in ("1", "true", "True"):
                         qs = qs.filter(
-                            Q(
-                                Q(created_by__isnull=True, visible_to_players=True)
-                                & (Q(npc__isnull=True) | Q(npc_id__in=showcased_npc_ids))
-                            )
-                            | Q(created_by_id=user.id)
-                            | Q(visible_to_party=True, created_by_id__in=campaign_player_ids)
-                            | (
-                                Q(created_by_id=campaign.gm_id, visible_to_players=True)
-                                & gm_public_session
-                            )
-                            | legacy_gm_session_visible
+                            models.Q(character__user=user)
+                            | models.Q(crew__members__user=user)
+                            | models.Q(created_by=user)
                         )
-                        qs = qs.filter(
-                            Q(npc__isnull=True) | Q(npc__campaign_id=campaign_id)
+                    showcased_npc_ids = list(campaign.showcased_npcs.values_list('npc_id', flat=True))
+                    campaign_player_ids = list(campaign.players.values_list('id', flat=True)) + list(
+                        campaign.characters.values_list('user_id', flat=True).distinct()
+                    )
+                    active_sid = getattr(campaign, "active_session_id", None)
+                    gm_public_session = Q(session__isnull=True)
+                    if active_sid:
+                        gm_public_session |= Q(session_id=active_sid)
+                    legacy_gm_session_visible = (
+                        Q(
+                            created_by__isnull=True,
+                            visible_to_players=True,
+                            session_id=active_sid,
                         )
-                except Campaign.DoesNotExist:
-                    pass
+                        if active_sid
+                        else Q(pk__in=[])
+                    )
+                    qs = qs.filter(
+                        Q(
+                            Q(created_by__isnull=True, visible_to_players=True)
+                            & (Q(npc__isnull=True) | Q(npc_id__in=showcased_npc_ids))
+                        )
+                        | Q(created_by_id=user.id)
+                        | Q(visible_to_party=True, created_by_id__in=campaign_player_ids)
+                        | (
+                            Q(created_by_id=campaign.gm_id, visible_to_players=True)
+                            & gm_public_session
+                        )
+                        | legacy_gm_session_visible
+                    )
+                    qs = qs.filter(
+                        Q(npc__isnull=True) | Q(npc__campaign_id=campaign_id)
+                    )
+            except Campaign.DoesNotExist:
+                pass
         return qs
 
     def perform_create(self, serializer):
@@ -219,9 +216,9 @@ class ProgressClockViewSet(viewsets.ModelViewSet):
         campaign = serializer.validated_data.get("campaign")
         user = self.request.user
         is_gm = campaign and campaign.gm_id == user.id
-        if not campaign and not user.is_staff:
+        if not campaign:
             raise PermissionDenied("Campaign is required to create progress clocks.")
-        if campaign and not is_gm and not user.is_staff:
+        if campaign and not is_gm:
             in_campaign = (
                 campaign.players.filter(id=user.id).exists()
                 or campaign.characters.filter(user_id=user.id).exists()
@@ -241,13 +238,13 @@ class ProgressClockViewSet(viewsets.ModelViewSet):
         obj = serializer.instance
         user = self.request.user
         is_gm = obj.campaign and obj.campaign.gm_id == user.id
-        if not obj.campaign and not user.is_staff:
+        if not obj.campaign:
             raise PermissionDenied("Only staff can update clocks without a campaign.")
 
         data = serializer.validated_data
         party_tick_keys = frozenset({"filled_segments"})
 
-        if user.is_staff or is_gm:
+        if is_gm:
             pass
         else:
             campaign = obj.campaign
@@ -289,14 +286,14 @@ class ProgressClockViewSet(viewsets.ModelViewSet):
 
         user = self.request.user
         is_gm = instance.campaign and instance.campaign.gm_id == user.id
-        if not is_gm and not user.is_staff:
+        if not is_gm:
             if instance.created_by_id != user.id:
                 raise PermissionDenied("Only the creator or GM can delete this clock.")
             if instance.completed:
                 raise PermissionDenied(
                     "Completed clocks must be dismissed, not hard-deleted."
                 )
-        if not instance.campaign and not user.is_staff:
+        if not instance.campaign:
             raise PermissionDenied("Only staff can delete clocks without a campaign.")
         snap = {
             "filled_segments": instance.filled_segments,
@@ -316,7 +313,7 @@ class ProgressClockViewSet(viewsets.ModelViewSet):
         clock = self.get_object()
         user = request.user
         is_gm = clock.campaign and clock.campaign.gm_id == user.id
-        if not user.is_staff and not is_gm and clock.created_by_id != user.id:
+        if not is_gm and clock.created_by_id != user.id:
             raise PermissionDenied("Only the creator or GM can dismiss this clock.")
         if not clock.completed:
             raise ValidationError("Only completed clocks can be soft-dismissed.")
@@ -334,7 +331,7 @@ class ProgressClockViewSet(viewsets.ModelViewSet):
         clock = self.get_object()
         user = request.user
         is_gm = clock.campaign and clock.campaign.gm_id == user.id
-        if not user.is_staff and not is_gm:
+        if not is_gm:
             raise PermissionDenied("Only the GM can undismiss a clock.")
         if clock.dismissed_at is None:
             raise ValidationError("Clock is not dismissed.")

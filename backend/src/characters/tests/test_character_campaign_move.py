@@ -92,8 +92,10 @@ class CharacterCampaignMoveTests(TestCase):
         response = self._patch_campaign(self.camp_a)
         self.assertEqual(response.status_code, 200, response.content)
 
-    def test_staff_can_move_a_pc_directly(self):
+    def test_staff_cannot_move_someone_elses_pc(self):
+        # Staff get no special access on the site (2026-11-08).
+        old = self.pc.campaign_id
         response = self._patch_campaign(self.camp_b, user=self.staff)
-        self.assertEqual(response.status_code, 200, response.content)
+        self.assertIn(response.status_code, (403, 404), response.content)
         self.pc.refresh_from_db()
-        self.assertEqual(self.pc.campaign_id, self.camp_b.pk)
+        self.assertEqual(self.pc.campaign_id, old)

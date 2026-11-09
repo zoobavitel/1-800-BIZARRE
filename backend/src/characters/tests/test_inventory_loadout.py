@@ -257,8 +257,7 @@ class EquipmentCatalogPermissionTests(TestCase):
         self.client = APIClient()
 
     def test_creator_cannot_delete_own_site_item(self):
-        # Site items are core catalog: staff-only, even for their creator
-        # (user's rule, 2026-11-06).
+        """The site catalog is staff-only; staff manage it in Django admin."""
         item = EquipmentItem.objects.create(
             name="Creator Site Widget",
             category="gear",
@@ -362,35 +361,6 @@ class EquipmentCatalogPermissionTests(TestCase):
         self.assertEqual(
             EquipmentItem.objects.filter(
                 campaign=self.campaign, name__iexact="Weird Widget"
-            ).count(),
-            1,
-        )
-
-    def test_publish_to_site_skips_existing_site_name(self):
-        site = EquipmentItem.objects.create(
-            name="Published Gadget",
-            category="gear",
-            scope="SITE",
-            created_by=self.gm,
-        )
-        camp = EquipmentItem.objects.create(
-            name="Published Gadget",
-            category="gear",
-            scope="CAMPAIGN",
-            campaign=self.campaign,
-            created_by=self.gm,
-        )
-        # Publishing to the site catalog is admin only (2026-10-29).
-        staff = User.objects.create_user(username="pub_staff_ss", password="pw-staff-ss-1", is_staff=True)
-        self.client.force_authenticate(staff)
-        res = self.client.post(
-            f"/api/equipment-items/{camp.id}/publish-to-site/"
-        )
-        self.assertEqual(res.status_code, 200)
-        self.assertEqual(res.data["id"], site.id)
-        self.assertEqual(
-            EquipmentItem.objects.filter(
-                name__iexact="Published Gadget", scope="SITE"
             ).count(),
             1,
         )

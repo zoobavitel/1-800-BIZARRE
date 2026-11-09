@@ -12,7 +12,6 @@ import {
   computeInventoryLoadUsed,
   characterHasAbility,
   EQUIPMENT_CATEGORY_OPTIONS,
-  kitItemCanPublishToSiteCatalog,
   kitItemCanSaveToCampaignLibrary,
   loadBandForUsed,
   loadCapForBand,
@@ -399,7 +398,6 @@ export default function CharacterSheetInventoryList({
   characterId,
   isGM = false,
   onPromoteToCampaign,
-  onPublishToSite,
   allowArmor = true,
   hideAggregateLoad = false,
 }) {
@@ -797,21 +795,6 @@ export default function CharacterSheetInventoryList({
                   }}
                 >
                   Save to campaign library
-                </button>
-              ) : null}
-              {isGM &&
-              onPublishToSite &&
-              !armorKind &&
-              kitItemCanPublishToSiteCatalog(item, catalogItems) ? (
-                <button
-                  type="button"
-                  style={{ ...btnStyle, alignSelf: "flex-start", fontSize: "10px" }}
-                  onClick={async () => {
-                    await onPublishToSite(item);
-                    await refreshCatalog();
-                  }}
-                >
-                  Publish to site catalog
                 </button>
               ) : null}
             </div>

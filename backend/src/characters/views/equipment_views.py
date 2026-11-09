@@ -30,24 +30,21 @@ class EquipmentItemViewSet(viewsets.ModelViewSet):
             except (TypeError, ValueError):
                 cid = None
 
-        if user.is_staff:
-            base = qs
-        else:
-            vis = (
-                models.Q(scope="TEMPLATE")
-                | models.Q(scope="SITE")
-                | models.Q(campaign__gm=user)
-                | models.Q(campaign__characters__user=user)
-            )
-            if cid:
-                vis = models.Q(scope="TEMPLATE") | models.Q(scope="SITE") | (
-                    models.Q(scope="CAMPAIGN", campaign_id=cid)
-                    & (
-                        models.Q(campaign__gm=user)
-                        | models.Q(campaign__characters__user=user)
-                    )
+        vis = (
+            models.Q(scope="TEMPLATE")
+            | models.Q(scope="SITE")
+            | models.Q(campaign__gm=user)
+            | models.Q(campaign__characters__user=user)
+        )
+        if cid:
+            vis = models.Q(scope="TEMPLATE") | models.Q(scope="SITE") | (
+                models.Q(scope="CAMPAIGN", campaign_id=cid)
+                & (
+                    models.Q(campaign__gm=user)
+                    | models.Q(campaign__characters__user=user)
                 )
-            base = qs.filter(vis).distinct()
+            )
+        base = qs.filter(vis).distinct()
 
         if cid:
             base = base.filter(
@@ -58,8 +55,8 @@ class EquipmentItemViewSet(viewsets.ModelViewSet):
         elif getattr(self, "action", None) == "list":
             # Unscoped list is the global catalog: never leak campaign libraries.
             base = base.filter(scope__in=("TEMPLATE", "SITE"))
-        elif not user.is_staff:
-            # Detail/update/publish: GM/player may still fetch their campaign rows by id.
+        else:
+            # Detail/update: GM/player may still fetch their campaign rows by id.
             base = base.filter(
                 models.Q(scope="TEMPLATE")
                 | models.Q(scope="SITE")
@@ -102,8 +99,6 @@ class EquipmentItemViewSet(viewsets.ModelViewSet):
         return ctx
 
     def _assert_gm(self, request, campaign):
-        if request.user.is_staff:
-            return
         if campaign.gm_id != request.user.id:
             self.permission_denied(
                 request,
@@ -134,14 +129,11 @@ class EquipmentItemViewSet(viewsets.ModelViewSet):
         serializer.save(created_by=self.request.user)
 
     def _can_edit_catalog_item(self, request, instance):
-        """Staff, or for a CAMPAIGN item its creator or campaign GM.
-
-        TEMPLATE and SITE (the core catalog) are staff-only, even for the
-        user who created a SITE item before publishing became staff-only.
-        """
-        if request.user.is_staff:
-            return True
+        """Creator or campaign GM (CAMPAIGN). The SRD catalog (TEMPLATE, SITE)
+        is staff-only; staff get nothing else (2026-11-08)."""
         if instance.scope in ("TEMPLATE", "SITE"):
+            return bool(request.user.is_staff)
+        if instance.scope == "TEMPLATE":
             return False
         if instance.created_by_id and instance.created_by_id == request.user.id:
             return True
@@ -195,47 +187,6 @@ class EquipmentItemViewSet(viewsets.ModelViewSet):
             defaults={"enabled": bool(enabled)},
         )
         return Response(CampaignEquipmentAccessSerializer(access).data)
-
-    @action(detail=True, methods=["post"], url_path="publish-to-site")
-    def publish_to_site(self, request, pk=None):
-        """Copy an item into the site-wide catalog. Admin (staff) only: a GM
-        keeps items in their own campaign with from-kit-item (user's rule,
-        2026-10-29)."""
-        item = self.get_object()
-        if not request.user.is_staff:
-            self.permission_denied(
-                request, message="Only admins can publish items to the site catalog."
-            )
-        existing = (
-            EquipmentItem.objects.filter(
-                scope__in=("TEMPLATE", "SITE"),
-                name__iexact=item.name,
-            )
-            .order_by("id")
-            .first()
-        )
-        if existing:
-            return Response(
-                EquipmentItemSerializer(
-                    existing, context=self.get_serializer_context()
-                ).data
-            )
-        site_item = EquipmentItem.objects.create(
-            name=item.name,
-            description=item.description,
-            category=item.category,
-            load_slots=item.load_slots,
-            quality=item.quality,
-            coin_value=item.coin_value,
-            scope="SITE",
-            created_by=request.user,
-            source_character_id=item.source_character_id,
-            available_when_adding=True,
-        )
-        return Response(
-            EquipmentItemSerializer(site_item, context=self.get_serializer_context()).data,
-            status=status.HTTP_201_CREATED,
-        )
 
     @action(detail=False, methods=["post"], url_path="from-kit-item")
     def from_kit_item(self, request):

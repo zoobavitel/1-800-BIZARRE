@@ -85,20 +85,6 @@ class CharacterHistoryViewSet(viewsets.ReadOnlyModelViewSet):
             "character", "character__campaign", "editor"
         )
 
-        if user.is_staff:
-            base = qs
-            if character_id:
-                try:
-                    base = base.filter(character_id=int(character_id))
-                except (TypeError, ValueError):
-                    return CharacterHistory.objects.none()
-            elif campaign_id:
-                try:
-                    base = base.filter(character__campaign_id=int(campaign_id))
-                except (TypeError, ValueError):
-                    return CharacterHistory.objects.none()
-            return base.order_by("-timestamp")
-
         if character_id:
             try:
                 ch_pk = int(character_id)
@@ -176,19 +162,16 @@ class CrewHistoryViewSet(viewsets.ReadOnlyModelViewSet):
         qs = CrewHistory.objects.all().select_related(
             "crew", "crew__campaign", "editor"
         )
-        if user.is_staff:
-            base = qs
-        else:
-            member_crew_ids = Crew.objects.filter(
-                members__user=user
-            ).values_list("id", flat=True)
-            gm_crew_ids = Crew.objects.filter(campaign__gm=user).values_list(
-                "id", flat=True
-            )
-            allowed = set(member_crew_ids) | set(gm_crew_ids)
-            if not allowed:
-                return CrewHistory.objects.none()
-            base = qs.filter(crew_id__in=allowed)
+        member_crew_ids = Crew.objects.filter(
+            members__user=user
+        ).values_list("id", flat=True)
+        gm_crew_ids = Crew.objects.filter(campaign__gm=user).values_list(
+            "id", flat=True
+        )
+        allowed = set(member_crew_ids) | set(gm_crew_ids)
+        if not allowed:
+            return CrewHistory.objects.none()
+        base = qs.filter(crew_id__in=allowed)
         crew_id = self.request.query_params.get("crew")
         if crew_id:
             base = base.filter(crew_id=crew_id)
@@ -219,8 +202,6 @@ class ExperienceTrackerViewSet(
             revoked_at__isnull=True
         ).select_related('character', 'session', 'character__campaign')
         user = self.request.user
-        if user.is_staff:
-            return qs
         char_id = self.request.query_params.get('character')
         if char_id:
             char = Character.objects.filter(pk=char_id).select_related('campaign').first()
@@ -265,7 +246,7 @@ class ExperienceTrackerViewSet(
         campaign = character.campaign
         is_owner = character.user_id == user.id
         is_gm = bool(campaign) and campaign.gm_id == user.id
-        if not (user.is_staff or is_owner or is_gm):
+        if not (is_owner or is_gm):
             raise PermissionDenied(
                 "Only the character owner or campaign GM can toggle session XP."
             )
@@ -389,7 +370,7 @@ class ExperienceTrackerViewSet(
             character.campaign_id
             and character.campaign.gm_id == user.id
         )
-        if not (user.is_staff or is_owner or is_gm):
+        if not (is_owner or is_gm):
             raise PermissionDenied(
                 "Only the character owner or campaign GM can delete XP entries."
             )

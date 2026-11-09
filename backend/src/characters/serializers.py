@@ -556,7 +556,7 @@ class CrewSerializer(serializers.ModelSerializer):
         qs = CrewFactionRelationship.objects.filter(crew=obj).select_related(
             "faction"
         )
-        show_all = bool(user and getattr(user, "is_staff", False))
+        show_all = False
         if user and getattr(user, "is_authenticated", False) and obj.campaign_id:
             if obj.campaign.gm_id == user.id:
                 show_all = True
@@ -626,7 +626,7 @@ class CrewSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"faction_relationships": "Authentication required."}
             )
-        if not (getattr(user, "is_staff", False) or instance.campaign.gm_id == user.id):
+        if not (instance.campaign.gm_id == user.id):
             raise serializers.ValidationError(
                 {
                     "faction_relationships": (
@@ -1395,10 +1395,7 @@ class RollSerializer(serializers.ModelSerializer):
         is_gm = bool(
             user
             and getattr(user, "is_authenticated", False)
-            and (
-                getattr(user, "is_staff", False)
-                or (instance.session_id and instance.session.campaign.gm_id == user.id)
-            )
+            and bool(instance.session_id and instance.session.campaign.gm_id == user.id)
         )
         if (
             (instance.roll_type or "").upper() == "FORTUNE"
@@ -1930,8 +1927,6 @@ class CharacterSerializer(serializers.ModelSerializer):
     def _redact_npc_standing_for_player(self, instance, data):
         request = self.context.get("request")
         user = getattr(request, "user", None) if request else None
-        if user and getattr(user, "is_staff", False):
-            return
         campaign = getattr(instance, "campaign", None)
         if user and campaign is not None and campaign.gm_id == getattr(user, "id", None):
             return
@@ -2074,7 +2069,7 @@ class CharacterSerializer(serializers.ModelSerializer):
         """
         request = self.context.get("request")
         user = getattr(request, "user", None)
-        if user is None or not user.is_authenticated or user.is_staff:
+        if user is None or not user.is_authenticated:
             return
         instance = self.instance
         if "campaign" in data:
@@ -2445,7 +2440,7 @@ class CharacterSerializer(serializers.ModelSerializer):
                     self.instance.campaign_id is not None
                     and self.instance.campaign.gm_id == u.id
                 )
-                if not (u.is_staff or is_owner or is_gm):
+                if not (is_owner or is_gm):
                     raise serializers.ValidationError(
                         {"crew_id": "You cannot change this character's crew."}
                     )
@@ -2964,8 +2959,6 @@ class NPCSummarySerializer(serializers.ModelSerializer):
         user = getattr(request, "user", None) if request else None
         if not user or not getattr(user, "is_authenticated", False):
             return False
-        if getattr(user, "is_staff", False):
-            return True
         campaign = getattr(instance, "campaign", None)
         return bool(campaign and campaign.gm_id == user.id)
 
@@ -3100,8 +3093,6 @@ class FactionSerializer(serializers.ModelSerializer):
         user = getattr(request, "user", None) if request else None
         if not user or not getattr(user, "is_authenticated", False):
             return False
-        if getattr(user, "is_staff", False):
-            return True
         campaign = getattr(instance, "campaign", None)
         return bool(campaign and campaign.gm_id == user.id)
 
@@ -3470,8 +3461,6 @@ class CampaignSerializer(serializers.ModelSerializer):
         user = getattr(request, "user", None) if request else None
         if not user or not getattr(user, "is_authenticated", False):
             return False
-        if getattr(user, "is_staff", False):
-            return True
         return bool(obj.gm_id == user.id)
 
     def get_campaign_npcs(self, obj):
@@ -3659,7 +3648,7 @@ class CampaignSerializer(serializers.ModelSerializer):
         viewer_is_gm_or_staff = bool(
             user
             and getattr(user, "is_authenticated", False)
-            and (getattr(user, "is_staff", False) or obj.gm_id == user.id)
+            and (obj.gm_id == user.id)
         )
         base_qs = s.npc_involvements.select_related("npc")
         if not viewer_is_gm_or_staff:
@@ -3760,7 +3749,7 @@ class CampaignSerializer(serializers.ModelSerializer):
             return []
         is_gm = obj.gm_id == request.user.id
         clocks = obj.progress_clocks.all()
-        if is_gm or request.user.is_staff:
+        if is_gm:
             return ProgressClockSerializer(clocks, many=True).data
         user = request.user
         clocks = clocks.filter(
@@ -4023,8 +4012,6 @@ class NPCSerializer(serializers.ModelSerializer):
         user = getattr(request, "user", None) if request else None
         if not user or not getattr(user, "is_authenticated", False):
             return False
-        if getattr(user, "is_staff", False):
-            return True
         campaign = getattr(instance, "campaign", None)
         return bool(campaign and campaign.gm_id == user.id)
 

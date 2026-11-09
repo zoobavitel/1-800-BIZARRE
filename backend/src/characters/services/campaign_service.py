@@ -18,8 +18,6 @@ class CampaignService:
     @staticmethod
     def get_user_campaigns(user):
         """Get all campaigns for a user (as GM or member)."""
-        if user.is_staff:
-            return Campaign.objects.all()
         
         return Campaign.objects.filter(
             models.Q(gm=user) | models.Q(characters__user=user)
@@ -28,7 +26,7 @@ class CampaignService:
     @staticmethod
     def can_edit_campaign(user, campaign):
         """Check if a user can edit a campaign."""
-        return user == campaign.gm or user.is_staff
+        return user == campaign.gm
     
     @staticmethod
     def add_character_to_campaign(campaign, character):
@@ -51,7 +49,7 @@ class CampaignService:
         characters = campaign.characters.all()
         
         # Filter by user if specified
-        if user and not user.is_staff:
+        if user:
             characters = characters.filter(user=user)
         
         return characters
@@ -62,7 +60,7 @@ class CampaignService:
         npcs = NPC.objects.filter(campaign=campaign)
         
         # Filter by user permissions
-        if user and not user.is_staff:
+        if user:
             # Only GMs can see NPCs
             if campaign.gm != user:
                 npcs = npcs.none()

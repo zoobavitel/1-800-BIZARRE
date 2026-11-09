@@ -54,22 +54,22 @@ class RollViewSet(viewsets.ModelViewSet):
         if group_action_id:
             qs = qs.filter(group_action_id=group_action_id)
         user = self.request.user
-        if not user.is_staff:
-            qs = qs.filter(
-                models.Q(session__campaign__gm=user) |
-                models.Q(session__campaign__characters__user=user) |
-                models.Q(session__campaign__players=user) |
-                # A PC's own rolls, including ones whose campaign was deleted.
-                models.Q(character__user=user)
-            ).distinct()
+        qs = qs.filter(
+            models.Q(session__campaign__gm=user) |
+            models.Q(session__campaign__characters__user=user) |
+            models.Q(session__campaign__players=user) |
+            # A PC's own rolls, including ones whose campaign was deleted.
+            models.Q(character__user=user)
+        ).distinct()
         return qs.order_by('-timestamp')
 
     def partial_update(self, request, *args, **kwargs):
         """GM-only: update roll fields (position/effect/fortune + manual corrections)."""
         roll = self.get_object()
-        # A roll whose campaign was deleted has no session; only staff edit it.
+        # A roll whose campaign was deleted has no session: nobody edits it on
+        # the site (Django admin can).
         campaign = roll.session.campaign if roll.session_id else None
-        if (campaign is None or campaign.gm_id != request.user.id) and not request.user.is_staff:
+        if campaign is None or campaign.gm_id != request.user.id:
             return Response(
                 {'error': 'Only the GM can edit roll records.'},
                 status=status.HTTP_403_FORBIDDEN
@@ -170,9 +170,10 @@ class RollViewSet(viewsets.ModelViewSet):
     def grant_xp(self, request, pk=None):
         """GM-only: Grant desperate-action XP (+1, or +2 for 0-dot per SRD)."""
         roll = self.get_object()
-        # A roll whose campaign was deleted has no session; only staff edit it.
+        # A roll whose campaign was deleted has no session: nobody edits it on
+        # the site (Django admin can).
         campaign = roll.session.campaign if roll.session_id else None
-        if (campaign is None or campaign.gm_id != request.user.id) and not request.user.is_staff:
+        if campaign is None or campaign.gm_id != request.user.id:
             return Response(
                 {'error': 'Only the GM can grant XP from rolls.'},
                 status=status.HTTP_403_FORBIDDEN
@@ -244,7 +245,7 @@ class RollViewSet(viewsets.ModelViewSet):
                 {'error': 'Character must belong to session campaign.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        is_gm_or_staff = session.campaign.gm_id == request.user.id or request.user.is_staff
+        is_gm_or_staff = session.campaign.gm_id == request.user.id
         is_character_owner = character.user_id == request.user.id
         if not is_gm_or_staff and not is_character_owner:
             return Response(
@@ -256,9 +257,10 @@ class RollViewSet(viewsets.ModelViewSet):
     def destroy(self, request, *args, **kwargs):
         """GM-only: remove a roll record from history."""
         roll = self.get_object()
-        # A roll whose campaign was deleted has no session; only staff edit it.
+        # A roll whose campaign was deleted has no session: nobody edits it on
+        # the site (Django admin can).
         campaign = roll.session.campaign if roll.session_id else None
-        if (campaign is None or campaign.gm_id != request.user.id) and not request.user.is_staff:
+        if campaign is None or campaign.gm_id != request.user.id:
             return Response(
                 {'error': 'Only the GM can remove roll records.'},
                 status=status.HTTP_403_FORBIDDEN,

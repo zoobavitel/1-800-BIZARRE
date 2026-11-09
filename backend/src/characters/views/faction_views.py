@@ -17,21 +17,16 @@ class FactionViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         qs = Faction.objects.select_related('campaign')
-        if user.is_staff:
-            base = qs
-        else:
-            base = qs.filter(
-                models.Q(campaign__gm=user) | models.Q(campaign__characters__user=user)
-            ).distinct()
+        base = qs.filter(
+            models.Q(campaign__gm=user) | models.Q(campaign__characters__user=user)
+        ).distinct()
         campaign_id = self.request.query_params.get('campaign')
         if campaign_id:
             return base.filter(campaign_id=campaign_id)
         return base
 
     def _assert_gm(self, request, campaign):
-        """Raise PermissionDenied unless the requester is the campaign GM or staff."""
-        if request.user.is_staff:
-            return
+        """Raise PermissionDenied unless the requester is the campaign GM."""
         if campaign.gm_id != request.user.id:
             self.permission_denied(
                 request,

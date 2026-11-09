@@ -1377,35 +1377,6 @@ const CharacterSheetWrapper = ({
     [campaignId, characterId],
   );
 
-  const handlePublishItemToSite = useCallback(
-    async (item) => {
-      const cid =
-        campaignId != null && campaignId !== ""
-          ? parseInt(String(campaignId), 10)
-          : NaN;
-      if (!Number.isFinite(cid)) return;
-      if (!String(item?.name || "").trim()) return;
-      try {
-        const created = await equipmentAPI.fromKitItem({
-          campaign: cid,
-          name: item.name,
-          detail: item.detail,
-          category: item.category,
-          load: item.load,
-          quality: item.quality,
-          coin_value: item.coin_value,
-          source_character: characterId,
-        });
-        const scope = String(created?.scope || "").toUpperCase();
-        if (scope === "TEMPLATE" || scope === "SITE") return;
-        if (created?.id) await equipmentAPI.publishToSite(created.id);
-      } catch (err) {
-        console.error("Publish to site catalog failed:", err);
-      }
-    },
-    [campaignId, characterId],
-  );
-
   // Portrait state
   const [imageUrl, setImageUrl] = useState(character?.image_url || "");
   const [imagePreview, setImagePreview] = useState(
@@ -15871,10 +15842,6 @@ const CharacterSheetWrapper = ({
                         isGM={isGM}
                         onPromoteToCampaign={
                           isGM ? handlePromoteItemToCampaign : undefined
-                        }
-                        onPublishToSite={
-                          // Site-wide catalog publishing is admin only (2026-10-29).
-                          user?.is_staff ? handlePublishItemToSite : undefined
                         }
                       />
                     ) : null}

@@ -72,7 +72,9 @@ from characters.models import (
 )
 
 CLOSED, OPEN, INVALID, ERROR = "closed", "open", "invalid", "error"
-ACTORS = ("stranger", "member")
+# "staff" is a staff account outside the campaign. Staff get no special
+# access on the site (2026-11-08); only SRD catalog writes stay staff-only.
+ACTORS = ("stranger", "member", "staff")
 READ_METHODS = {"GET", "HEAD", "OPTIONS"}
 
 
@@ -110,6 +112,9 @@ EXPECTED = {
 
     # BY DESIGN.
     **_both("POST", "/api/campaigns/", OPEN, "BY DESIGN: anyone may create their own campaign and becomes its GM"),
+    # The SRD catalog is the one thing staff manage through the API (the body
+    # creates a TEMPLATE item). Everything else is closed to staff (2026-11-08).
+    "POST /api/equipment-items/ as staff": (OPEN, "BY DESIGN: staff add SRD catalog items"),
     "POST /api/characters/ as member": (OPEN, "BY DESIGN: a player may add a PC to a campaign they play in"),
     "POST /api/crews/ as member": (OPEN, "BY DESIGN: a player may create a crew in their campaign"),
     "PATCH /api/crews/{id}/ as member": (OPEN, "BY DESIGN: crew members edit the shared crew sheet, including level, xp, coin, rep, hold, turf and wanted_level (user, 2026-11-02; see test_member_crew_stat_patch)"),
@@ -298,7 +303,9 @@ class PermissionMatrixTests(TestCase):
         """A new user for one request. Called inside that request's savepoint."""
         PermissionMatrixTests._fresh += 1
         n = PermissionMatrixTests._fresh
-        user = User.objects.create_user(username=f"pm_{kind}_{n}", password=f"pw-pm-{kind}-{n}")
+        user = User.objects.create_user(
+            username=f"pm_{kind}_{n}", password=f"pw-pm-{kind}-{n}", is_staff=(kind == "staff")
+        )
         UserProfile.objects.get_or_create(user=user)
         if kind == "member":
             self.campaign.players.add(user)
@@ -368,7 +375,10 @@ class PermissionMatrixTests(TestCase):
                 current = privileged.get(url)
                 if current.status_code == 200 and isinstance(current.data, dict):
                     body = json.loads(json.dumps(current.data, default=str))
+            key = f"{method} {template}"
             for actor in ACTORS:
+                if actor == "staff" and self.allowed_user(prefix, key) is self.staff:
+                    continue  # SRD catalog: staff are the allowed actor there.
                 with transaction.atomic():
                     user = self.fresh_actor(actor)
                     actor_body = dict(body) if isinstance(body, dict) else body

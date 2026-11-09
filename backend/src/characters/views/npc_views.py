@@ -27,8 +27,6 @@ class NPCViewSet(viewsets.ModelViewSet):
 
         if mine:
             qs = NPC.objects.filter(creator=user)
-        elif user.is_staff:
-            qs = NPC.objects.all()
         else:
             # Creator / campaign GM: full access.
             # Campaign players: See-on NPCs only (visible_to_players=True).
@@ -53,8 +51,6 @@ class NPCViewSet(viewsets.ModelViewSet):
     def _user_can_edit_npc(self, request, npc):
         """Staff, NPC creator, or campaign GM may mutate an NPC."""
         user = request.user
-        if user.is_staff:
-            return True
         if npc.creator_id and npc.creator_id == user.id:
             return True
         if npc.campaign_id and getattr(npc.campaign, 'gm_id', None) == user.id:
@@ -136,7 +132,7 @@ class NPCViewSet(viewsets.ModelViewSet):
         """Only the campaign's GM (or staff) may put an NPC in a campaign (S5).
         An NPC with no campaign is fine for anyone."""
         user = self.request.user
-        if campaign is not None and not (campaign.gm_id == user.id or user.is_staff):
+        if campaign is not None and not (campaign.gm_id == user.id):
             raise PermissionDenied("Only the campaign GM can add NPCs to this campaign.")
 
     def perform_create(self, serializer):
