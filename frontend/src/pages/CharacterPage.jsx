@@ -297,7 +297,7 @@ function isUnsavedCharacterDirty(tab) {
 // Payload normalizer
 // ---------------------------------------------------------------------------
 
-function normalizeSheetPayloadToFrontend(payload, traumasList = []) {
+export function normalizeSheetPayloadToFrontend(payload, traumasList = []) {
   const traumaIds = traumaObjectToIds(payload.trauma || {}, traumasList);
   const harm = normalizeHarmObject(
     payload.harm || payload.harmEntries || EMPTY_HARM_SHAPE,
@@ -342,6 +342,20 @@ function normalizeSheetPayloadToFrontend(payload, traumasList = []) {
     physicalArmorUsed: Math.min(
       6,
       Math.max(0, Math.floor(Number(payload.physicalArmorUsed) || 0)),
+    ),
+    // Without these, spin, hamon and special ticks were saved as 0.
+    spinArmorUsed: Math.min(
+      3,
+      Math.max(0, Math.floor(Number(payload.spinArmorUsed) || 0)),
+    ),
+    hamonArmorUsed: Math.min(
+      3,
+      Math.max(0, Math.floor(Number(payload.hamonArmorUsed) || 0)),
+    ),
+    // The inventory cap is applied in transformFrontendToBackend.
+    specialArmorUsed: Math.max(
+      0,
+      Math.floor(Number(payload.specialArmorUsed) || 0),
     ),
     armor: {
       armor: false,
