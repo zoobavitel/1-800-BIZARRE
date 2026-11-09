@@ -58,15 +58,18 @@ class RollViewSet(viewsets.ModelViewSet):
             qs = qs.filter(
                 models.Q(session__campaign__gm=user) |
                 models.Q(session__campaign__characters__user=user) |
-                models.Q(session__campaign__players=user)
+                models.Q(session__campaign__players=user) |
+                # A PC's own rolls, including ones whose campaign was deleted.
+                models.Q(character__user=user)
             ).distinct()
         return qs.order_by('-timestamp')
 
     def partial_update(self, request, *args, **kwargs):
         """GM-only: update roll fields (position/effect/fortune + manual corrections)."""
         roll = self.get_object()
-        campaign = roll.session.campaign
-        if campaign.gm_id != request.user.id and not request.user.is_staff:
+        # A roll whose campaign was deleted has no session; only staff edit it.
+        campaign = roll.session.campaign if roll.session_id else None
+        if (campaign is None or campaign.gm_id != request.user.id) and not request.user.is_staff:
             return Response(
                 {'error': 'Only the GM can edit roll records.'},
                 status=status.HTTP_403_FORBIDDEN
@@ -167,8 +170,9 @@ class RollViewSet(viewsets.ModelViewSet):
     def grant_xp(self, request, pk=None):
         """GM-only: Grant desperate-action XP (+1, or +2 for 0-dot per SRD)."""
         roll = self.get_object()
-        campaign = roll.session.campaign
-        if campaign.gm_id != request.user.id and not request.user.is_staff:
+        # A roll whose campaign was deleted has no session; only staff edit it.
+        campaign = roll.session.campaign if roll.session_id else None
+        if (campaign is None or campaign.gm_id != request.user.id) and not request.user.is_staff:
             return Response(
                 {'error': 'Only the GM can grant XP from rolls.'},
                 status=status.HTTP_403_FORBIDDEN
@@ -252,8 +256,9 @@ class RollViewSet(viewsets.ModelViewSet):
     def destroy(self, request, *args, **kwargs):
         """GM-only: remove a roll record from history."""
         roll = self.get_object()
-        campaign = roll.session.campaign
-        if campaign.gm_id != request.user.id and not request.user.is_staff:
+        # A roll whose campaign was deleted has no session; only staff edit it.
+        campaign = roll.session.campaign if roll.session_id else None
+        if (campaign is None or campaign.gm_id != request.user.id) and not request.user.is_staff:
             return Response(
                 {'error': 'Only the GM can remove roll records.'},
                 status=status.HTTP_403_FORBIDDEN,
