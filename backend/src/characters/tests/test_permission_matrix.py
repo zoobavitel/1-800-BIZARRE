@@ -120,6 +120,11 @@ EXPECTED = {
     "PATCH /api/crews/{id}/ as member": (OPEN, "BY DESIGN: crew members edit the shared crew sheet, including level, xp, coin, rep, hold, turf and wanted_level (user, 2026-11-02; see test_member_crew_stat_patch)"),
     "POST /api/crews/{id}/propose-name/ as member": (OPEN, "BY DESIGN: crew members propose crew names"),
     "POST /api/crews/{id}/approve-name/ as member": (OPEN, "BY DESIGN: crew members approve a proposed crew name"),
+    # S9: a collection is per user. Collect and uncollect only change the
+    # caller's own rows. The matrix target is a campaign library item, which
+    # isn't homebrew, so collect refuses it with 400.
+    "POST /api/equipment-items/{id}/collect/ as member": (INVALID, "BY DESIGN: anyone may collect homebrew they can see; a library item isn't homebrew (400)"),
+    "POST /api/equipment-items/{id}/uncollect/ as member": (OPEN, "BY DESIGN: removing an item from your own collection changes only your own rows"),
     "POST /api/campaigns/{id}/increment-wanted/ as member": (OPEN, "BY DESIGN (U4): any member may bump the wanted level"),
     "POST /api/characters/{id}/assist-help/ as member": (OPEN, "BY DESIGN: a crewmate assists with their own PC and pays the stress (test_assist_help_pending)"),
     **_both("PUT", "/api/user-profiles/update/", OPEN, "BY DESIGN: updates the caller's own profile"),

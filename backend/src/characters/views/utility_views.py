@@ -11,7 +11,7 @@ from django.db.models import Q, Count
 
 from ..models import (
     Character, Campaign, NPC, Crew, Heritage, Vice, Ability,
-    StandAbility, HamonAbility, SpinAbility, Session,
+    StandAbility, HamonAbility, SpinAbility, Session, EquipmentItem,
 )
 from .character_views import _character_queryset_for_user
 
@@ -232,6 +232,27 @@ def global_search(request):
             'description': npc.description or 'No description',
             'url': f'/campaigns',
             'campaign': npc.campaign.name if npc.campaign else None
+        })
+
+    # Published homebrew items (S9): staff-made SITE or public SHARED. Never
+    # private homebrew.
+    homebrew_queryset = EquipmentItem.objects.select_related('created_by').filter(
+        Q(scope='SITE') | Q(scope='SHARED', is_public=True)
+    ).filter(
+        Q(name__icontains=query) | Q(description__icontains=query)
+    ).order_by('name')[:10]
+
+    for item in homebrew_queryset:
+        maker = item.created_by.username if item.created_by_id else 'admin'
+        desc = item.description or ''
+        results.append({
+            'type': 'homebrew_item',
+            'id': item.id,
+            'title': item.name or 'Unnamed',
+            'subtitle': f"Homebrew item · by {maker}",
+            'description': desc[:100] + '...' if len(desc) > 100 else desc,
+            'url': '/homebrew',
+            'campaign': None
         })
 
     # Search Standard Abilities (Ability model)
