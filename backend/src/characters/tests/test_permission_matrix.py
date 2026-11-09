@@ -106,7 +106,6 @@ def _both(method, template, cls, reason):
 # key: "<METHOD> <url template> as <actor>" -> (class, reason)
 EXPECTED = {
     # KNOWN HOLES. Each fix PR deletes its own entries.
-    **_both("POST", "/api/equipment-items/", OPEN, "KNOWN HOLE, S7: anyone can create a global TEMPLATE item"),
     **_both("POST", "/api/user-profiles/", ERROR, "KNOWN BUG, D: a second profile hits the unique constraint (500)"),
 
     # BY DESIGN.
