@@ -626,3 +626,50 @@ describe("pickCrewFactionRowImage", () => {
     ).toBe("");
   });
 });
+
+describe("freshFieldTouches", () => {
+  // The sheet reset its touch map on character change and left out
+  // "heritage", so benefit/detriment clicks were never marked as edits and a
+  // server sync undid them.
+  test("has every server-owned touch key, all false", () => {
+    const { freshFieldTouches, SERVER_OWNED_FIELD_TOUCH_KEYS } = require("./characterUtils");
+    const touches = freshFieldTouches();
+    expect(Object.keys(touches).sort()).toEqual([...SERVER_OWNED_FIELD_TOUCH_KEYS].sort());
+    expect(Object.values(touches).every((v) => v === false)).toBe(true);
+    expect(touches).toHaveProperty("heritage", false);
+  });
+});
+
+describe("mergeServerOwnedCharacterFields armor", () => {
+  // Armor ticks were not merged from the server, so a reload after the save
+  // kept the tab's old count and the next autosave sent it back (2 then 0).
+  const { mergeServerOwnedCharacterFields, freshFieldTouches } = require("./characterUtils");
+  const local = {
+    standArmorUsed: 0,
+    physicalArmorUsed: 0,
+    spinArmorUsed: 0,
+    hamonArmorUsed: 0,
+    specialArmorUsed: 0,
+  };
+  const server = {
+    standArmorUsed: 2,
+    physicalArmorUsed: 1,
+    spinArmorUsed: 3,
+    hamonArmorUsed: 1,
+    specialArmorUsed: 2,
+  };
+
+  test("takes all five armor counts from the server when armor is untouched", () => {
+    const next = mergeServerOwnedCharacterFields(local, server, {});
+    expect(next).toMatchObject(server);
+  });
+
+  test("keeps the tab's armor counts while armor is touched", () => {
+    const next = mergeServerOwnedCharacterFields(local, server, { armor: true });
+    expect(next).toMatchObject(local);
+  });
+
+  test("armor is a touch key", () => {
+    expect(freshFieldTouches()).toHaveProperty("armor", false);
+  });
+});

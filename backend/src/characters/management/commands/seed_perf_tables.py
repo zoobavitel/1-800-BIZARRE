@@ -11,6 +11,9 @@ Writes JSON consumed by perf harnesses (tokens never logged at INFO).
 
 from __future__ import annotations
 
+import os
+import secrets
+
 import json
 from pathlib import Path
 
@@ -49,7 +52,8 @@ TIERS = {
     "ramp": {"tables": 8, "players": 5},
 }
 
-PERF_PASSWORD = "PerfLoadTest1!"
+# Random per run; written to the --output JSON that the perf harness reads.
+PERF_PASSWORD = os.environ.get("PERF_PASSWORD") or secrets.token_urlsafe(16)
 ACTION_DOTS = {
     "hunt": 1,
     "study": 0,

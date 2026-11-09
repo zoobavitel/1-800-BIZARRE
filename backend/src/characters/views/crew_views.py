@@ -1,5 +1,5 @@
 from django.db import models
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import FieldDoesNotExist, PermissionDenied
 from rest_framework import viewsets, status
 from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.permissions import IsAuthenticated
@@ -28,19 +28,48 @@ _CREW_MEMBER_ALLOWED_PATCH_FIELDS = frozenset(
         "session_xp_triggers",
         # Server-managed alongside session_xp_triggers merges (rep tally).
         "session_rep_contributions",
+        # Crew stats. S5 made these GM only; the user opened them to crew
+        # members again on 2026-11-02.
+        "level",
+        "xp",
+        "coin",
+        "rep",
+        "hold",
+        "turf",
+        "wanted_level",
     }
-)
-
-# GM only (user, 2026-10-26). A member may still send these when the value is
-# unchanged, because the sheet's crew autosave sends them with every save.
-_CREW_GM_ONLY_STAT_FIELDS = frozenset(
-    {"level", "xp", "coin", "rep", "hold", "turf", "wanted_level"}
 )
 
 # Trigger boolean keys that players may toggle in session_xp_triggers[sid].
 # `credited` is set server-side by the settlement service and must NOT be
 # changed via PATCH (we strip it before saving in the view).
 _CREW_XP_TRIGGER_BOOL_KEYS = frozenset({"challenge", "reputation", "goals"})
+
+
+def _patch_changes_nothing(crew, validated):
+    """True when every field in the PATCH already has that value on the crew.
+
+    Skipping the save also skips the crew event, which every open sheet
+    refetches on. An old sheet that re-sends unchanged values after each
+    refetch then can't loop (2026-11-03). `name` always saves: it clears
+    pending name proposals. Files and many-to-many fields always save.
+    """
+    if "name" in validated:
+        return False
+    for key, value in validated.items():
+        try:
+            field = crew._meta.get_field(key)
+        except FieldDoesNotExist:
+            return False
+        if (
+            not getattr(field, "concrete", False)
+            or field.many_to_many
+            or isinstance(field, models.FileField)
+        ):
+            return False
+        if getattr(crew, key) != value:
+            return False
+    return True
 
 
 class CrewViewSet(viewsets.ModelViewSet):
@@ -191,6 +220,8 @@ class CrewViewSet(viewsets.ModelViewSet):
                 user, crew, serializer.validated_data, is_gm_or_staff
             )
         if is_gm_or_staff:
+            if _patch_changes_nothing(crew, serializer.validated_data):
+                return
             serializer.save()
             crew.refresh_from_db()
             if "name" in serializer.validated_data:
@@ -202,19 +233,10 @@ class CrewViewSet(viewsets.ModelViewSet):
         # Crew members can update shared crew sheet fields (name, stash grid, resources, etc.)
         if self._is_crew_member(user, crew):
             validated = serializer.validated_data
-            changed_stats = [
-                key for key in _CREW_GM_ONLY_STAT_FIELDS & validated.keys()
-                if validated[key] != getattr(crew, key)
-            ]
-            if changed_stats:
-                raise PermissionDenied(
-                    "Only the campaign GM can change the crew's "
-                    + ", ".join(sorted(changed_stats))
-                )
-            unchanged_stats = _CREW_GM_ONLY_STAT_FIELDS & validated.keys()
-            if set(validated.keys()) - unchanged_stats <= _CREW_MEMBER_ALLOWED_PATCH_FIELDS:
-                for key in unchanged_stats:
-                    validated.pop(key)
+            if set(validated.keys()) <= _CREW_MEMBER_ALLOWED_PATCH_FIELDS:
+                # #269: a PATCH that changes nothing doesn't save (no crew event).
+                if _patch_changes_nothing(crew, validated):
+                    return
                 serializer.save()
                 crew.refresh_from_db()
                 if "name" in validated:
@@ -225,11 +247,21 @@ class CrewViewSet(viewsets.ModelViewSet):
                 return
         raise PermissionDenied("Only the GM or crew members can update this crew")
 
-    def perform_destroy(self, instance):
-        user = self.request.user
+    def destroy(self, request, *args, **kwargs):
+        """GM only, and only once the campaign has no players left (user's
+        rule, 2026-10-29). Deleting the campaign still removes its crews.
+        Staff may delete any time, for cleanup."""
+        instance = self.get_object()
+        user = request.user
         if not (instance.campaign.gm_id == user.id or user.is_staff):
             raise PermissionDenied("Only the campaign GM can delete the crew.")
+        if not user.is_staff and instance.campaign.players.exists():
+            return Response(
+                {"detail": "Remove all players from the campaign first."},
+                status=status.HTTP_409_CONFLICT,
+            )
         instance.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     def _authorize_session_xp_triggers_patch(
         self, user, crew, validated_data, is_gm_or_staff

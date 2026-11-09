@@ -2021,17 +2021,11 @@ class CharacterSerializer(serializers.ModelSerializer):
         data["advancement_plan"] = [
             serialize_plan_item(item) for item in list_queued_plan_items(instance)
         ]
-        # Crew-linked PCs store stash on Crew.stash_slots; expose resolved grid on
-        # the character payload so clients hydrate without a separate /crews/ GET.
-        crew_obj = getattr(instance, "crew", None)
-        if crew_obj is not None:
-            data["effective_stash_slots"] = list(
-                crew_obj.stash_slots or _default_stash_slots()
-            )
-        else:
-            data["effective_stash_slots"] = list(
-                instance.stash_slots or _default_stash_slots()
-            )
+        # Stash is personal, crew or not (user, 2026-11-03). Kept under this
+        # name so older clients that read it still get the right grid.
+        data["effective_stash_slots"] = list(
+            instance.stash_slots or _default_stash_slots()
+        )
         from characters.services.xp_allocation import compute_pc_level
 
         data["level"] = compute_pc_level(instance)
@@ -2070,7 +2064,9 @@ class CharacterSerializer(serializers.ModelSerializer):
     def _validate_campaign_membership(self, data):
         """A PC may only join a campaign its user is in (GM or player).
 
-        Only a change is checked: an unchanged campaign always passes.
+        A PC already in a campaign can't move straight to another one: it
+        leaves first (campaign set to null), then joins. Only a change is
+        checked: an unchanged campaign always passes.
         The sheet autosave sends `campaign` on every save, and some older PCs
         may already point at a campaign or crew they couldn't join today.
         Staff are exempt. The crew rule (crew must be in the PC's campaign)
@@ -2085,6 +2081,12 @@ class CharacterSerializer(serializers.ModelSerializer):
             new_campaign = data["campaign"]
             old_id = getattr(instance, "campaign_id", None) if instance else None
             new_id = getattr(new_campaign, "pk", None)
+            if new_campaign is not None and old_id is not None and new_id != old_id:
+                # A PC belongs to one campaign: leave the old one first.
+                old_name = getattr(instance.campaign, "name", "its campaign")
+                raise serializers.ValidationError(
+                    {"campaign": f'Remove this character from "{old_name}" first.'}
+                )
             if new_campaign is not None and new_id != old_id:
                 is_member = (
                     new_campaign.gm_id == user.id
