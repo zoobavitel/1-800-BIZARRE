@@ -376,6 +376,15 @@ function ArmorEditorCard({ draft, readOnly, onChange, onSave, onCancel }) {
   );
 }
 
+const CATALOG_FIELDS = ["name", "detail", "category", "load", "quality"];
+
+/** True when an edit changed any field copied from the catalog item. */
+function catalogFieldsChanged(before, after) {
+  return CATALOG_FIELDS.some(
+    (key) => String(before?.[key] ?? "").trim() !== String(after?.[key] ?? "").trim(),
+  );
+}
+
 export default function CharacterSheetInventoryList({
   panelId,
   inventory,
@@ -567,6 +576,12 @@ export default function CharacterSheetInventoryList({
           is_armor: false,
           armor_kind: "",
         };
+    // Changing a catalog item makes it this sheet's own custom item. The
+    // catalog entry itself is never touched from a sheet.
+    const original = inv[editingIndex];
+    if (original?.catalog_id != null && catalogFieldsChanged(original, row)) {
+      row.catalog_id = null;
+    }
     onInventoryTouch?.();
     onChange(inv.map((item, i) => (i === editingIndex ? row : item)));
     cancelEdit();
