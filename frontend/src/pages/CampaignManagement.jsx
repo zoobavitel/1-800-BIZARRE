@@ -496,7 +496,7 @@ function PendingInvitations({ invitations, onAccept, onDecline }) {
 // ---------------------------------------------------------------------------
 // Campaign Detail View
 // ---------------------------------------------------------------------------
-function CampaignEquipmentPanel({ campaign, onRefresh }) {
+export function CampaignEquipmentPanel({ campaign, onRefresh }) {
   const { user } = useAuth();
   const [items, setItems] = useState([]);
   const [form, setForm] = useState(null);
@@ -547,6 +547,20 @@ function CampaignEquipmentPanel({ campaign, onRefresh }) {
     setError(null);
   };
 
+  // Renaming a catalog item doesn't touch copies already on sheets: each copy
+  // is its own row and is edited on its sheet (user's choice, 2026-11-06).
+  const startEdit = (item) => {
+    setForm({
+      editingId: item.id,
+      name: item.name || "",
+      description: item.description || "",
+      category: item.category || "other",
+      load_slots: item.load_slots ?? 1,
+      quality: item.quality ?? 1,
+    });
+    setError(null);
+  };
+
   const handleSave = async () => {
     if (!form?.name?.trim()) {
       setError("Name required.");
@@ -554,6 +568,20 @@ function CampaignEquipmentPanel({ campaign, onRefresh }) {
     }
     setError(null);
     try {
+      if (form.editingId != null) {
+        // Only the fields the form shows. Scope and campaign stay as they are.
+        await equipmentAPI.update(form.editingId, {
+          name: form.name.trim(),
+          description: form.description || "",
+          category: form.category,
+          load_slots: Number(form.load_slots) || 1,
+          quality: Number(form.quality) || 1,
+        });
+        setForm(null);
+        loadItems();
+        onRefresh?.();
+        return;
+      }
       await equipmentAPI.create({
         name: form.name.trim(),
         description: form.description || "",
@@ -638,6 +666,16 @@ function CampaignEquipmentPanel({ campaign, onRefresh }) {
               />
               Available when adding
             </label>
+            {canDeleteCatalogItem(item) ? (
+              <button
+                type="button"
+                aria-label={`Edit ${item.name}`}
+                style={{ ...S.btn, marginLeft: "12px", fontSize: "11px" }}
+                onClick={() => startEdit(item)}
+              >
+                Edit
+              </button>
+            ) : null}
             {canDeleteCatalogItem(item) ? (
               <button
                 type="button"

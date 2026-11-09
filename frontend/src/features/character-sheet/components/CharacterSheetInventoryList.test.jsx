@@ -1,6 +1,7 @@
 import React from "react";
 import { render } from "@testing-library/react";
 import CharacterSheetInventoryList from "./CharacterSheetInventoryList";
+import { equipmentAPI } from "../services/api";
 
 jest.mock("../services/api", () => {
   const actual = jest.requireActual("../services/api");
@@ -11,6 +12,12 @@ jest.mock("../services/api", () => {
 // load-save effect re-ran on every render while the session copy was stale,
 // and sent the same body each time.
 describe("CharacterSheetInventoryList session load save", () => {
+  // CRA's resetMocks clears the factory's implementation before each test,
+  // and a sheet with no campaign now loads the SRD list (#274).
+  beforeEach(() => {
+    equipmentAPI.list.mockResolvedValue([]);
+  });
+
   const inventory = [{ id: "item-1", name: "Waluigi", load: 1 }];
   const staleEntry = { band: "normal", carried_ids: [] };
 
