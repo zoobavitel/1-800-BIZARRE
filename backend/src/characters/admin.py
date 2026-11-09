@@ -2,7 +2,7 @@ from django.contrib import admin
 from .models import (
     Heritage, Benefit, Detriment,
     Character, Vice, Ability, Stand,
-    Campaign, Crew, NPC
+    Campaign, Crew, NPC, EquipmentItem, CampaignEquipmentAccess
 )
 
 # Inline editing for Benefits and Detriments on Heritage admin
@@ -116,3 +116,31 @@ admin.site.register(Ability)
 admin.site.register(Stand)
 admin.site.register(Campaign)
 admin.site.register(Crew)
+
+
+# Equipment: the SRD catalog and campaign libraries. Staff manage the SRD
+# catalog here, not on the site (user's rule, 2026-11-08: staff get no
+# special access in the app; support work happens in Django admin).
+@admin.register(EquipmentItem)
+class EquipmentItemAdmin(admin.ModelAdmin):
+    list_display = ("name", "scope", "category", "load_slots", "quality", "campaign", "created_by")
+    list_filter = ("scope", "category", "campaign")
+    search_fields = ("name", "description", "created_by__username")
+    raw_id_fields = ("campaign", "created_by", "source_character")
+
+
+@admin.register(CampaignEquipmentAccess)
+class CampaignEquipmentAccessAdmin(admin.ModelAdmin):
+    """Read only: GMs change these from their campaign's Equipment catalog card."""
+
+    list_display = ("campaign", "item", "enabled")
+    list_filter = ("enabled", "campaign")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

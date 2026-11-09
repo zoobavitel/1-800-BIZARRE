@@ -80,8 +80,6 @@ from ..services.character_sheet_reset import reset_character_sheet
 
 def _character_queryset_for_user(user):
     """Own PCs plus campaign-visible PCs for this user (staff sees all)."""
-    if user.is_staff:
-        return Character.objects.all()
     return Character.objects.filter(
         Q(user=user) | Q(campaign__gm=user) | Q(campaign__players=user)
     ).distinct()
@@ -94,8 +92,6 @@ def _max_stress_for_character(character):
     return max_stress_slots_for_character(character)
 
 def _user_may_edit_character(user, character):
-    if user.is_staff:
-        return True
     if character.user_id == user.id:
         return True
     if character.campaign_id and character.campaign.gm_id == user.id:
@@ -181,7 +177,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
         user = self.request.user
         is_owner = instance.user_id == user.id
         is_gm = instance.campaign_id and instance.campaign.gm_id == user.id
-        if not (user.is_staff or is_owner or is_gm):
+        if not (is_owner or is_gm):
             raise PermissionDenied(
                 "You may only edit your own characters unless you are the campaign GM."
             )
@@ -277,7 +273,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
         user = self.request.user
         is_owner = instance.user_id == user.id
         is_gm = instance.campaign_id and instance.campaign.gm_id == user.id
-        if not (user.is_staff or is_owner or is_gm):
+        if not (is_owner or is_gm):
             raise PermissionDenied("You may only delete your own characters.")
         instance.delete()
 
@@ -698,7 +694,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
             action_rating = 0
             attribute_dice = 0
             if npc_heal_fortune:
-                if character.user_id != request.user.id and not request.user.is_staff:
+                if character.user_id != request.user.id:
                     return Response(
                         {
                             "error": (
@@ -1953,7 +1949,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
         is_gm = bool(
             character.campaign_id and character.campaign.gm_id == user.id
         )
-        if not (user.is_staff or is_gm):
+        if not is_gm:
             raise PermissionDenied(
                 "Only the campaign GM can force a Stand Coin advance."
             )
@@ -2248,8 +2244,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
         token = request.data.get("commit_token")
         allow_acquire = bool(request.data.get("allow_acquire_stand_drop"))
         if allow_acquire and not (
-            request.user.is_staff
-            or (
+            (
                 character.campaign_id
                 and character.campaign.gm_id == request.user.id
             )
@@ -2489,7 +2484,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
         is_gm = bool(
             character.campaign_id and character.campaign.gm_id == user.id
         )
-        if not (user.is_staff or is_owner or is_gm):
+        if not (is_owner or is_gm):
             raise PermissionDenied(
                 "You may only allocate pool XP for your own character or as the campaign GM."
             )
@@ -2594,7 +2589,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
         is_gm = bool(
             character.campaign_id and character.campaign.gm_id == user.id
         )
-        if not (user.is_staff or is_owner or is_gm):
+        if not (is_owner or is_gm):
             raise PermissionDenied(
                 "You may only deallocate pool XP for your own character or as the campaign GM."
             )
@@ -2713,7 +2708,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
         is_gm = bool(
             character.campaign_id and character.campaign.gm_id == user.id
         )
-        if not (user.is_staff or is_owner or is_gm):
+        if not (is_owner or is_gm):
             raise PermissionDenied(
                 "You may only add XP for your own character or as the campaign GM."
             )
@@ -2914,7 +2909,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
         is_gm = bool(
             character.campaign_id and character.campaign.gm_id == user.id
         )
-        if not (user.is_staff or is_owner or is_gm):
+        if not (is_owner or is_gm):
             raise PermissionDenied(
                 "You may only train for your own character or as the campaign GM."
             )

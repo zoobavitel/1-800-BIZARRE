@@ -34,8 +34,10 @@ class CrewDeleteRuleTests(TestCase):
         self.assertEqual(self.delete_as(self.gm).status_code, 204)
         self.assertFalse(Crew.objects.filter(pk=self.crew.pk).exists())
 
-    def test_staff_can_delete_any_time(self):
-        self.assertEqual(self.delete_as(self.staff).status_code, 204)
+    def test_staff_get_no_exception(self):
+        # Staff get no special access on the site (2026-11-08).
+        self.assertIn(self.delete_as(self.staff).status_code, (403, 404))
+        self.assertTrue(Crew.objects.filter(pk=self.crew.pk).exists())
 
     def test_a_player_still_cannot_delete(self):
         self.assertEqual(self.delete_as(self.player).status_code, 403)

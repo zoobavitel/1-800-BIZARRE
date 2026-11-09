@@ -467,7 +467,6 @@ export function isUserCampaignGmForCharacter(
   if (user?.id == null) return false;
   if (campaignId == null) return false;
   if (Boolean(isGMProp)) return true;
-  if (user.is_staff) return true;
   const gmId = campaignRecord?.gm?.id ?? campaignRecord?.gm;
   return gmId != null && Number(gmId) === Number(user.id);
 }

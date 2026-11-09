@@ -256,7 +256,8 @@ class EquipmentCatalogPermissionTests(TestCase):
         self.campaign = Campaign.objects.create(name="EqCamp", gm=self.gm)
         self.client = APIClient()
 
-    def test_creator_can_delete_own_site_item(self):
+    def test_creator_cannot_delete_own_site_item(self):
+        """The site catalog is staff-only; staff manage it in Django admin."""
         item = EquipmentItem.objects.create(
             name="Creator Site Widget",
             category="gear",
@@ -265,8 +266,8 @@ class EquipmentCatalogPermissionTests(TestCase):
         )
         self.client.force_authenticate(self.creator)
         res = self.client.delete(f"/api/equipment-items/{item.id}/")
-        self.assertEqual(res.status_code, 204)
-        self.assertFalse(EquipmentItem.objects.filter(pk=item.id).exists())
+        self.assertEqual(res.status_code, 403)
+        self.assertTrue(EquipmentItem.objects.filter(pk=item.id).exists())
 
     def test_non_creator_cannot_delete_site_item(self):
         item = EquipmentItem.objects.create(
@@ -360,33 +361,6 @@ class EquipmentCatalogPermissionTests(TestCase):
         self.assertEqual(
             EquipmentItem.objects.filter(
                 campaign=self.campaign, name__iexact="Weird Widget"
-            ).count(),
-            1,
-        )
-
-    def test_publish_to_site_skips_existing_site_name(self):
-        site = EquipmentItem.objects.create(
-            name="Published Gadget",
-            category="gear",
-            scope="SITE",
-            created_by=self.gm,
-        )
-        camp = EquipmentItem.objects.create(
-            name="Published Gadget",
-            category="gear",
-            scope="CAMPAIGN",
-            campaign=self.campaign,
-            created_by=self.gm,
-        )
-        self.client.force_authenticate(self.gm)
-        res = self.client.post(
-            f"/api/equipment-items/{camp.id}/publish-to-site/"
-        )
-        self.assertEqual(res.status_code, 200)
-        self.assertEqual(res.data["id"], site.id)
-        self.assertEqual(
-            EquipmentItem.objects.filter(
-                name__iexact="Published Gadget", scope="SITE"
             ).count(),
             1,
         )

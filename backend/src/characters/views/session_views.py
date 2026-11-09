@@ -29,7 +29,7 @@ class IsCampaignGMOrReadOnly(permissions.BasePermission):
             return True
 
         # Write permissions are only allowed to the GM of the campaign
-        if obj.campaign.gm == request.user or request.user.is_staff:
+        if obj.campaign.gm == request.user:
             return True
 
         # Players may PATCH only loadout_by_character (own entry checked in perform_update).
@@ -67,7 +67,7 @@ class SessionViewSet(viewsets.ModelViewSet):
         xp_qs = ExperienceTracker.objects.select_related(
             "character__campaign", "session", "awarded_by"
         ).order_by("pk")
-        base = Session.objects.all() if user.is_staff else Session.objects.filter(
+        base = Session.objects.filter(
             models.Q(campaign__gm=user)
             | models.Q(campaign__characters__user=user)
             | models.Q(campaign__players=user)
@@ -93,14 +93,14 @@ class SessionViewSet(viewsets.ModelViewSet):
         # Only the campaign's GM (or staff) may open a session in it.
         campaign = serializer.validated_data.get("campaign")
         user = self.request.user
-        if campaign is None or not (campaign.gm_id == user.id or user.is_staff):
+        if campaign is None or not (campaign.gm_id == user.id):
             raise PermissionDenied("Only the campaign GM can create a session.")
         serializer.save()
 
     def perform_update(self, serializer):
         session = self.get_object()
         user = self.request.user
-        is_gm = session.campaign.gm == user or user.is_staff
+        is_gm = session.campaign.gm == user
 
         if not is_gm:
             data_keys = set(self.request.data.keys())

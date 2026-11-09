@@ -81,20 +81,17 @@ class CrewViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         # Filter crews based on user permissions
         user = self.request.user
-        if user.is_staff:
-            qs = Crew.objects.select_related("campaign").all()
-        else:
-            # Return crews from campaigns where user is GM or a member
-            qs = (
-                Crew.objects.select_related("campaign")
-                .filter(
-                    models.Q(campaign__gm=user)
-                    | models.Q(campaign__characters__user=user)
-                    | models.Q(campaign__players=user)
-                    | models.Q(members__user=user)
-                )
-                .distinct()
+        # Return crews from campaigns where user is GM or a member
+        qs = (
+            Crew.objects.select_related("campaign")
+            .filter(
+                models.Q(campaign__gm=user)
+                | models.Q(campaign__characters__user=user)
+                | models.Q(campaign__players=user)
+                | models.Q(members__user=user)
             )
+            .distinct()
+        )
 
         campaign_id = self.request.query_params.get("campaign")
         if campaign_id:
@@ -198,7 +195,7 @@ class CrewViewSet(viewsets.ModelViewSet):
         campaign = serializer.validated_data.get("campaign")
         if campaign is None:
             raise DRFValidationError({"campaign": "Crew must be tied to a campaign."})
-        if user.is_staff or campaign.gm_id == user.id:
+        if campaign.gm_id == user.id:
             serializer.save()
             return
         is_campaign_player = (
@@ -214,7 +211,7 @@ class CrewViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         crew = self.get_object()
         user = self.request.user
-        is_gm_or_staff = crew.campaign.gm_id == user.id or user.is_staff
+        is_gm_or_staff = crew.campaign.gm_id == user.id
         if "session_xp_triggers" in serializer.validated_data:
             self._authorize_session_xp_triggers_patch(
                 user, crew, serializer.validated_data, is_gm_or_staff
@@ -250,12 +247,13 @@ class CrewViewSet(viewsets.ModelViewSet):
     def destroy(self, request, *args, **kwargs):
         """GM only, and only once the campaign has no players left (user's
         rule, 2026-10-29). Deleting the campaign still removes its crews.
-        Staff may delete any time, for cleanup."""
+        Staff get no exception on the site (2026-11-08); cleanup happens in
+        Django admin."""
         instance = self.get_object()
         user = request.user
-        if not (instance.campaign.gm_id == user.id or user.is_staff):
+        if instance.campaign.gm_id != user.id:
             raise PermissionDenied("Only the campaign GM can delete the crew.")
-        if not user.is_staff and instance.campaign.players.exists():
+        if instance.campaign.players.exists():
             return Response(
                 {"detail": "Remove all players from the campaign first."},
                 status=status.HTTP_409_CONFLICT,
