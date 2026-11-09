@@ -54,7 +54,12 @@ function savedRow(onChange) {
 }
 
 describe("editing a catalog item on a sheet", () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    // CRA's resetMocks clears the factory's implementation before each test,
+    // and a sheet with no campaign loads the SRD list (#274).
+    equipmentAPI.list.mockResolvedValue([]);
+  });
 
   it("turns a renamed catalog item into a custom item and never writes to the catalog", () => {
     const onChange = jest.fn();
