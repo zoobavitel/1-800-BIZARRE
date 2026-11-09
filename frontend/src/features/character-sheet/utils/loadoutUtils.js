@@ -404,12 +404,3 @@ export function kitItemCanSaveToCampaignLibrary(item, catalogItems = []) {
   return true;
 }
 
-/**
- * Custom and campaign-library rows can publish. Hide for SRD TEMPLATE and
- * already-SITE items so base game kits are not double-saved.
- */
-export function kitItemCanPublishToSiteCatalog(item, catalogItems = []) {
-  if (!_catalogNameKey(item?.name)) return false;
-  const scope = _strongestCatalogScope(catalogRowsForKitItem(item, catalogItems));
-  return scope !== "TEMPLATE" && scope !== "SITE";
-}

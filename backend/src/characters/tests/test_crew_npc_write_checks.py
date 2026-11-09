@@ -1,4 +1,8 @@
-"""Crew and NPC writes that only the campaign GM may make (S5)."""
+"""Crew and NPC writes that only the campaign GM may make (S5).
+
+Crew stats (level, xp, coin, rep, hold, turf, wanted_level) went back to
+crew members on 2026-11-02 (user). Crew delete and campaign NPCs stay GM only.
+"""
 
 from django.contrib.auth.models import User
 from django.test import TestCase
@@ -6,7 +10,7 @@ from rest_framework.test import APIClient
 
 from characters.models import NPC, Campaign, Character, Crew, Heritage
 
-GM_ONLY_CREW_STATS = {
+CREW_STATS = {
     "level": 2,
     "xp": 3,
     "coin": 4,
@@ -17,11 +21,12 @@ GM_ONLY_CREW_STATS = {
 }
 
 
-class CrewGmOnlyWriteTests(TestCase):
+class CrewWriteTests(TestCase):
     def setUp(self):
         self.gm = User.objects.create_user(username="cw_gm", password="pw-cw-gm-1")
         self.player = User.objects.create_user(username="cw_player", password="pw-cw-player-1")
         self.staff = User.objects.create_user(username="cw_staff", password="pw-cw-staff-1", is_staff=True)
+        self.outsider = User.objects.create_user(username="cw_outsider", password="pw-cw-outsider-1")
         heritage, _ = Heritage.objects.get_or_create(name="Human", defaults={"base_hp": 0, "description": ""})
         self.campaign = Campaign.objects.create(name="CW Camp", gm=self.gm)
         self.campaign.players.add(self.player)
@@ -43,22 +48,31 @@ class CrewGmOnlyWriteTests(TestCase):
         self.assertEqual(response.status_code, 403, response.content)
         self.assertTrue(Crew.objects.filter(pk=self.crew.pk).exists())
 
-    def test_gm_and_staff_can_delete_the_crew(self):
-        self.client.force_authenticate(self.gm)
-        self.assertEqual(self.client.delete(f"/api/crews/{self.crew.pk}/").status_code, 204)
+    def test_gm_can_delete_the_crew_and_staff_cannot(self):
+        # Staff get no special access on the site (2026-11-08). The GM may
+        # delete once no players remain (2026-10-29, see test_crew_delete_rule).
         other = Crew.objects.create(name="CW Crew 2", campaign=self.campaign)
         self.client.force_authenticate(self.staff)
-        self.assertEqual(self.client.delete(f"/api/crews/{other.pk}/").status_code, 204)
+        self.assertIn(self.client.delete(f"/api/crews/{other.pk}/").status_code, (403, 404))
+        self.assertTrue(Crew.objects.filter(pk=other.pk).exists())
+        self.campaign.players.clear()
+        self.client.force_authenticate(self.gm)
+        self.assertEqual(self.client.delete(f"/api/crews/{self.crew.pk}/").status_code, 204)
 
     # Stats
 
-    def test_member_cannot_change_any_gm_only_stat(self):
-        for field, value in GM_ONLY_CREW_STATS.items():
+    def test_member_can_change_every_crew_stat(self):
+        for field, value in CREW_STATS.items():
             with self.subTest(field=field):
-                before = getattr(Crew.objects.get(pk=self.crew.pk), field)
                 response = self._patch(self.player, {field: value})
-                self.assertEqual(response.status_code, 403, response.content)
-                self.assertEqual(getattr(Crew.objects.get(pk=self.crew.pk), field), before)
+                self.assertEqual(response.status_code, 200, response.content)
+                self.assertEqual(getattr(Crew.objects.get(pk=self.crew.pk), field), value)
+
+    def test_non_member_cannot_change_crew_stats(self):
+        coin_before = self.crew.coin
+        response = self._patch(self.outsider, {"coin": coin_before + 2})
+        self.assertIn(response.status_code, (403, 404), response.content)
+        self.assertEqual(Crew.objects.get(pk=self.crew.pk).coin, coin_before)
 
     def test_member_can_edit_shared_fields(self):
         response = self._patch(self.player, {"name": "New name", "notes": "n", "description": "d"})
@@ -80,18 +94,18 @@ class CrewGmOnlyWriteTests(TestCase):
         self.crew.refresh_from_db()
         self.assertEqual(self.crew.notes, "from the sheet")
 
-    def test_member_sheet_autosave_with_a_changed_stat_is_refused(self):
-        body = {"coin": self.crew.coin + 1, "notes": "sneaky"}
+    def test_member_sheet_autosave_with_a_changed_stat_saves(self):
+        body = {"coin": self.crew.coin + 1, "notes": "from the sheet"}
         response = self._patch(self.player, body)
-        self.assertEqual(response.status_code, 403, response.content)
-        self.crew.refresh_from_db()
-        self.assertNotEqual(self.crew.notes, "sneaky")
-
-    def test_gm_can_change_stats(self):
-        response = self._patch(self.gm, dict(GM_ONLY_CREW_STATS))
         self.assertEqual(response.status_code, 200, response.content)
         self.crew.refresh_from_db()
-        for field, value in GM_ONLY_CREW_STATS.items():
+        self.assertEqual((self.crew.coin, self.crew.notes), (body["coin"], "from the sheet"))
+
+    def test_gm_can_change_stats(self):
+        response = self._patch(self.gm, dict(CREW_STATS))
+        self.assertEqual(response.status_code, 200, response.content)
+        self.crew.refresh_from_db()
+        for field, value in CREW_STATS.items():
             self.assertEqual(getattr(self.crew, field), value, field)
 
 
@@ -120,9 +134,10 @@ class NpcCampaignGmOnlyTests(TestCase):
         self.assertEqual(self._create(self.stranger, self.campaign).status_code, 403)
         self.assertFalse(NPC.objects.filter(campaign=self.campaign).exists())
 
-    def test_gm_and_staff_can_create_campaign_npcs(self):
+    def test_gm_can_create_campaign_npcs_and_staff_cannot(self):
         self.assertEqual(self._create(self.gm, self.campaign).status_code, 201)
-        self.assertEqual(self._create(self.staff, self.campaign).status_code, 201)
+        # Staff get no special access on the site (2026-11-08).
+        self.assertEqual(self._create(self.staff, self.campaign).status_code, 403)
 
     def test_anyone_can_create_an_npc_without_a_campaign(self):
         self.assertEqual(self._create(self.player).status_code, 201)

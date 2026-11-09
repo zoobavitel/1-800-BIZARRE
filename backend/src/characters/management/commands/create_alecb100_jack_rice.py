@@ -1,6 +1,7 @@
 from django.core.management.base import BaseCommand
 from django.contrib.auth.models import User
 from characters.models import Character, Heritage, Vice, Ability, Stand, StandAbility
+from characters.management.seed_passwords import seed_password
 
 
 class Command(BaseCommand):
@@ -16,7 +17,7 @@ class Command(BaseCommand):
         )
 
         if created:
-            user.set_password(User.objects.make_random_password())
+            user.set_password(seed_password(self.stdout, user.username))
             user.save()
             self.stdout.write(
                 self.style.SUCCESS(f"Created user: {user.username} (ID: {user.id})")

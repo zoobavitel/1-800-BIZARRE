@@ -426,6 +426,8 @@ class Crew(models.Model):
 
     coin = models.IntegerField(default=0)
     stash = models.IntegerField(default=0)
+    # Unused since 2026-11-03: stash is personal (Character.stash_slots).
+    # Drop in a cleanup PR.
     stash_slots = models.JSONField(
         default=_default_stash_slots,
         blank=True,
@@ -558,8 +560,9 @@ class NPC(models.Model):
     creator = models.ForeignKey(
         User, on_delete=models.CASCADE, related_name="created_npcs"
     )
+    # SET_NULL: deleting a campaign keeps its NPCs (user's rule, 2026-10-29).
     campaign = models.ForeignKey(
-        Campaign, on_delete=models.CASCADE, null=True, blank=True, related_name="npcs"
+        Campaign, on_delete=models.SET_NULL, null=True, blank=True, related_name="npcs"
     )
     faction = models.ForeignKey(
         Faction, on_delete=models.SET_NULL, null=True, blank=True, related_name="npcs"
@@ -870,9 +873,10 @@ class Character(models.Model):
             self.refresh_from_db(fields=["version"])
 
     user = models.ForeignKey(User, on_delete=models.CASCADE)
+    # SET_NULL: deleting a campaign keeps players' PCs (user's rule, 2026-10-29).
     campaign = models.ForeignKey(
         Campaign,
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="characters",
@@ -2783,7 +2787,11 @@ class Roll(models.Model):
     character = models.ForeignKey(
         Character, on_delete=models.CASCADE, related_name="rolls"
     )
-    session = models.ForeignKey(Session, on_delete=models.CASCADE, related_name="rolls")
+    # SET_NULL: a PC keeps its past rolls when the campaign (and so the
+    # session) is deleted (user's rule, 2026-10-29).
+    session = models.ForeignKey(
+        Session, on_delete=models.SET_NULL, null=True, blank=True, related_name="rolls"
+    )
     roll_type = models.CharField(
         max_length=20, choices=ROLL_TYPE_CHOICES, default="ACTION"
     )

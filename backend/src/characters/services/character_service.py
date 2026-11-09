@@ -108,11 +108,9 @@ class CharacterService:
     @staticmethod
     def can_edit_character(user, character):
         """Check if a user can edit a character."""
-        return user == character.user or user.is_staff
+        return user == character.user
     
     @staticmethod
     def get_user_characters(user):
         """Get all characters for a user."""
-        if user.is_staff:
-            return Character.objects.all()
         return Character.objects.filter(user=user) 

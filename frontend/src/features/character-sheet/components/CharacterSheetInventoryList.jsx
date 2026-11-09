@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { equipmentAPI, normalizeCharacterInventory } from "../services/api";
 import {
   ARMOR_KIND_OPTIONS,
@@ -12,7 +12,6 @@ import {
   computeInventoryLoadUsed,
   characterHasAbility,
   EQUIPMENT_CATEGORY_OPTIONS,
-  kitItemCanPublishToSiteCatalog,
   kitItemCanSaveToCampaignLibrary,
   loadBandForUsed,
   loadCapForBand,
@@ -392,7 +391,6 @@ export default function CharacterSheetInventoryList({
   characterId,
   isGM = false,
   onPromoteToCampaign,
-  onPublishToSite,
   onShareItem,
   allowArmor = true,
   hideAggregateLoad = false,
@@ -427,25 +425,40 @@ export default function CharacterSheetInventoryList({
   const [catalogItems, setCatalogItems] = useState([]);
   const [catalogError, setCatalogError] = useState(null);
 
+  // Session load save. Keyed on plain values, not the loadout object (rebuilt
+  // every render), and never resends a body it already sent: while the
+  // session copy is stale, re-renders used to resend it hundreds of times a
+  // second (13,049 PATCHes from one tab in the batch test).
+  const loadoutRef = useRef(loadout);
+  loadoutRef.current = loadout;
+  const lastSentLoadRef = useRef(null);
+  const storedBand = loadout.band || "";
+  const storedIdsKey = [...(loadout.carried_ids || [])].sort().join(",");
+  const nextIdsKey = [...loadedItemIds].sort().join(",");
   useEffect(() => {
     if (!sessionActive || !onLoadoutChange || readOnly) return;
-    const bandChanged = derivedBand !== (loadout.band || "");
-    const prevIds = [...(loadout.carried_ids || [])].sort().join(",");
-    const nextIds = [...loadedItemIds].sort().join(",");
-    const idsChanged = prevIds !== nextIds;
-    if (!bandChanged && !idsChanged) return;
-    onLoadoutChange({
-      ...loadout,
-      band: derivedBand,
-      carried_ids: loadedItemIds,
-    });
+    if (derivedBand === storedBand && nextIdsKey === storedIdsKey) return;
+    const sendKey = `${activeSessionId}:${characterId}:${derivedBand}:${nextIdsKey}`;
+    if (lastSentLoadRef.current === sendKey) return;
+    lastSentLoadRef.current = sendKey;
+    onLoadoutChange(
+      {
+        ...loadoutRef.current,
+        band: derivedBand,
+        carried_ids: nextIdsKey ? nextIdsKey.split(",") : [],
+      },
+      { auto: true },
+    );
   }, [
     sessionActive,
     onLoadoutChange,
     readOnly,
+    activeSessionId,
+    characterId,
     derivedBand,
-    loadedItemIds,
-    loadout,
+    storedBand,
+    storedIdsKey,
+    nextIdsKey,
   ]);
 
   const refreshCatalog = useCallback(() => {
@@ -803,21 +816,6 @@ export default function CharacterSheetInventoryList({
                     </button>
                   ))}
                 </div>
-              ) : null}
-              {isGM &&
-              onPublishToSite &&
-              !armorKind &&
-              kitItemCanPublishToSiteCatalog(item, catalogItems) ? (
-                <button
-                  type="button"
-                  style={{ ...btnStyle, alignSelf: "flex-start", fontSize: "10px" }}
-                  onClick={async () => {
-                    await onPublishToSite(item);
-                    await refreshCatalog();
-                  }}
-                >
-                  Publish to site catalog
-                </button>
               ) : null}
             </div>
           );

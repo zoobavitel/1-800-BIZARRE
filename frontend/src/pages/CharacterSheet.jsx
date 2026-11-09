@@ -88,6 +88,7 @@ import {
   isPlaybookFoundationAbility,
   shouldSkipSheetDraftHydration,
   shouldSkipServerOwnedFieldHydration,
+  freshFieldTouches,
   applyHarmSlotTextChange,
   computeHealingClockAfterSegments,
   normalizeCrewFromCharacter,
@@ -200,6 +201,11 @@ import {
 } from "../features/character-sheet/utils/heritageRollBonusMeta";
 import { derivePartyFacingSessionNpc } from "../features/character-sheet/utils/sessionNpcPartyFace";
 import { getResistanceResultSheetAbilityReminders } from "../features/character-sheet/utils/sheetAbilityResistanceReminders";
+import { useCrewAutosave } from "../features/character-sheet/hooks/useCrewAutosave";
+import {
+  sheetPayloadDedupeKey,
+  withResolvedHeritage,
+} from "../features/character-sheet/utils/sheetDedupeKey";
 
 function archetypesEqual(a, b) {
   if (a === b) return true;
@@ -264,6 +270,21 @@ function upgradesToProgress(upgrades) {
     p[`training_${k}`] = !!v;
   });
   return p;
+}
+
+/** Crew fields the sheet autosaves, in PATCH shape. */
+function crewPatchPayload(crewData) {
+  return {
+    rep: crewData.rep,
+    turf: crewData.turf,
+    level: crewData.tier,
+    wanted_level: crewData.wanted,
+    coin: crewData.coin,
+    hold: crewData.hold,
+    description: crewData.description,
+    notes: crewData.notes,
+    upgrade_progress: upgradesToProgress(crewData.upgrades),
+  };
 }
 
 function progressToUpgrades(progress) {
@@ -781,16 +802,6 @@ function inventorySyncFingerprint(inv) {
   );
 }
 
-/** Stable autosave dedupe key — File stringifies as {}, which falsely matched "already saved". */
-function sheetPayloadDedupeKey(payload, { ignorePendingImageFile = false } = {}) {
-  const { lastModified, _fieldTouches, ...rest } = payload || {};
-  const file = rest.imageFile;
-  let imageFileKey = null;
-  if (!ignorePendingImageFile && isImageUploadPayload(file)) {
-    imageFileKey = `pending:${file.name || "blob"}:${file.size}:${file.type || ""}`;
-  }
-  return JSON.stringify({ ...rest, imageFile: imageFileKey });
-}
 
 function hasMeaningfulDraftChanges(payload) {
   if (!payload || payload.id) return false;
@@ -1086,16 +1097,7 @@ const CharacterSheetWrapper = ({
     dirtyIntent: false,
   });
   /** User touched server-owned field controls this draft; gates hydrate omit + PATCH include. */
-  const fieldTouchRef = useRef({
-    stress: false,
-    trauma: false,
-    xp: false,
-    healingClock: false,
-    inventory: false,
-    coin: false,
-    stash: false,
-    heritage: false,
-  });
+  const fieldTouchRef = useRef(freshFieldTouches());
   const markDirtyIntent = useCallback(() => {
     dirtyIntentRef.current = true;
     const nextMeta = {
@@ -1279,13 +1281,15 @@ const CharacterSheetWrapper = ({
   }, [charCampaign?.active_session_detail, characterId]);
 
   const handleLoadoutChange = useCallback(
-    async (nextEntry) => {
+    async (nextEntry, { auto = false } = {}) => {
       if (!activeSessionId || characterId == null) return;
       try {
         await sessionAPI.patchSession(activeSessionId, {
           loadout_by_character: { [String(characterId)]: nextEntry },
         });
-        onCampaignRefresh?.();
+        // The automatic load save needs no refresh: the sheet works the load
+        // out from the items. Rigging ticks show the session copy, so refresh.
+        if (!auto) onCampaignRefresh?.();
       } catch (err) {
         console.error("Loadout save failed:", err);
       }
@@ -1397,35 +1401,6 @@ const CharacterSheetWrapper = ({
     [characterId],
   );
 
-  const handlePublishItemToSite = useCallback(
-    async (item) => {
-      const cid =
-        campaignId != null && campaignId !== ""
-          ? parseInt(String(campaignId), 10)
-          : NaN;
-      if (!Number.isFinite(cid)) return;
-      if (!String(item?.name || "").trim()) return;
-      try {
-        const created = await equipmentAPI.fromKitItem({
-          campaign: cid,
-          name: item.name,
-          detail: item.detail,
-          category: item.category,
-          load: item.load,
-          quality: item.quality,
-          coin_value: item.coin_value,
-          source_character: characterId,
-        });
-        const scope = String(created?.scope || "").toUpperCase();
-        if (scope === "TEMPLATE" || scope === "SITE") return;
-        if (created?.id) await equipmentAPI.publishToSite(created.id);
-      } catch (err) {
-        console.error("Publish to site catalog failed:", err);
-      }
-    },
-    [campaignId, characterId],
-  );
-
   // Portrait state
   const [imageUrl, setImageUrl] = useState(character?.image_url || "");
   const [imagePreview, setImagePreview] = useState(
@@ -1475,15 +1450,9 @@ const CharacterSheetWrapper = ({
   }, [character?.id]);
 
   useEffect(() => {
-    fieldTouchRef.current = {
-      stress: false,
-      trauma: false,
-      xp: false,
-      healingClock: false,
-      inventory: false,
-      coin: false,
-      stash: false,
-    };
+    // Built from the shared key list: a hand-written copy here once left out
+    // "heritage", so benefit/detriment picks were undone by the next sync.
+    fieldTouchRef.current = freshFieldTouches();
   }, [character?.id]);
 
   // A server sync resets the dedupe baseline, so the next render's payload,
@@ -2301,6 +2270,8 @@ const CharacterSheetWrapper = ({
 
   useEffect(() => {
     if (sheetDraftIsDirty) return;
+    // A tick not saved yet must not be overwritten by an older server copy.
+    if (fieldTouchRef.current.armor) return;
     if (typeof character?.standArmorUsed === "number" && Number.isFinite(character.standArmorUsed))
       setStandArmorUsed(Math.max(0, Math.floor(character.standArmorUsed)));
     const u = character?.physicalArmorUsed;
@@ -3430,6 +3401,8 @@ const CharacterSheetWrapper = ({
     readCharSheetBool(characterId, "crew-history", false),
   );
   const crewHydratedRef = useRef(false);
+  /** JSON of the crew values the server has; useCrewAutosave skips a match. */
+  const crewSyncedKeyRef = useRef(null);
 
   useEffect(() => {
     setNpcPlayerVisOverrides({});
@@ -3616,19 +3589,7 @@ const CharacterSheetWrapper = ({
     isCampaignGm,
   ]);
 
-  const buildCrewPatchPayload = useCallback(() => {
-    return {
-      rep: crewData.rep,
-      turf: crewData.turf,
-      level: crewData.tier,
-      wanted_level: crewData.wanted,
-      coin: crewData.coin,
-      hold: crewData.hold,
-      description: crewData.description,
-      notes: crewData.notes,
-      upgrade_progress: upgradesToProgress(crewData.upgrades),
-    };
-  }, [crewData]);
+  const crewPatchBody = useMemo(() => crewPatchPayload(crewData), [crewData]);
 
   const crewPortraitSrc = useMemo(
     () => resolveMediaUrl(crewData.image || crewData.image_url || ""),
@@ -3714,38 +3675,43 @@ const CharacterSheetWrapper = ({
     const cid = charData.crewId;
     let cancelled = false;
     crewHydratedRef.current = false;
+    crewSyncedKeyRef.current = null;
     crewAPI
       .getCrew(cid)
       .then((d) => {
         if (cancelled) return;
-        setCrewData((p) => ({
-          ...p,
-          rep: Math.min(6, Math.max(0, Number(d.rep) || 0)),
-          turf: Math.min(6, Math.max(0, Number(d.turf) || 0)),
-          tier: Math.min(4, Math.max(0, Number(d.level) || 0)),
-          wanted: Math.min(5, Math.max(0, Number(d.wanted_level) || 0)),
-          coin: Math.min(4, Math.max(0, Number(d.coin) || 0)),
-          hold: d.hold === "weak" || d.hold === "strong" ? d.hold : p.hold,
-          description: d.description ?? "",
-          notes: d.notes ?? "",
-          image: d.image ?? "",
-          image_url: d.image_url ?? "",
-          upgrades: progressToUpgrades(d.upgrade_progress),
-          specialAbilities: (d.special_abilities || []).map((a) => ({
-            name: a.name,
-            description: a.description || "",
-          })),
-          sessionXpTriggers:
-            d.session_xp_triggers && typeof d.session_xp_triggers === "object"
-              ? d.session_xp_triggers
-              : {},
-          sessionRepContributions:
-            d.session_rep_contributions &&
-            typeof d.session_rep_contributions === "object"
-              ? d.session_rep_contributions
-              : {},
-          activeSessionCrewXpAvailable: !!d.active_session_crew_earned_xp,
-        }));
+        setCrewData((p) => {
+          const next = {
+            ...p,
+            rep: Math.min(6, Math.max(0, Number(d.rep) || 0)),
+            turf: Math.min(6, Math.max(0, Number(d.turf) || 0)),
+            tier: Math.min(4, Math.max(0, Number(d.level) || 0)),
+            wanted: Math.min(5, Math.max(0, Number(d.wanted_level) || 0)),
+            coin: Math.min(4, Math.max(0, Number(d.coin) || 0)),
+            hold: d.hold === "weak" || d.hold === "strong" ? d.hold : p.hold,
+            description: d.description ?? "",
+            notes: d.notes ?? "",
+            image: d.image ?? "",
+            image_url: d.image_url ?? "",
+            upgrades: progressToUpgrades(d.upgrade_progress),
+            specialAbilities: (d.special_abilities || []).map((a) => ({
+              name: a.name,
+              description: a.description || "",
+            })),
+            sessionXpTriggers:
+              d.session_xp_triggers && typeof d.session_xp_triggers === "object"
+                ? d.session_xp_triggers
+                : {},
+            sessionRepContributions:
+              d.session_rep_contributions &&
+              typeof d.session_rep_contributions === "object"
+                ? d.session_rep_contributions
+                : {},
+            activeSessionCrewXpAvailable: !!d.active_session_crew_earned_xp,
+          };
+          crewSyncedKeyRef.current = JSON.stringify(crewPatchPayload(next));
+          return next;
+        });
         setCrewPortraitUrlDraft(String(d.image_url || "").trim());
         setCrewFactionLinks(d.faction_relationships || []);
         crewHydratedRef.current = true;
@@ -3893,46 +3859,24 @@ const CharacterSheetWrapper = ({
     charCampaign?.campaign_characters,
   ]);
 
-  useEffect(() => {
-    if (!crewHydratedRef.current || !charData.crewId) return undefined;
-    const t = setTimeout(() => {
-      crewAPI
-        .patchCrew(charData.crewId, buildCrewPatchPayload())
-        .then(() => {
-          const cid = Number.parseInt(String(campaignId || ""), 10);
-          const wanted = Math.min(5, Math.max(0, Number(crewData.wanted) || 0));
-          const currentCampaignWanted = Number(charCampaign?.wanted_stars ?? 0);
-          if (
-            isGM &&
-            Number.isFinite(cid) &&
-            wanted !== currentCampaignWanted
-          ) {
-            campaignAPI
-              .patchCampaign(cid, { wanted_stars: wanted })
-              .then(() => onCampaignRefresh?.())
-              .catch(() => {});
-          }
-        })
-        .catch(() => {});
-    }, 900);
-    return () => clearTimeout(t);
-  }, [
-    charData.crewId,
-    buildCrewPatchPayload,
-    campaignId,
-    charCampaign?.wanted_stars,
-    isGM,
-    onCampaignRefresh,
-    crewData.rep,
-    crewData.turf,
-    crewData.tier,
-    crewData.wanted,
-    crewData.coin,
-    crewData.hold,
-    crewData.description,
-    crewData.notes,
-    crewData.upgrades,
-  ]);
+  useCrewAutosave({
+    crewId: charData.crewId,
+    hydratedRef: crewHydratedRef,
+    payload: crewPatchBody,
+    syncedKeyRef: crewSyncedKeyRef,
+    save: (body) =>
+      crewAPI.patchCrew(charData.crewId, body).then(() => {
+        const cid = Number.parseInt(String(campaignId || ""), 10);
+        const wanted = Math.min(5, Math.max(0, Number(crewData.wanted) || 0));
+        const currentCampaignWanted = Number(charCampaign?.wanted_stars ?? 0);
+        if (isGM && Number.isFinite(cid) && wanted !== currentCampaignWanted) {
+          campaignAPI
+            .patchCampaign(cid, { wanted_stars: wanted })
+            .then(() => onCampaignRefresh?.())
+            .catch(() => {});
+        }
+      }),
+  });
 
   // ─── Derived Values ──────────────────────────────────────────────────────────
 
@@ -10251,6 +10195,18 @@ const CharacterSheetWrapper = ({
         ignorePendingImageFile: true,
       });
       cleanPayloadRef.current = payload;
+    } else if (
+      payload.id &&
+      lastSavedPayloadRef.current != null &&
+      character?.heritage != null &&
+      payload.heritage === Number(character.heritage)
+    ) {
+      // The baseline was taken before the heritage list loaded. Only the
+      // server's own heritage is filled in, so a first pick still saves.
+      lastSavedPayloadRef.current = withResolvedHeritage(
+        lastSavedPayloadRef.current,
+        payload.heritage,
+      );
     }
     const isDirty = !payload.id
       ? hasMeaningfulDraftChanges(payload)
@@ -10271,7 +10227,7 @@ const CharacterSheetWrapper = ({
     };
     lastDraftMetaRef.current = meta;
     onDraftMetaChange(meta);
-  }, [onDraftMetaChange, buildPayload, saveStatus]);
+  }, [onDraftMetaChange, buildPayload, saveStatus, character?.heritage]);
 
   // Debounced auto-save (busy-collision queues via pendingResaveRef; drain rebuilds payload fresh)
   useEffect(() => {
@@ -10383,6 +10339,7 @@ const CharacterSheetWrapper = ({
           if (touches.coin) fieldTouchRef.current.coin = false;
           if (touches.stash) fieldTouchRef.current.stash = false;
           if (touches.heritage) fieldTouchRef.current.heritage = false;
+          if (touches.armor) fieldTouchRef.current.armor = false;
           // Re-assert only fields this save included. A clock autosave that
           // omitted stress must not push a stale truth-lock count over the
           // server echo (GM unmark / concurrent roll marks).
@@ -15539,18 +15496,33 @@ const CharacterSheetWrapper = ({
                         showStandArmor={showStandArmor}
                         standArmorMax={standArmorMax}
                         standArmorUsed={standArmorUsed}
-                        onStandArmorUsedChange={setStandArmorUsed}
+                        onStandArmorUsedChange={(v) => {
+                          markFieldTouch("armor");
+                          setStandArmorUsed(v);
+                        }}
                         showSpinArmor={showSpinArmor}
                         spinArmorUsed={spinArmorUsed}
-                        onSpinArmorUsedChange={setSpinArmorUsed}
+                        onSpinArmorUsedChange={(v) => {
+                          markFieldTouch("armor");
+                          setSpinArmorUsed(v);
+                        }}
                         showHamonArmor={showHamonArmor}
                         hamonArmorUsed={hamonArmorUsed}
-                        onHamonArmorUsedChange={setHamonArmorUsed}
+                        onHamonArmorUsedChange={(v) => {
+                          markFieldTouch("armor");
+                          setHamonArmorUsed(v);
+                        }}
                         inventory={charData.inventory}
                         physicalArmorUsed={physicalArmorUsed}
-                        onPhysicalArmorUsedChange={setPhysicalArmorUsed}
+                        onPhysicalArmorUsedChange={(v) => {
+                          markFieldTouch("armor");
+                          setPhysicalArmorUsed(v);
+                        }}
                         specialArmorUsed={specialArmorUsed}
-                        onSpecialArmorUsedChange={setSpecialArmorUsed}
+                        onSpecialArmorUsedChange={(v) => {
+                          markFieldTouch("armor");
+                          setSpecialArmorUsed(v);
+                        }}
                       />
                       {characterHasLegendaryGuard(abilities) ? (
                         <div
@@ -15894,10 +15866,6 @@ const CharacterSheetWrapper = ({
                         isGM={isGM}
                         onPromoteToCampaign={
                           isGM ? handlePromoteItemToCampaign : undefined
-                        }
-                        onPublishToSite={
-                          // Site-wide catalog publishing is admin only (2026-10-29).
-                          user?.is_staff ? handlePublishItemToSite : undefined
                         }
                         onShareItem={
                           character?.id && character?.user_id === user?.id

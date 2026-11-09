@@ -43,8 +43,6 @@ class CharacterHistoryUndoError(Exception):
 
 
 def _user_may_edit_character(user, character: Character) -> bool:
-    if user.is_staff:
-        return True
     if character.user_id == user.id:
         return True
     if character.campaign_id and character.campaign.gm_id == user.id:
@@ -54,8 +52,7 @@ def _user_may_edit_character(user, character: Character) -> bool:
 
 def _user_is_gm_for_character(user, character: Character) -> bool:
     return bool(
-        user.is_staff
-        or (
+        (
             character.campaign_id
             and character.campaign.gm_id == user.id
         )

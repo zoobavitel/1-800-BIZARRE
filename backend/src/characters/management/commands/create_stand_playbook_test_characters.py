@@ -7,13 +7,14 @@ per action), and a Stand record so the frontend shows action ratings and stats.
 
 Usage:
   python manage.py create_stand_playbook_test_characters
-  python manage.py create_stand_playbook_test_characters --username testuser --password testpass123
+  python manage.py create_stand_playbook_test_characters --username testuser --password "$SEED_PASSWORD"
 """
 from django.core.management.base import BaseCommand
 from django.contrib.auth.models import User
 from characters.models import (
     Character, Heritage, Vice, Ability, Stand, StandAbility, Benefit, Detriment,
 )
+from characters.management.seed_passwords import seed_password
 
 
 # SRD: 7 action dots total at creation, max 2 per action. Use flat keys (model expects these).
@@ -114,7 +115,7 @@ class Command(BaseCommand):
         parser.add_argument(
             '--password',
             type=str,
-            default='testpass123',
+            default=None,
             help='Password for the test account',
         )
         parser.add_argument(
@@ -125,7 +126,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         username = options['username']
-        password = options['password']
+        password = options['password'] or seed_password()
         clear = options['clear']
 
         user, created = User.objects.get_or_create(

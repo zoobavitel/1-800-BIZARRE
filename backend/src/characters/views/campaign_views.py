@@ -73,8 +73,6 @@ class CampaignViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        if user.is_staff:
-            return Campaign.objects.all()
         return Campaign.objects.filter(
             models.Q(gm=user) | models.Q(characters__user=user) | models.Q(players=user)
         ).distinct()
@@ -84,7 +82,7 @@ class CampaignViewSet(viewsets.ModelViewSet):
 
     def update(self, request, *args, **kwargs):
         campaign = self.get_object()
-        if campaign.gm != request.user and not request.user.is_staff:
+        if campaign.gm != request.user:
             return Response(
                 {"error": "Only the GM can update this campaign"},
                 status=status.HTTP_403_FORBIDDEN,
@@ -93,7 +91,7 @@ class CampaignViewSet(viewsets.ModelViewSet):
 
     def partial_update(self, request, *args, **kwargs):
         campaign = self.get_object()
-        if campaign.gm != request.user and not request.user.is_staff:
+        if campaign.gm != request.user:
             return Response(
                 {"error": "Only the GM can update this campaign"},
                 status=status.HTTP_403_FORBIDDEN,
@@ -204,7 +202,7 @@ class CampaignViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="invite")
     def invite_player(self, request, pk=None):
         campaign = self.get_object()
-        if campaign.gm != request.user and not request.user.is_staff:
+        if campaign.gm != request.user:
             return Response(
                 {"error": "Only the GM can invite players."},
                 status=status.HTTP_403_FORBIDDEN,
@@ -256,7 +254,7 @@ class CampaignViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="withdraw-invitation")
     def withdraw_invitation(self, request, pk=None):
         campaign = self.get_object()
-        if campaign.gm != request.user and not request.user.is_staff:
+        if campaign.gm != request.user:
             return Response(
                 {"error": "Only the GM can withdraw invitations."},
                 status=status.HTTP_403_FORBIDDEN,
@@ -289,7 +287,7 @@ class CampaignViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="remove-player")
     def remove_player(self, request, pk=None):
         campaign = self.get_object()
-        if campaign.gm != request.user and not request.user.is_staff:
+        if campaign.gm != request.user:
             return Response(
                 {"error": "Only the GM can remove players."},
                 status=status.HTTP_403_FORBIDDEN,
@@ -348,7 +346,7 @@ class CampaignViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["get"], url_path="invitable-users")
     def invitable_users(self, request, pk=None):
         campaign = self.get_object()
-        if campaign.gm != request.user and not request.user.is_staff:
+        if campaign.gm != request.user:
             return Response(
                 {"error": "Only the GM can view invitable users."},
                 status=status.HTTP_403_FORBIDDEN,
@@ -378,7 +376,7 @@ class CampaignViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="deactivate")
     def deactivate(self, request, pk=None):
         campaign = self.get_object()
-        if campaign.gm != request.user and not request.user.is_staff:
+        if campaign.gm != request.user:
             return Response(
                 {"error": "Only the GM can deactivate this campaign."},
                 status=status.HTTP_403_FORBIDDEN,
@@ -390,7 +388,7 @@ class CampaignViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="activate")
     def activate(self, request, pk=None):
         campaign = self.get_object()
-        if campaign.gm != request.user and not request.user.is_staff:
+        if campaign.gm != request.user:
             return Response(
                 {"error": "Only the GM can activate this campaign."},
                 status=status.HTTP_403_FORBIDDEN,
@@ -426,6 +424,18 @@ class CampaignViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+        # A PC belongs to one campaign: it must be removed from the old one
+        # first (that also clears the old campaign's crew).
+        if character.campaign_id and character.campaign_id != campaign.id:
+            return Response(
+                {
+                    "error": (
+                        f'Remove this character from "{character.campaign.name}" first.'
+                    )
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
         character.campaign = campaign
         character.save(update_fields=["campaign"])
         if not campaign.players.filter(id=request.user.id).exists():
@@ -451,7 +461,7 @@ class CampaignViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        is_gm = campaign.gm == request.user or request.user.is_staff
+        is_gm = campaign.gm == request.user
         try:
             if is_gm:
                 character = Character.objects.select_related("crew").get(
@@ -490,7 +500,7 @@ class CampaignViewSet(viewsets.ModelViewSet):
     def showcase_npc(self, request, pk=None):
         """Add an NPC to the campaign showcase (opposition in Entanglement/All-Out-Brawl)."""
         campaign = self.get_object()
-        if campaign.gm != request.user and not request.user.is_staff:
+        if campaign.gm != request.user:
             return Response(
                 {"error": "Only the GM can add NPCs to the showcase."},
                 status=status.HTTP_403_FORBIDDEN,
@@ -522,7 +532,7 @@ class CampaignViewSet(viewsets.ModelViewSet):
     def gm_history(self, request, pk=None):
         """Merged character sheet + progress-clock audit for the GM (paginated)."""
         campaign = self.get_object()
-        if campaign.gm != request.user and not request.user.is_staff:
+        if campaign.gm != request.user:
             return Response(
                 {"error": "Only the GM can view campaign history."},
                 status=status.HTTP_403_FORBIDDEN,
@@ -652,13 +662,11 @@ class ShowcasedNPCViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        if user.is_staff:
-            return ShowcasedNPC.objects.all()
         return ShowcasedNPC.objects.filter(campaign__gm=user)
 
     def partial_update(self, request, *args, **kwargs):
         obj = self.get_object()
-        if obj.campaign.gm != request.user and not request.user.is_staff:
+        if obj.campaign.gm != request.user:
             return Response(
                 {"error": "Only the GM can update showcased NPCs."},
                 status=status.HTTP_403_FORBIDDEN,
@@ -667,7 +675,7 @@ class ShowcasedNPCViewSet(viewsets.ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         obj = self.get_object()
-        if obj.campaign.gm != request.user and not request.user.is_staff:
+        if obj.campaign.gm != request.user:
             return Response(
                 {"error": "Only the GM can remove showcased NPCs."},
                 status=status.HTTP_403_FORBIDDEN,

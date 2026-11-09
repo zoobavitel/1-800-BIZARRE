@@ -6,7 +6,7 @@ from django.contrib.auth.models import User
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from characters.models import Character, Heritage, Stand
+from characters.models import Campaign, Character, Heritage, Stand
 from characters.services.xp_allocation import (
     apply_level_up,
     apply_minor_advance,
@@ -294,7 +294,10 @@ class AdvanceAutosaveGuardTests(TestCase):
     def test_gm_force_stand_stat_bypasses_sheet_guard(self):
         self.character.xp_clocks = {"playbook": 10}
         self.character.save(update_fields=["xp_clocks"])
-        gm = User.objects.create_user(username="gm_force", password="x", is_staff=True)
+        # The campaign GM, not staff: staff get no special access (2026-11-08).
+        gm = User.objects.create_user(username="gm_force", password="x")
+        self.character.campaign = Campaign.objects.create(name="gm_force camp", gm=gm)
+        self.character.save(update_fields=["campaign"])
         self.client.force_authenticate(user=gm)
 
         response = self.client.post(
@@ -310,7 +313,10 @@ class AdvanceAutosaveGuardTests(TestCase):
     def test_gm_force_stand_stat_decrease_undoes_tip_raise(self):
         self.character.xp_clocks = {"playbook": 10}
         self.character.save(update_fields=["xp_clocks"])
-        gm = User.objects.create_user(username="gm_down", password="x", is_staff=True)
+        # The campaign GM, not staff: staff get no special access (2026-11-08).
+        gm = User.objects.create_user(username="gm_down", password="x")
+        self.character.campaign = Campaign.objects.create(name="gm_down camp", gm=gm)
+        self.character.save(update_fields=["campaign"])
         self.client.force_authenticate(user=gm)
 
         up = self.client.post(
@@ -352,7 +358,10 @@ class AdvanceAutosaveGuardTests(TestCase):
         self.character.refresh_from_db()
         self.assertEqual(self.character.stand.power, "A")
 
-        gm = User.objects.create_user(username="gm_chargen_down", password="x", is_staff=True)
+        # The campaign GM, not staff: staff get no special access (2026-11-08).
+        gm = User.objects.create_user(username="gm_chargen_down", password="x")
+        self.character.campaign = Campaign.objects.create(name="gm_chargen_down camp", gm=gm)
+        self.character.save(update_fields=["campaign"])
         self.client.force_authenticate(user=gm)
         down = self.client.post(
             f"/api/characters/{self.character.id}/gm-force-stand-stat/",
