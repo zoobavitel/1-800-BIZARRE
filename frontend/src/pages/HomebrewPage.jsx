@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "../features/auth";
+import { buildRouteHref } from "../utils/spaNavigation";
 import {
   characterAPI,
   equipmentAPI,
@@ -44,22 +45,27 @@ const S = {
   label: { display: "flex", flexDirection: "column", gap: "4px", fontSize: "11px", color: "var(--text-muted)" },
 };
 
+// Sub-pages of homebrew items. "items" is the search page (route
+// #homebrew/items); "create" is #homebrew/create/item.
 const ITEM_TABS = [
-  { id: "browse", label: "Browse" },
+  { id: "items", label: "Browse items" },
+  { id: "create", label: "Create item" },
   { id: "collection", label: "My collection" },
   { id: "creations", label: "My creations" },
-  { id: "create", label: "Create item" },
 ];
 
-// Homebrew kinds, like D&D Beyond's homebrew page. Only items exist so far;
-// the rest are planned stories (S12 to S14).
+// Homebrew kinds on the landing page, like D&D Beyond's homebrew page. Only
+// items are built; the rest are planned stories (S13 onward).
 const KINDS = [
-  { id: "items", label: "Items", live: true },
-  { id: "heritages", label: "Heritages" },
-  { id: "standard", label: "Standard abilities" },
-  { id: "spin", label: "Spin abilities" },
-  { id: "hamon", label: "Hamon abilities" },
+  { id: "heritages", one: "heritage", label: "Heritages",
+    blurb: "New heritages, or variations of existing ones, with their own benefits and detriments." },
+  { id: "abilities", one: "ability", label: "Abilities", blurb: "Standard abilities anyone can take." },
+  { id: "items", one: "item", label: "Items", blurb: "Gear, implements, weapons and other equipment.", live: true },
+  { id: "monsters", one: "monster", label: "Monsters", blurb: "Enemies and creatures for GMs to use as NPCs." },
+  { id: "playbooks", one: "playbook", label: "Playbooks", blurb: "Stand, Spin and Hamon playbooks and their abilities." },
 ];
+
+const linkBtn = { display: "inline-block", textDecoration: "none" };
 
 const EMPTY_FORM = { name: "", description: "", category: "gear", load: 1, quality: 1 };
 
@@ -415,16 +421,118 @@ function HomebrewItemList({ which, initialQuery = "", onUseTemplate, onSearch, r
  * published homebrew, keep a collection, manage your creations or create
  * one (S8, S9). Only items exist so far.
  */
+function HomebrewLanding() {
+  return (
+    <div style={S.page}>
+      <div style={S.card}>
+        <h2 style={S.title}>Homebrew</h2>
+        <div style={S.muted}>
+          Make your own content, find what other players and GMs published, and keep the ones you like in your
+          collection.
+        </div>
+        <div style={{ ...S.tabs, marginTop: "10px", marginBottom: 0 }}>
+          <a style={{ ...S.btn, ...linkBtn }} href={buildRouteHref("homebrew", { tab: "collection" })}>
+            My collection
+          </a>
+          <a style={{ ...S.btn, ...linkBtn }} href={buildRouteHref("homebrew", { tab: "creations" })}>
+            My creations
+          </a>
+        </div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "12px" }}>
+        {KINDS.map((k) => (
+          <div key={k.id} style={{ ...S.card, marginBottom: 0, opacity: k.live ? 1 : 0.7 }}>
+            <h3 style={{ ...S.title, fontSize: "14px" }}>{k.label}</h3>
+            <div style={{ ...S.muted, minHeight: "34px" }}>{k.blurb}</div>
+            <div style={{ display: "flex", gap: "6px", marginTop: "10px", flexWrap: "wrap" }}>
+              {k.live ? (
+                <>
+                  <a
+                    style={{ ...S.btn, ...linkBtn }}
+                    aria-label={`View homebrew ${k.id}`}
+                    href={buildRouteHref("homebrew", { tab: k.id })}
+                  >
+                    View homebrew
+                  </a>
+                  <a
+                    style={{ ...S.btn, ...linkBtn }}
+                    aria-label={`Create homebrew ${k.one}`}
+                    href={buildRouteHref("homebrew", { tab: "create", q: k.one })}
+                  >
+                    Create homebrew
+                  </a>
+                </>
+              ) : (
+                <>
+                  <button type="button" style={S.btn} disabled aria-label={`View homebrew ${k.id} (coming soon)`}>
+                    View homebrew
+                  </button>
+                  <button type="button" style={S.btn} disabled aria-label={`Create homebrew ${k.one} (coming soon)`}>
+                    Create homebrew
+                  </button>
+                </>
+              )}
+            </div>
+            {k.live ? null : <div style={{ ...S.muted, marginTop: "6px" }}>Coming soon</div>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ComingSoon({ kind }) {
+  const name = kind.label.toLowerCase();
+  return (
+    <div style={S.page}>
+      <div style={S.card}>
+        <h2 style={S.title}>Homebrew {name}</h2>
+        <div style={S.muted}>Homebrew {name} are coming soon.</div>
+        <a style={{ ...S.btn, ...linkBtn, marginTop: "10px" }} href={buildRouteHref("homebrew")}>
+          ← Back to Homebrew
+        </a>
+      </div>
+    </div>
+  );
+}
+
+/** Which page a #homebrew route opens. */
+function homebrewView(tab, query) {
+  if (!tab) return { page: "landing" };
+  if (tab === "browse" || tab === "items") return { page: "items", sub: "items" };
+  if (tab === "collection" || tab === "creations") return { page: "items", sub: tab };
+  if (tab === "create") {
+    const kind = KINDS.find((k) => k.one === (query || "item"));
+    if (!kind || kind.live) return { page: "items", sub: "create" };
+    return { page: "soon", kind };
+  }
+  const kind = KINDS.find((k) => k.id === tab);
+  if (kind && !kind.live) return { page: "soon", kind };
+  return { page: "landing" };
+}
+
+/**
+ * Homebrew pages, modelled on D&D Beyond's (2026-11-09):
+ * #homebrew (landing cards), #homebrew/items (search),
+ * #homebrew/create/item, #homebrew/collection, #homebrew/creations.
+ */
 export default function HomebrewPage({ tab, query = "", onNavigate }) {
-  const initial = ITEM_TABS.some((t) => t.id === tab) ? tab : "browse";
-  const [current, setCurrent] = useState(initial);
+  const view = homebrewView(tab, query);
+  if (view.page === "landing") return <HomebrewLanding />;
+  if (view.page === "soon") return <ComingSoon kind={view.kind} />;
+  return <HomebrewItemsPage sub={view.sub} query={tab === "create" ? "" : query} onNavigate={onNavigate} />;
+}
+
+/** Homebrew items: search (browse), create, my collection, my creations. */
+function HomebrewItemsPage({ sub, query = "", onNavigate }) {
+  const [current, setCurrent] = useState(sub);
   const [template, setTemplate] = useState(null);
   const { user } = useAuth();
   const [sheets, setSheets] = useState([]);
 
   useEffect(() => {
-    if (ITEM_TABS.some((t) => t.id === tab)) setCurrent(tab);
-  }, [tab]);
+    setCurrent(sub);
+  }, [sub]);
 
   // For the S10 action: my sheets.
   useEffect(() => {
@@ -440,7 +548,7 @@ export default function HomebrewPage({ tab, query = "", onNavigate }) {
 
   const go = (id, extra) => {
     setCurrent(id);
-    onNavigate?.({ tab: id, ...extra });
+    onNavigate?.(id === "create" ? { tab: "create", q: "item" } : { tab: id, ...extra });
   };
 
   const startFromTemplate = (item) => {
@@ -450,31 +558,11 @@ export default function HomebrewPage({ tab, query = "", onNavigate }) {
 
   return (
     <div style={S.page}>
-      <div style={S.card}>
-        <h2 style={S.title}>Homebrew</h2>
-        <div style={S.muted}>
-          Make your own content, find what other players and GMs published, and keep the ones you like in your
-          collection.
-        </div>
-        <div style={{ ...S.tabs, marginTop: "10px", marginBottom: 0 }}>
-          {KINDS.map((k) => (
-            <button
-              key={k.id}
-              type="button"
-              disabled={!k.live}
-              aria-label={k.live ? k.label : `${k.label} (coming later)`}
-              style={{
-                ...S.btn,
-                opacity: k.live ? 1 : 0.5,
-                cursor: k.live ? "pointer" : "default",
-                borderColor: k.live ? "var(--sheet-label)" : "var(--border)",
-              }}
-            >
-              {k.label}
-              {k.live ? "" : " · coming later"}
-            </button>
-          ))}
-        </div>
+      <div style={{ ...S.muted, marginBottom: "8px" }}>
+        <a href={buildRouteHref("homebrew")} style={{ color: "inherit" }}>
+          Homebrew
+        </a>{" "}
+        › Items
       </div>
       <div style={S.card}>
         <h2 style={S.title}>Homebrew items</h2>
@@ -501,8 +589,8 @@ export default function HomebrewPage({ tab, query = "", onNavigate }) {
           <MySharedItems renderActions={renderActions} />
         ) : (
           <HomebrewItemList
-            which={current}
-            initialQuery={current === "browse" ? query : ""}
+            which={current === "items" ? "browse" : current}
+            initialQuery={current === "items" ? query : ""}
             onUseTemplate={startFromTemplate}
             renderActions={renderActions}
           />

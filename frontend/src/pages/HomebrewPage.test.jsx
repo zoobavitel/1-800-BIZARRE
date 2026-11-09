@@ -101,16 +101,8 @@ describe("Homebrew page: find homebrew (S9)", () => {
     equipmentAPI.uncollect.mockResolvedValue({ ...lantern, in_my_collection: false });
   });
 
-  it("shows homebrew types, with only Items live for now", () => {
-    render(<HomebrewPage />);
-    expect(screen.getByRole("button", { name: "Items" })).toBeEnabled();
-    for (const kind of ["Heritages", "Standard abilities", "Spin abilities", "Hamon abilities"]) {
-      expect(screen.getByRole("button", { name: `${kind} (coming later)` })).toBeDisabled();
-    }
-  });
-
   it("opens on Browse and searches published homebrew", async () => {
-    render(<HomebrewPage query="lantern" />);
+    render(<HomebrewPage tab="items" query="lantern" />);
     await waitFor(() =>
       expect(equipmentAPI.list).toHaveBeenCalledWith({ homebrew: "browse", q: "lantern" }),
     );
@@ -171,5 +163,53 @@ describe("Homebrew page: use homebrew (S10)", () => {
   it("offers the same actions on my collection", async () => {
     render(<HomebrewPage tab="collection" />);
     expect(await screen.findByLabelText("Sheet for Lucky Coin")).toBeInTheDocument();
+  });
+});
+
+describe("Homebrew landing page, like D&D Beyond's (2026-11-09)", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    equipmentAPI.list.mockResolvedValue([]);
+  });
+
+  it("shows a card per kind with View and Create", () => {
+    render(<HomebrewPage />);
+    for (const kind of ["Heritages", "Abilities", "Items", "Monsters", "Playbooks"]) {
+      expect(screen.getByRole("heading", { name: kind })).toBeInTheDocument();
+    }
+    expect(screen.getByRole("link", { name: "View homebrew items" })).toHaveAttribute("href", "#homebrew/items");
+    expect(screen.getByRole("link", { name: "Create homebrew item" })).toHaveAttribute(
+      "href",
+      "#homebrew/create/item",
+    );
+  });
+
+  it("marks the kinds that aren't built yet as coming soon", () => {
+    render(<HomebrewPage />);
+    expect(screen.getByRole("button", { name: "View homebrew heritages (coming soon)" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Create homebrew heritage (coming soon)" })).toBeDisabled();
+  });
+
+  it("links to my collection and my creations", () => {
+    render(<HomebrewPage />);
+    expect(screen.getByRole("link", { name: "My collection" })).toHaveAttribute("href", "#homebrew/collection");
+    expect(screen.getByRole("link", { name: "My creations" })).toHaveAttribute("href", "#homebrew/creations");
+  });
+
+  it("opens the items search page from its route", async () => {
+    render(<HomebrewPage tab="items" />);
+    await waitFor(() => expect(equipmentAPI.list).toHaveBeenCalledWith({ homebrew: "browse" }));
+    expect(screen.getByLabelText("Search homebrew items")).toBeInTheDocument();
+  });
+
+  it("opens the item create page from its route", () => {
+    render(<HomebrewPage tab="create" query="item" />);
+    expect(screen.getByLabelText("Homebrew item name")).toBeInTheDocument();
+  });
+
+  it("shows coming soon for a kind that isn't built yet", () => {
+    render(<HomebrewPage tab="heritages" />);
+    expect(screen.getByText(/Homebrew heritages are coming soon/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Back to Homebrew/ })).toHaveAttribute("href", "#homebrew");
   });
 });
