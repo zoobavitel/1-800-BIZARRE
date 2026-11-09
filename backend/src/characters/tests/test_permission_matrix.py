@@ -108,11 +108,13 @@ def _both(method, template, cls, reason):
 # key: "<METHOD> <url template> as <actor>" -> (class, reason)
 EXPECTED = {
     # KNOWN HOLES. Each fix PR deletes its own entries.
-    **_both("POST", "/api/equipment-items/", OPEN, "KNOWN HOLE, S7: anyone can create a global TEMPLATE item"),
     **_both("POST", "/api/user-profiles/", ERROR, "KNOWN BUG, D: a second profile hits the unique constraint (500)"),
 
     # BY DESIGN.
     **_both("POST", "/api/campaigns/", OPEN, "BY DESIGN: anyone may create their own campaign and becomes its GM"),
+    # The SRD catalog is the one thing staff manage through the API (the body
+    # creates a TEMPLATE item). Everything else is closed to staff (2026-11-08).
+    "POST /api/equipment-items/ as staff": (OPEN, "BY DESIGN: staff add SRD catalog items"),
     "POST /api/characters/ as member": (OPEN, "BY DESIGN: a player may add a PC to a campaign they play in"),
     "POST /api/crews/ as member": (OPEN, "BY DESIGN: a player may create a crew in their campaign"),
     "PATCH /api/crews/{id}/ as member": (OPEN, "BY DESIGN: crew members edit the shared crew sheet, including level, xp, coin, rep, hold, turf and wanted_level (user, 2026-11-02; see test_member_crew_stat_patch)"),
