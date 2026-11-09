@@ -54,19 +54,18 @@ class RollViewSet(viewsets.ModelViewSet):
         if group_action_id:
             qs = qs.filter(group_action_id=group_action_id)
         user = self.request.user
-        if not user.is_staff:
-            qs = qs.filter(
-                models.Q(session__campaign__gm=user) |
-                models.Q(session__campaign__characters__user=user) |
-                models.Q(session__campaign__players=user)
-            ).distinct()
+        qs = qs.filter(
+            models.Q(session__campaign__gm=user) |
+            models.Q(session__campaign__characters__user=user) |
+            models.Q(session__campaign__players=user)
+        ).distinct()
         return qs.order_by('-timestamp')
 
     def partial_update(self, request, *args, **kwargs):
         """GM-only: update roll fields (position/effect/fortune + manual corrections)."""
         roll = self.get_object()
         campaign = roll.session.campaign
-        if campaign.gm_id != request.user.id and not request.user.is_staff:
+        if campaign.gm_id != request.user.id:
             return Response(
                 {'error': 'Only the GM can edit roll records.'},
                 status=status.HTTP_403_FORBIDDEN
@@ -168,7 +167,7 @@ class RollViewSet(viewsets.ModelViewSet):
         """GM-only: Grant desperate-action XP (+1, or +2 for 0-dot per SRD)."""
         roll = self.get_object()
         campaign = roll.session.campaign
-        if campaign.gm_id != request.user.id and not request.user.is_staff:
+        if campaign.gm_id != request.user.id:
             return Response(
                 {'error': 'Only the GM can grant XP from rolls.'},
                 status=status.HTTP_403_FORBIDDEN
@@ -240,7 +239,7 @@ class RollViewSet(viewsets.ModelViewSet):
                 {'error': 'Character must belong to session campaign.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        is_gm_or_staff = session.campaign.gm_id == request.user.id or request.user.is_staff
+        is_gm_or_staff = session.campaign.gm_id == request.user.id
         is_character_owner = character.user_id == request.user.id
         if not is_gm_or_staff and not is_character_owner:
             return Response(
@@ -253,7 +252,7 @@ class RollViewSet(viewsets.ModelViewSet):
         """GM-only: remove a roll record from history."""
         roll = self.get_object()
         campaign = roll.session.campaign
-        if campaign.gm_id != request.user.id and not request.user.is_staff:
+        if campaign.gm_id != request.user.id:
             return Response(
                 {'error': 'Only the GM can remove roll records.'},
                 status=status.HTTP_403_FORBIDDEN,

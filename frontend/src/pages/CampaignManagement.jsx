@@ -522,9 +522,8 @@ export function CampaignEquipmentPanel({ campaign, onRefresh }) {
 
   const canDeleteCatalogItem = (item) => {
     if (!user) return false;
-    if (user.is_staff) return true;
-    // Core catalog (SRD, site) is staff-only. A public item is edited by its
-    // creator on their account page, not here.
+    // Core catalog (SRD, site) is managed in Django admin. Homebrew is
+    // edited by its creator on the Homebrew page, not here.
     if (["TEMPLATE", "SITE", "SHARED"].includes(item.scope)) return false;
     if (item.created_by != null && Number(item.created_by) === Number(user.id)) {
       return true;

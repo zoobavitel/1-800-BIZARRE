@@ -45,9 +45,10 @@ class SessionWriteCheckTests(TestCase):
     def test_player_cannot_create_a_session(self):
         self.assertEqual(self._create(self.player, self.campaign).status_code, 403)
 
-    def test_gm_and_staff_can_create_a_session(self):
+    def test_gm_can_create_a_session_and_staff_cannot(self):
         self.assertEqual(self._create(self.gm, self.campaign).status_code, 201)
-        self.assertEqual(self._create(self.staff, self.campaign).status_code, 201)
+        # Staff get no special access on the site (2026-11-08).
+        self.assertEqual(self._create(self.staff, self.campaign).status_code, 403)
 
     # Loadout PATCH
 

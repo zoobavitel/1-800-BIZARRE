@@ -467,7 +467,6 @@ export function isUserCampaignGmForCharacter(
   if (user?.id == null) return false;
   if (campaignId == null) return false;
   if (Boolean(isGMProp)) return true;
-  if (user.is_staff) return true;
   const gmId = campaignRecord?.gm?.id ?? campaignRecord?.gm;
   return gmId != null && Number(gmId) === Number(user.id);
 }
@@ -764,7 +763,22 @@ export const SERVER_OWNED_FIELD_TOUCH_KEYS = [
   "coin",
   "stash",
   "heritage",
+  "armor",
 ];
+
+/** Sheet armor counts covered by the "armor" touch key. */
+export const ARMOR_USED_KEYS = [
+  "standArmorUsed",
+  "physicalArmorUsed",
+  "spinArmorUsed",
+  "hamonArmorUsed",
+  "specialArmorUsed",
+];
+
+/** An untouched field-touch map with every key in SERVER_OWNED_FIELD_TOUCH_KEYS. */
+export function freshFieldTouches() {
+  return Object.fromEntries(SERVER_OWNED_FIELD_TOUCH_KEYS.map((k) => [k, false]));
+}
 
 /**
  * Pure healing-clock advance (recover roll / manual +). Returns new filled count
@@ -821,6 +835,15 @@ export function mergeServerOwnedCharacterFields(
   }
   if (!touches.stash && Array.isArray(serverCharacter.stash)) {
     next.stash = serverCharacter.stash;
+  }
+  // Armor ticks: take the server's counts unless the player is mid-edit, so
+  // a reload after a save can't leave an old count for the autosave to send.
+  if (!touches.armor) {
+    for (const key of ARMOR_USED_KEYS) {
+      if (typeof serverCharacter[key] === "number") {
+        next[key] = serverCharacter[key];
+      }
+    }
   }
   // XP tracks + free pool are server-owned (autosave never sends them). Take the
   // server copy unless the player is mid-spend on the XP card.

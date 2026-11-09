@@ -404,6 +404,8 @@ class Crew(models.Model):
 
     coin = models.IntegerField(default=0)
     stash = models.IntegerField(default=0)
+    # Unused since 2026-11-03: stash is personal (Character.stash_slots).
+    # Drop in a cleanup PR.
     stash_slots = models.JSONField(
         default=_default_stash_slots,
         blank=True,

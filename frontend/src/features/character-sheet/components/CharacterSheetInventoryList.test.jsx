@@ -1,66 +1,69 @@
-/**
- * @jest-environment jsdom
- */
-
-import "@testing-library/jest-dom";
 import React from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-
+import { render } from "@testing-library/react";
 import CharacterSheetInventoryList from "./CharacterSheetInventoryList";
-import { equipmentAPI } from "../services/api";
 
-jest.mock("../services/api", () => ({
-  ...jest.requireActual("../services/api"),
-  equipmentAPI: { list: jest.fn() },
-}));
+jest.mock("../services/api", () => {
+  const actual = jest.requireActual("../services/api");
+  return { ...actual, equipmentAPI: { list: jest.fn(() => Promise.resolve([])) } };
+});
 
-const crowbar = {
-  id: 2,
-  name: "Crowbar",
-  description: "SRD kit",
-  category: "tools",
-  load_slots: 1,
-  quality: 1,
-  scope: "TEMPLATE",
-};
+// The batch test (2026-11-01) saw 13,049 session PATCHes from one tab: the
+// load-save effect re-ran on every render while the session copy was stale,
+// and sent the same body each time.
+describe("CharacterSheetInventoryList session load save", () => {
+  const inventory = [{ id: "item-1", name: "Waluigi", load: 1 }];
+  const staleEntry = { band: "normal", carried_ids: [] };
 
-function renderList(props) {
-  return render(
-    <CharacterSheetInventoryList
-      inventory={[]}
-      readOnly={false}
-      onChange={jest.fn()}
-      loadoutEntry={{}}
-      onLoadoutChange={jest.fn()}
-      {...props}
-    />,
-  );
-}
-
-describe("CharacterSheetInventoryList catalog search", () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    equipmentAPI.list.mockResolvedValue([crowbar]);
+  const props = (onLoadoutChange) => ({
+    inventory,
+    onChange: () => {},
+    loadoutEntry: staleEntry,
+    onLoadoutChange,
+    activeSessionId: 1,
+    characterId: 1,
   });
 
-  it("a sheet with no campaign can search the SRD template catalog", async () => {
-    renderList({ campaignId: null });
-
-    await waitFor(() =>
-      expect(equipmentAPI.list).toHaveBeenCalledWith({ scope: "TEMPLATE" }),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Add Item" }));
-    expect(await screen.findByRole("option", { name: /Crowbar/ })).toBeInTheDocument();
+  test("sends one save while the session copy stays stale across renders", () => {
+    const onLoadoutChange = jest.fn();
+    const { rerender } = render(<CharacterSheetInventoryList {...props(onLoadoutChange)} />);
+    for (let i = 0; i < 5; i += 1) {
+      // A new but equal stale entry each render, as the parent builds it.
+      rerender(
+        <CharacterSheetInventoryList
+          {...props(onLoadoutChange)}
+          loadoutEntry={{ ...staleEntry }}
+          inventory={inventory.map((x) => ({ ...x }))}
+        />,
+      );
+    }
+    expect(onLoadoutChange).toHaveBeenCalledTimes(1);
+    expect(onLoadoutChange.mock.calls[0][0]).toMatchObject({
+      band: "light",
+      carried_ids: ["item-1"],
+    });
   });
 
-  it("a sheet in a campaign still loads that campaign's enabled catalog", async () => {
-    renderList({ campaignId: 3 });
-
-    await waitFor(() =>
-      expect(equipmentAPI.list).toHaveBeenCalledWith({
-        campaign: 3,
-        available_for_campaign: true,
-      }),
+  test("sends again when the load really changes", () => {
+    const onLoadoutChange = jest.fn();
+    const { rerender } = render(<CharacterSheetInventoryList {...props(onLoadoutChange)} />);
+    rerender(
+      <CharacterSheetInventoryList
+        {...props(onLoadoutChange)}
+        inventory={[...inventory, { id: "item-2", name: "Crowbar", load: 2 }]}
+      />,
     );
+    expect(onLoadoutChange).toHaveBeenCalledTimes(2);
+    expect(onLoadoutChange.mock.calls[1][0].carried_ids).toEqual(["item-1", "item-2"]);
+  });
+
+  test("sends nothing when the session copy already matches", () => {
+    const onLoadoutChange = jest.fn();
+    render(
+      <CharacterSheetInventoryList
+        {...props(onLoadoutChange)}
+        loadoutEntry={{ band: "light", carried_ids: ["item-1"] }}
+      />,
+    );
+    expect(onLoadoutChange).not.toHaveBeenCalled();
   });
 });

@@ -72,7 +72,9 @@ from characters.models import (
 )
 
 CLOSED, OPEN, INVALID, ERROR = "closed", "open", "invalid", "error"
-ACTORS = ("stranger", "member")
+# "staff" is a staff account outside the campaign. Staff get no special
+# access on the site (2026-11-08); only SRD catalog writes stay staff-only.
+ACTORS = ("stranger", "member", "staff")
 READ_METHODS = {"GET", "HEAD", "OPTIONS"}
 
 
@@ -112,7 +114,7 @@ EXPECTED = {
     **_both("POST", "/api/campaigns/", OPEN, "BY DESIGN: anyone may create their own campaign and becomes its GM"),
     "POST /api/characters/ as member": (OPEN, "BY DESIGN: a player may add a PC to a campaign they play in"),
     "POST /api/crews/ as member": (OPEN, "BY DESIGN: a player may create a crew in their campaign"),
-    "PATCH /api/crews/{id}/ as member": (OPEN, "BY DESIGN: crew members edit name, stash, description, notes and upgrade progress; level, xp, coin, rep, hold, turf and wanted_level are GM only since S5 (see test_member_crew_stat_patch)"),
+    "PATCH /api/crews/{id}/ as member": (OPEN, "BY DESIGN: crew members edit the shared crew sheet, including level, xp, coin, rep, hold, turf and wanted_level (user, 2026-11-02; see test_member_crew_stat_patch)"),
     "POST /api/crews/{id}/propose-name/ as member": (OPEN, "BY DESIGN: crew members propose crew names"),
     "POST /api/crews/{id}/approve-name/ as member": (OPEN, "BY DESIGN: crew members approve a proposed crew name"),
     "POST /api/campaigns/{id}/increment-wanted/ as member": (OPEN, "BY DESIGN (U4): any member may bump the wanted level"),
@@ -300,7 +302,9 @@ class PermissionMatrixTests(TestCase):
         """A new user for one request. Called inside that request's savepoint."""
         PermissionMatrixTests._fresh += 1
         n = PermissionMatrixTests._fresh
-        user = User.objects.create_user(username=f"pm_{kind}_{n}", password=f"pw-pm-{kind}-{n}")
+        user = User.objects.create_user(
+            username=f"pm_{kind}_{n}", password=f"pw-pm-{kind}-{n}", is_staff=(kind == "staff")
+        )
         UserProfile.objects.get_or_create(user=user)
         if kind == "member":
             self.campaign.players.add(user)
@@ -372,7 +376,10 @@ class PermissionMatrixTests(TestCase):
                 current = privileged.get(url)
                 if current.status_code == 200 and isinstance(current.data, dict):
                     body = json.loads(json.dumps(current.data, default=str))
+            key = f"{method} {template}"
             for actor in ACTORS:
+                if actor == "staff" and self.allowed_user(prefix, key) is self.staff:
+                    continue  # SRD catalog: staff are the allowed actor there.
                 with transaction.atomic():
                     user = self.fresh_actor(actor)
                     actor_body = dict(body) if isinstance(body, dict) else body
@@ -424,8 +431,8 @@ class PermissionMatrixTests(TestCase):
         self.assertEqual(problems, [], "\n" + "\n".join(problems))
 
     def test_member_crew_stat_patch(self):
-        """S5: level, xp, coin, rep, hold, turf and wanted_level are GM only
-        (user, 2026-10-26). A member's PATCH of coin is refused and coin stays."""
+        """Crew members may change the crew's stats (user, 2026-11-02; S5 had
+        made them GM only). A member's PATCH of coin saves."""
         with transaction.atomic():
             member = self.fresh_actor("member")
             coin_before = self.crew.coin
@@ -433,5 +440,5 @@ class PermissionMatrixTests(TestCase):
             self.crew.refresh_from_db()
             coin_after = self.crew.coin
             transaction.set_rollback(True)
-        self.assertEqual(response.status_code, 403, response.content)
-        self.assertEqual(coin_after, coin_before)
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(coin_after, coin_before + 3)

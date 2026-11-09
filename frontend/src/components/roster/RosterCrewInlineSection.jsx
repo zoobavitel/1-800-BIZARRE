@@ -38,7 +38,6 @@ export default function RosterCrewInlineSection({
         rep: String(c.rep ?? ""),
         turf: String(c.turf ?? ""),
         coin: String(c.coin ?? ""),
-        stash: String(c.stash ?? ""),
         xp: String(c.xp ?? ""),
         advancement_points: String(c.advancement_points ?? ""),
       };
@@ -115,9 +114,6 @@ export default function RosterCrewInlineSection({
                 `${rel.faction_name || rel.faction_id}: ${rel.reputation_value}`,
             )
           : [];
-        const stashFilled = Array.isArray(crew.stash_slots)
-          ? crew.stash_slots.filter(Boolean).length
-          : null;
 
         return (
           <div
@@ -306,25 +302,6 @@ export default function RosterCrewInlineSection({
                       disabled={busy}
                     />
                   </CrewField>
-                  <CrewField label="Stash" busy={busy} S={S}>
-                    <input
-                      style={S.inp}
-                      value={d.stash ?? ""}
-                      inputMode="numeric"
-                      onChange={(e) =>
-                        setCrewDraftById((p) => ({
-                          ...p,
-                          [crew.id]: { ...(p[crew.id] || {}), stash: e.target.value },
-                        }))
-                      }
-                      onBlur={() => {
-                        const n = parseInt(String(d.stash).trim(), 10);
-                        if (!Number.isFinite(n) || n === crew.stash) return;
-                        patchCrewSnapshot(crew.id, { stash: n });
-                      }}
-                      disabled={busy}
-                    />
-                  </CrewField>
                   <CrewField label="XP" busy={busy} S={S}>
                     <input
                       style={S.inp}
@@ -455,12 +432,6 @@ export default function RosterCrewInlineSection({
                     <div style={{ marginTop: 4 }}>
                       <span style={{ color: "#9ca3af" }}>Faction rep: </span>
                       {relRows.join(" · ")}
-                    </div>
-                  ) : null}
-                  {stashFilled != null ? (
-                    <div style={{ marginTop: 4 }}>
-                      <span style={{ color: "#9ca3af" }}>Stash grid: </span>
-                      {stashFilled}/40 filled
                     </div>
                   ) : null}
                 </div>

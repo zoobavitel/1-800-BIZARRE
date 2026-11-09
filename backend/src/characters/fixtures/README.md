@@ -22,7 +22,7 @@ These are the rows the app cannot run without. The `load_srd_reference_data` man
 | File | Contents |
 |------|----------|
 | `initial_data.json` | Bootstrap data for an empty dev DB. |
-| `example_campaign.json` | A sample campaign for screenshots / tests. |
+| `example_campaign.json` | A sample campaign for screenshots / tests. Its users (`test_gm`, `test_player`) have placeholder password hashes, so they can't log in until you run `manage.py set_user_password`. |
 | `jack_rice_fixture.json` | A specific PC build used in demo flows. |
 
 ## Loading
