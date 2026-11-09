@@ -1,6 +1,7 @@
 from django.core.management.base import BaseCommand
 from django.contrib.auth.models import User
 from characters.models import Character, Heritage, Benefit, Detriment, Vice, Ability
+from characters.management.seed_passwords import seed_password
 
 
 class Command(BaseCommand):
@@ -13,7 +14,7 @@ class Command(BaseCommand):
             defaults={"email": "aya_funsami_player@example.com"},
         )
         if created:
-            user.set_password(User.objects.make_random_password())
+            user.set_password(seed_password(self.stdout, user.username))
             user.save()
             self.stdout.write(self.style.SUCCESS("Created user for Aya Funsami"))
 

@@ -150,7 +150,18 @@ T=$(python manage.py shell -c "from rest_framework.authtoken.models import Token
 curl -sI -H "Authorization: Token $T" -H 'X-Forwarded-Proto: https' -H 'Accept-Encoding: gzip' http://127.0.0.1:8080/api/abilities/ | grep -iE '^HTTP|content-encoding'
 sudo tailscale funnel --bg http://127.0.0.1:8080
 sudo tailscale funnel status   # expect: / proxy http://127.0.0.1:8080
+# Django admin, tailnet only (see "Admin access" below):
+sudo tailscale serve --bg --https=9443 http://127.0.0.1:8081
+sudo tailscale serve status    # expect :9443 -> http://127.0.0.1:8081, not marked Funnel
 ```
+
+### Admin access (tailnet only)
+
+`/admin/` is not reachable from the internet: Caddy's `:8080` (Cloudflare and Funnel) answers 404 for `/admin` and `/admin/*`. Admin is served on `:8081`, published only to the tailnet with `tailscale serve` (never `funnel`), at `https://bizarre-api.<tailnet>.ts.net:9443/admin/`. Login is the normal Django username and password.
+
+In the `:8081` block, set `header_up Host` to your real `bizarre-api.<tailnet>.ts.net:9443`. Django checks the browser's Origin against it for CSRF, and needs `X-Forwarded-Proto: https` for its secure cookies. That host must be in `ALLOWED_HOSTS` in `prod.env`.
+
+Check from outside: `curl -s -o /dev/null -w '%{http_code}' https://api.1-800-bizarre.com/admin/login/` gives `404`.
 
 Rollback: `sudo tailscale funnel --bg http://127.0.0.1:8000`. CI deploys don't touch Caddy, Funnel or the tunnel.
 

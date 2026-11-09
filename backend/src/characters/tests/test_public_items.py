@@ -152,15 +152,16 @@ class PublicItemTests(PublicItemBase):
         self.assertEqual(response.status_code, 404)
         self.assertEqual(self.as_user(self.player).get(f"{URL}{item.id}/").status_code, 200)
 
-    def test_only_the_creator_or_staff_unshare(self):
+    def test_only_the_creator_unshares(self):
+        # Staff get no exception on the site (2026-11-08); they use Django admin.
         item = self.make_shared()
-        for user in (self.player2, self.other_gm, self.gm):
+        for user in (self.player2, self.other_gm, self.gm, self.staff):
             with self.subTest(user=user.username):
                 response = self.as_user(user).post(f"{URL}{item.id}/unshare/", {}, format="json")
                 self.assertEqual(response.status_code, 403, getattr(response, "data", None))
         item.refresh_from_db()
         self.assertTrue(item.is_public)
-        self.assertEqual(self.as_user(self.staff).post(f"{URL}{item.id}/unshare/", {}, format="json").status_code, 200)
+        self.assertEqual(self.as_user(self.player).post(f"{URL}{item.id}/unshare/", {}, format="json").status_code, 200)
 
     # Editing
 
@@ -318,3 +319,36 @@ class MakeHomebrewTests(PublicItemBase):
         self.assertEqual(rows["Old Site Hook"]["created_by_username"], "admin")
         self.assertFalse(rows["Old Site Hook"]["is_mine"])
         self.assertTrue(rows["Lucky Coin"]["is_mine"])
+
+
+class DjangoAdminHomebrewTests(PublicItemBase):
+    """Publishing homebrew on a user's behalf happens in Django admin
+    (2026-11-08). The owner stays the creator."""
+
+    def setUp(self):
+        super().setUp()
+        self.admin = User.objects.create_superuser(username="sh_admin", password="pw-sh-admin-1", email="")
+        self.client.force_login(self.admin)
+
+    def run_action(self, action, items):
+        return self.client.post(
+            "/admin/characters/equipmentitem/",
+            {"action": action, "_selected_action": [str(i.id) for i in items]},
+            follow=True,
+        )
+
+    def test_publish_and_unpublish_keep_the_owner(self):
+        item = EquipmentItem.objects.get(pk=self.share_sheet_item(self.player, self.pc, public=False).data["id"])
+        self.client.force_login(self.admin)
+        self.assertEqual(self.run_action("publish_homebrew", [item]).status_code, 200)
+        item.refresh_from_db()
+        self.assertEqual((item.is_public, item.created_by), (True, self.player))
+        self.run_action("unpublish_homebrew", [item])
+        item.refresh_from_db()
+        self.assertEqual((item.is_public, item.created_by), (False, self.player))
+
+    def test_actions_leave_non_homebrew_alone(self):
+        self.client.force_login(self.admin)
+        self.run_action("publish_homebrew", [self.library_item])
+        self.library_item.refresh_from_db()
+        self.assertEqual(self.library_item.scope, "CAMPAIGN")

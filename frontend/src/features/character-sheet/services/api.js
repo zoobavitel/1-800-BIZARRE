@@ -52,13 +52,6 @@ export function formatPlaybookPair(primary, secondary) {
 /** Sheet select options for playbook dropdowns. */
 export const PLAYBOOK_SHEET_OPTIONS = [...PLAYBOOK_DISPLAY];
 
-/** True when the sheet is linked to a campaign crew (stash lives on Crew). */
-function hasLinkedCrew(crewId) {
-  if (crewId == null || crewId === "") return false;
-  const n =
-    typeof crewId === "number" ? crewId : parseInt(String(crewId).trim(), 10);
-  return Number.isFinite(n) && n > 0;
-}
 
 /** Backend `inventory` is a JSON array; legacy data may be a single object. */
 export function normalizeCharacterInventory(inv) {
@@ -132,7 +125,7 @@ export function normalizeCoinBoxes(v) {
   return d.map((_, i) => Boolean(v[i]));
 }
 
-/** Shared crew stash grid (40 booleans); persisted on Crew.stash_slots. */
+/** Personal stash grid (40 booleans); persisted on Character.stash_slots. */
 export function normalizeStashSlots(v) {
   const d = Array(40).fill(false);
   if (!Array.isArray(v)) return d;
@@ -149,12 +142,7 @@ export function isStashAllEmpty(stash) {
   );
 }
 
-/** Skip crew PATCH when corrupted local grid would wipe server-filled stash. */
-export function shouldSkipEmptyCrewStashPatch(localStash, serverStash) {
-  return isStashAllEmpty(localStash) && countFilledStashSlots(serverStash) > 0;
-}
-
-/** Post-save stash merge — mirrors coin: prefer effective crew stash over empty echo. */
+/** Post-save stash: the server echo, else the local grid. */
 export function resolveStashAfterCharacterSave({
   stashMerged,
   savedFrontend,
@@ -795,8 +783,6 @@ export const equipmentAPI = {
       method: "POST",
       body: JSON.stringify({ campaign: campaignId, enabled }),
     }),
-  publishToSite: (id) =>
-    apiRequest(`/equipment-items/${id}/publish-to-site/`, { method: "POST" }),
   fromKitItem: (data) =>
     apiRequest("/equipment-items/from-kit-item/", {
       method: "POST",
@@ -1501,13 +1487,11 @@ export const transformBackendToFrontend = (backendCharacter) => {
       ],
     },
 
-    // Coin (character); stash on crew when linked, else personal Character.stash_slots
+    // Coin and stash are the character's own. Stash is personal, crew or not
+    // (user, 2026-11-03); the crew keeps coin, not a stash.
     coin: normalizeCoinBoxes(backendCharacter.coin_boxes),
     stash: normalizeStashSlots(
-      backendCharacter.effective_stash_slots ??
-        (Array.isArray(backendCharacter.crew?.stash_slots)
-          ? backendCharacter.crew.stash_slots
-          : backendCharacter.stash_slots),
+      backendCharacter.stash_slots ?? backendCharacter.effective_stash_slots,
     ),
 
     // Healing clock
@@ -1932,13 +1916,9 @@ export const transformFrontendToBackend = (frontendCharacter) => {
       0,
       Math.floor(Number(frontendCharacter.healingClock) || 0),
     ),
-    healing_clock_segments: Math.min(
-      5,
-      Math.max(
-        4,
-        Math.floor(Number(frontendCharacter.healingClockSegments) || 4),
-      ),
-    ),
+    // healing_clock_segments is not sent: the server sets it from the saved
+    // detriments (Slower Recovery gives 5). Sending it from a stale local
+    // pick flipped it 4/5 on every save and kept the sheet autosaving.
     spin_armor_used: Math.min(
       3,
       Math.max(0, Math.floor(Number(frontendCharacter.spinArmorUsed) || 0)),
@@ -2116,10 +2096,8 @@ export const transformFrontendToBackend = (frontendCharacter) => {
 
     coin_boxes: normalizeCoinBoxes(frontendCharacter.coin),
 
-    // Stash: crew grid when linked; otherwise personal stash_slots on Character
-    ...(hasLinkedCrew(frontendCharacter.crewId)
-      ? {}
-      : { stash_slots: normalizeStashSlots(frontendCharacter.stash) }),
+    // Stash is personal, crew or not.
+    stash_slots: normalizeStashSlots(frontendCharacter.stash),
 
     ...(typeof frontendCharacter.gm_can_have_s_rank_stand_stats === "boolean"
       ? {

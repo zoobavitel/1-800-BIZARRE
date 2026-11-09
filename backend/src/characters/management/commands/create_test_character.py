@@ -4,6 +4,7 @@ from characters.models import (
     Character, Heritage, Benefit, Detriment, Vice, Ability,
     HamonAbility, SpinAbility, CharacterHamonAbility, CharacterSpinAbility
 )
+from characters.management.seed_passwords import seed_password
 
 
 class Command(BaseCommand):
@@ -41,7 +42,7 @@ class Command(BaseCommand):
             defaults={'email': f'{username}@test.com'}
         )
         if created:
-            user.set_password(os.environ["SEED_PASSWORD"])
+            user.set_password(seed_password(self.stdout, user.username))
             user.save()
             self.stdout.write(
                 self.style.SUCCESS(f'Created test user: {username}')

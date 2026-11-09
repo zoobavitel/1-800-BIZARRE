@@ -50,8 +50,9 @@ class CharacterCampaignMembershipTests(TestCase):
         self.assertEqual(self._create(self.player, self.campaign).status_code, 201)
         self.assertEqual(self._create(self.gm, self.campaign).status_code, 201)
 
-    def test_staff_are_exempt(self):
-        self.assertEqual(self._create(self.staff, self.campaign).status_code, 201)
+    def test_staff_are_not_exempt(self):
+        # Staff get no special access on the site (2026-11-08).
+        self.assertEqual(self._create(self.staff, self.campaign).status_code, 400)
 
     # Change
 

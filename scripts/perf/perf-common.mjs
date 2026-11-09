@@ -6,13 +6,17 @@
 const FORBIDDEN_HOST_SNIPPETS = [
   "zoobavitel.github.io",
   "github.io/1-800-BIZARRE",
-  "example.ngrok-free.dev",
   // Live API (Cloudflare Tunnel). Players are on it; never load-test it.
   "api.1-800-bizarre.com",
 ];
 
-/** Live Funnel. Direct runs use 127.0.0.1:8001. Public probe uses port 8443 only. */
-const LIVE_FUNNEL_HOST = "bizarre-api.tailnet-example.ts.net";
+/**
+ * Live Funnel: any Tailscale name (*.ts.net), so the tailnet name stays out of
+ * the repo. Direct runs use 127.0.0.1:8001. Public probe uses port 8443 only.
+ */
+function isLiveFunnelHost(hostname) {
+  return hostname.endsWith(".ts.net");
+}
 
 /** Extra deny list via PERF_FORBIDDEN_HOSTS=host1,host2 */
 function envForbidden() {
@@ -43,11 +47,11 @@ export function assertSafePerfTarget(url) {
   } catch {
     throw new Error(`Invalid PERF target URL: ${url}`);
   }
-  if (parsed.hostname === LIVE_FUNNEL_HOST) {
+  if (isLiveFunnelHost(parsed.hostname)) {
     if (process.env.PERF_ALLOW_REMOTE !== "1" || parsed.port !== "8443") {
       throw new Error(
         `Refusing live Funnel ${url}. Direct run: http://127.0.0.1:8001. ` +
-          `Funnel run: https://${LIVE_FUNNEL_HOST}:8443 with PERF_ALLOW_REMOTE=1.`,
+          `Funnel run: https://${parsed.hostname}:8443 with PERF_ALLOW_REMOTE=1.`,
       );
     }
     return;

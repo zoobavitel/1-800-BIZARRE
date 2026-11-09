@@ -43,13 +43,12 @@ class GroupActionViewSet(viewsets.ModelViewSet):
         if session_id:
             qs = qs.filter(session_id=session_id)
         user = self.request.user
-        if not user.is_staff:
-            qs = qs.filter(
-                models.Q(session__campaign__gm=user)
-                | models.Q(session__campaign__characters__user=user)
-                | models.Q(session__campaign__players=user)
-                | models.Q(leader__user=user)
-            ).distinct()
+        qs = qs.filter(
+            models.Q(session__campaign__gm=user)
+            | models.Q(session__campaign__characters__user=user)
+            | models.Q(session__campaign__players=user)
+            | models.Q(leader__user=user)
+        ).distinct()
         return qs.order_by('-created_at')
 
     def create(self, request, *args, **kwargs):
@@ -69,7 +68,7 @@ class GroupActionViewSet(viewsets.ModelViewSet):
         if not leader or leader.campaign_id != session.campaign_id:
             return Response({'error': 'Leader must be a PC in the session campaign.'}, status=status.HTTP_400_BAD_REQUEST)
         camp = session.campaign
-        if camp.gm_id != request.user.id and leader.user_id != request.user.id and not request.user.is_staff:
+        if camp.gm_id != request.user.id and leader.user_id != request.user.id:
             return Response({'error': 'Only the GM or leader can start a group action.'}, status=status.HTTP_403_FORBIDDEN)
         ga = GroupAction.objects.create(
             session=session,
@@ -92,7 +91,7 @@ class GroupActionViewSet(viewsets.ModelViewSet):
         if (
             camp.gm_id != request.user.id
             and ga.leader.user_id != request.user.id
-            and not request.user.is_staff
+           
         ):
             return Response(
                 {'error': 'Only the GM or group leader can cancel a group action.'},
@@ -116,7 +115,7 @@ class GroupActionViewSet(viewsets.ModelViewSet):
         if (
             camp.gm_id != request.user.id
             and ga.leader.user_id != request.user.id
-            and not request.user.is_staff
+           
         ):
             return Response(
                 {'error': 'Only the GM or leader can resolve a group action.'},

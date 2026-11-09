@@ -9,7 +9,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('characters', '0133_equipment_shared_scope'),
+        ('characters', '0135_equipment_shared_scope'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
