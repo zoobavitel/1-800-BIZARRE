@@ -22,7 +22,12 @@ import {
 } from "../../features/character-sheet/services/api";
 import InventoryItemPicker from "../../features/character-sheet/components/InventoryItemPicker";
 import { ArmorChargeBoxes } from "../../features/character-sheet/components/CharacterSheetArmorPanel";
-import { progressClockShowsPlayersBadge } from "../../features/character-sheet/utils/progressClockVisibility";
+import {
+  clockAudiencePatch,
+  clockPlayerOptions,
+  progressClockShowsPlayersBadge,
+} from "../../features/character-sheet/utils/progressClockVisibility";
+import ClockAudiencePicker from "../clocks/ClockAudiencePicker";
 import { buildRouteHref, handleSpaNavClick } from "../../utils/spaNavigation";
 import useRosterExpandAnchor from "../roster/useRosterExpandAnchor";
 import {
@@ -1277,7 +1282,7 @@ export default function SessionGMManagementPanels({
     name: "",
     max_segments: 8,
     clock_type: "CUSTOM",
-    visible_to_players: false,
+    audience: { all: false, ids: [] },
   });
   const [pcSessionClockBusyCharId, setPcSessionClockBusyCharId] = useState(null);
 
@@ -6473,7 +6478,7 @@ export default function SessionGMManagementPanels({
                                 name: "",
                                 max_segments: 8,
                                 clock_type: "CUSTOM",
-                                visible_to_players: false,
+                                audience: { all: false, ids: [] },
                               });
                               setPcSessionClockDraftFor(full.id);
                             }
@@ -6555,28 +6560,16 @@ export default function SessionGMManagementPanels({
                               </select>
                             </label>
                           </div>
-                          <label
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: 6,
-                              fontSize: 10,
-                              color: "#a7f3d0",
-                              cursor: "pointer",
-                            }}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={pcSessionClockDraft.visible_to_players}
-                              onChange={(e) =>
-                                setPcSessionClockDraft((d) => ({
-                                  ...d,
-                                  visible_to_players: e.target.checked,
-                                }))
-                              }
-                            />
-                            Visible to players
-                          </label>
+                          <ClockAudiencePicker
+                            idPrefix={`pc-clock-${full.id}`}
+                            players={clockPlayerOptions(campaign)}
+                            value={
+                              pcSessionClockDraft.audience || { all: false, ids: [] }
+                            }
+                            onChange={(audience) =>
+                              setPcSessionClockDraft((d) => ({ ...d, audience }))
+                            }
+                          />
                           <div style={{ display: "flex", gap: 6 }}>
                             <button
                               type="button"
@@ -6603,15 +6596,22 @@ export default function SessionGMManagementPanels({
                                     max_segments:
                                       pcSessionClockDraft.max_segments || 8,
                                     filled_segments: 0,
-                                    visible_to_players:
-                                      !!pcSessionClockDraft.visible_to_players,
+                                    // The GM makes this clock (PC private clocks).
+                                    ...clockAudiencePatch(
+                                      { created_by: campaign?.gm?.id ?? campaign?.gm },
+                                      campaign?.gm,
+                                      pcSessionClockDraft.audience || {
+                                        all: false,
+                                        ids: [],
+                                      },
+                                    ),
                                   });
                                   setPcSessionClockDraftFor(null);
                                   setPcSessionClockDraft({
                                     name: "",
                                     max_segments: 8,
                                     clock_type: "CUSTOM",
-                                    visible_to_players: false,
+                                    audience: { all: false, ids: [] },
                                   });
                                   await refreshSessionClocks();
                                   await reloadCampaignWideClocks();
@@ -6638,7 +6638,7 @@ export default function SessionGMManagementPanels({
                                   name: "",
                                   max_segments: 8,
                                   clock_type: "CUSTOM",
-                                  visible_to_players: false,
+                                  audience: { all: false, ids: [] },
                                 });
                               }}
                             >

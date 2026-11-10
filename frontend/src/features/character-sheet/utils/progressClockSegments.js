@@ -30,18 +30,13 @@ export function clockWedgeCount(segments) {
 }
 
 /** Filled wedges: early = red → orange → yellow → late = green. */
-export const CLOCK_WEDGE_FILL_STOPS = [
-  "#dc2626",
-  "#ea580c",
-  "#ca8a04",
-  "#16a34a",
-];
+export const CLOCK_WEDGE_FILL_STOPS = ["#dc2626", "#ea580c", "#ca8a04", "#16a34a"];
 
 export function clockWedgeFillColor(wedgeIndex, totalSegments) {
   const n = Math.max(1, totalSegments);
   const band = Math.min(
     CLOCK_WEDGE_FILL_STOPS.length - 1,
-    Math.floor((wedgeIndex / n) * CLOCK_WEDGE_FILL_STOPS.length),
+    Math.floor((wedgeIndex / n) * CLOCK_WEDGE_FILL_STOPS.length)
   );
   return CLOCK_WEDGE_FILL_STOPS[band];
 }
@@ -111,19 +106,14 @@ export function mergeSheetProgressClocks(prev, incoming) {
     if (!pn) continue;
     let match = null;
     if (isPersistedProgressClockId(pn.id)) {
-      match = incList.find(
-        (i) => !usedInc.has(i.id) && Number(i.id) === Number(pn.id),
-      );
+      match = incList.find((i) => !usedInc.has(i.id) && Number(i.id) === Number(pn.id));
     }
     if (!match && !isPersistedProgressClockId(pn.id)) {
       const name = String(pn.name || "").trim();
       const segs = clockWedgeCount(pn.segments);
       match = incList.find((i) => {
         if (usedInc.has(i.id)) return false;
-        return (
-          String(i.name || "").trim() === name &&
-          clockWedgeCount(i.segments) === segs
-        );
+        return String(i.name || "").trim() === name && clockWedgeCount(i.segments) === segs;
       });
     }
     if (match) {
@@ -171,6 +161,11 @@ export function serializeSheetProgressClocks(clocks) {
         description: n.description || "",
         session: n.session ?? null,
       };
+      // Picked players (PC private clocks). Left out when unknown, so the
+      // server keeps the list it has.
+      if (Array.isArray(n.visible_to)) {
+        row.visible_to = n.visible_to.map(Number).filter(Number.isFinite);
+      }
       if (isPersistedProgressClockId(n.id)) {
         row.id = Number(n.id);
       }
