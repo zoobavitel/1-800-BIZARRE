@@ -51,7 +51,7 @@ The canonical **game rules** live in [`1-(800)-BIZARRE SRD.md`](1-\(800\)-BIZARR
 
 | File | Role |
 |------|------|
-| [`DEPLOY_GITHUB_PAGES.md`](DEPLOY_GITHUB_PAGES.md) | Static frontend deploy via GitHub Pages. |
+| [`DEPLOY_FRONTEND.md`](DEPLOY_FRONTEND.md) | Static frontend deploy to Cloudflare (1-800-bizarre.com). |
 | [`DEPLOY_SQLITE_TO_POSTGRES.md`](DEPLOY_SQLITE_TO_POSTGRES.md) | One-time SQLite → Postgres migration for the LXC deploy. |
 | [`operations/session-status-prod-checklist.md`](operations/session-status-prod-checklist.md) | Production session-status sanity checks. |
 
