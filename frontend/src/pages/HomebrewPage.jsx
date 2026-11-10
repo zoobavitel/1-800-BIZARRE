@@ -102,7 +102,15 @@ function CreateHomebrewItem({ initialTemplate = null, renderActions }) {
   const matches = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return [];
-    return sources.filter((i) => String(i.name || "").toLowerCase().includes(q)).slice(0, 8);
+    // Name matches first, then description matches: the SRD has no
+    // "Crowbar" item, but Burglary Gear's description lists one.
+    const byName = [];
+    const byText = [];
+    for (const i of sources) {
+      if (String(i.name || "").toLowerCase().includes(q)) byName.push(i);
+      else if (String(i.description || "").toLowerCase().includes(q)) byText.push(i);
+    }
+    return [...byName, ...byText].slice(0, 8);
   }, [search, sources]);
 
   const pickTemplate = (item) => {
@@ -208,6 +216,8 @@ function CreateHomebrewItem({ initialTemplate = null, renderActions }) {
               </button>
             ))}
           </div>
+        ) : search.trim() ? (
+          <div style={S.muted}>No items match “{search.trim()}”.</div>
         ) : (
           <div style={S.muted}>Type to search SRD items, published homebrew and your own homebrew.</div>
         )}

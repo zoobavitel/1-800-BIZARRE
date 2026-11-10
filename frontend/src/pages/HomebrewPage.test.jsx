@@ -84,6 +84,32 @@ describe("Homebrew page: make homebrew (S8)", () => {
     );
   });
 
+  it("finds an item by its description, name matches first", async () => {
+    // The SRD has no "Crowbar" item: a crowbar is part of Burglary Gear.
+    const burglary = {
+      id: 3, name: "Burglary Gear", category: "gear", load_slots: 1, quality: 1,
+      description: "Breaking-and-entering kit — crowbar, picks, glass cutter, etc.",
+      scope: "TEMPLATE",
+    };
+    const bent = { id: 4, name: "Bent Crowbar", description: "", category: "gear", scope: "SHARED" };
+    equipmentAPI.list.mockResolvedValue([burglary, bent]);
+    render(<HomebrewPage tab="create-item" />);
+    fireEvent.click(screen.getByRole("button", { name: "Start from a template" }));
+    fireEvent.change(screen.getByLabelText("Start from an existing item"), { target: { value: "crowbar" } });
+    const hits = await screen.findAllByRole("button", { name: /^Use .* as template$/ });
+    expect(hits.map((b) => b.getAttribute("aria-label"))).toEqual([
+      "Use Bent Crowbar as template",
+      "Use Burglary Gear as template",
+    ]);
+  });
+
+  it("says so when nothing matches", async () => {
+    render(<HomebrewPage tab="create-item" />);
+    fireEvent.click(screen.getByRole("button", { name: "Start from a template" }));
+    fireEvent.change(screen.getByLabelText("Start from an existing item"), { target: { value: "zzz" } });
+    expect(await screen.findByText(/No items match/)).toBeInTheDocument();
+  });
+
   it("lists my creations on their own tab", async () => {
     render(<HomebrewPage tab="creations" />);
     await waitFor(() => expect(equipmentAPI.list).toHaveBeenCalledWith({ homebrew: "mine" }));
