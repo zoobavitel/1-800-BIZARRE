@@ -884,7 +884,7 @@ export function CampaignEquipmentPanel({ campaign, onRefresh }) {
                 ))
               )}
               <a
-                href={buildRouteHref("homebrew", { tab: "browse" })}
+                href={buildRouteHref("homebrew", { tab: "items" })}
                 style={{ color: "var(--text-muted)", fontSize: "11px", display: "inline-block", marginTop: "6px" }}
               >
                 Find more on the Homebrew page

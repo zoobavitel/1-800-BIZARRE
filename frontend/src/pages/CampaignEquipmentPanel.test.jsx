@@ -148,7 +148,7 @@ describe("CampaignEquipmentPanel: homebrew switch and shared pool (S11)", () => 
     render(<CampaignEquipmentPanel campaign={on} />);
     expect(await screen.findByRole("link", { name: /Find more on the Homebrew page/ })).toHaveAttribute(
       "href",
-      "#homebrew/browse",
+      "#homebrew/items",
     );
   });
 

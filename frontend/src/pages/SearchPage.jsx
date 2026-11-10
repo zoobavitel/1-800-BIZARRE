@@ -163,8 +163,8 @@ export default function SearchPage({
 
   const handleResultClick = (r) => {
     if (r.type === "homebrew_item") {
-      if (onNavigateToHomebrew) onNavigateToHomebrew({ tab: "browse", q: r.title });
-      else window.location.hash = buildRouteHref("homebrew", { tab: "browse", q: r.title });
+      if (onNavigateToHomebrew) onNavigateToHomebrew({ tab: "items", q: r.title });
+      else window.location.hash = buildRouteHref("homebrew", { tab: "items", q: r.title });
     } else if (r.type === "character" && onNavigateToCharacter)
       onNavigateToCharacter(r.id);
     else if (r.type === "campaign" && onNavigateToCampaign)
@@ -193,7 +193,7 @@ export default function SearchPage({
     if (r.type === "character") return buildRouteHref("character", { characterId: r.id });
     if (r.type === "campaign") return buildRouteHref("campaigns", { campaignId: r.id });
     if (r.type === "heritage") return buildRouteHref("abilities", { filter: "heritage" });
-    if (r.type === "homebrew_item") return buildRouteHref("homebrew", { tab: "browse", q: r.title });
+    if (r.type === "homebrew_item") return buildRouteHref("homebrew", { tab: "items", q: r.title });
     if (["ability", "hamon_ability", "spin_ability", "stand_ability"].includes(r.type)) {
       const filter =
         r.type === "hamon_ability"
