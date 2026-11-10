@@ -10,7 +10,7 @@
 
 Repo facts (as of 2026-04-10):
 - Default branch: `master`.
-- GitHub Pages site: `https://zoobavitel.github.io/1-800-BIZARRE/` (static frontend build).
+- Live site: `https://1-800-bizarre.com` (static frontend build on Cloudflare).
 - Primary languages: JavaScript/React and Python/Django.
 - CI uses **Node 24** and **Python 3.11** (see `.github/workflows/ci.yml`).
 
@@ -145,7 +145,7 @@ cd frontend
 npm run build
 ```
 
-GitHub Pages deploy job sets `REACT_APP_API_URL` from repo secrets before building.
+The `deploy-frontend` job sets `REACT_APP_API_URL` from repo secrets before building.
 
 ## Local dev (fast path)
 

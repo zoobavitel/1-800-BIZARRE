@@ -28,7 +28,7 @@ ALLOWED_HOSTS = config(
 
 CORS_ALLOWED_ORIGINS = config(
     "CORS_ALLOWED_ORIGINS",
-    default="https://zoobavitel.github.io",
+    default="https://1-800-bizarre.com,https://zoobavitel.github.io",
     cast=Csv(),
 )
 
@@ -155,6 +155,6 @@ CSRF_COOKIE_HTTPONLY = True
 # For LAN HTTP, include http://<your-ip> and http://hostname (e.g. http://bizarre-api).
 CSRF_TRUSTED_ORIGINS = config(
     "CSRF_TRUSTED_ORIGINS",
-    default="https://zoobavitel.github.io",
+    default="https://1-800-bizarre.com,https://zoobavitel.github.io",
     cast=Csv(),
 )

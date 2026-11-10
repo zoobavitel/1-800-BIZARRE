@@ -1,16 +1,18 @@
 /**
  * Runtime API base URL for the game backend.
- * GitHub Pages bakes the public host. A stored URL overrides that host.
+ * Production builds bake the public host. A stored URL overrides that host.
  */
 
 const STORAGE_KEY = "apiBaseUrl";
 
-/** Explicit REACT_APP_API_URL in .env wins. Otherwise local dev uses 127.0.0.1; production has no default (github.io must use Server URL / localStorage). */
+/** Explicit REACT_APP_API_URL in .env wins. Otherwise local dev uses 127.0.0.1 and the public frontend uses the public API host. */
 const envApi = process.env.REACT_APP_API_URL;
 const hasEnvApi = typeof envApi === "string" && envApi.trim() !== "";
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
 /** Prefer IPv4 loopback — `localhost` often resolves to ::1, which may hit another listener (e.g. IDE) instead of Django. */
 const LOCAL_API_DEFAULT = "http://127.0.0.1:8000/api";
+const PUBLIC_FRONTEND_HOST = "1-800-bizarre.com";
+const PUBLIC_API_DEFAULT = "https://api.1-800-bizarre.com/api";
 
 function getRuntimeDefaultBase() {
   if (hasEnvApi) return envApi.trim().replace(/\/+$/, "");
@@ -21,6 +23,11 @@ function getRuntimeDefaultBase() {
   const { protocol, hostname } = window.location;
   if (LOCAL_HOSTS.has(hostname)) {
     return LOCAL_API_DEFAULT;
+  }
+
+  // Cloudflare serves the frontend only; the API is on its own subdomain.
+  if (hostname === PUBLIC_FRONTEND_HOST) {
+    return PUBLIC_API_DEFAULT;
   }
 
   // GitHub Pages is static only; there is no API on :8000 on this hostname.

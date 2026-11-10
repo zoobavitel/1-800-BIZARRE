@@ -93,7 +93,7 @@ Rollback of live code: `cd /opt/bizarre-prod && git fetch origin && git checkout
 
 **Before cutover:** full backend tests + frontend build (see [.cursor/rules/pr-before-build.mdc](../../.cursor/rules/pr-before-build.mdc)).
 
-**After deploy:** from `/opt/bizarre-prod/backend/src` with `DJANGO_SETTINGS_MODULE=app.settings_prod` and `BIZARRE_ENV_FILE=/etc/bizarre/prod.env`, run `python manage.py check`. Smoke-test GitHub Pages → public API `/api`.
+**After deploy:** from `/opt/bizarre-prod/backend/src` with `DJANGO_SETTINGS_MODULE=app.settings_prod` and `BIZARRE_ENV_FILE=/etc/bizarre/prod.env`, run `python manage.py check`. Smoke-test https://1-800-bizarre.com → public API `/api`.
 
 ## 1. Environment
 

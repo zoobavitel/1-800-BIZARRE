@@ -24,6 +24,6 @@ npm run dev
 
 - PRs trigger GitHub Actions CI (frontend, backend, integration tests)
 - CI source of truth: Node 24 + Python 3.11
-- Frontend can deploy to GitHub Pages after passing checks
+- Frontend deploys to Cloudflare (1-800-bizarre.com) after passing checks
 - Set `REACT_APP_API_URL` for deploy builds
 

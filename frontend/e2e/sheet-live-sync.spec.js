@@ -10,7 +10,7 @@ const { test, expect } = require("@playwright/test");
 
 const API = process.env.E2E_API_URL;
 const appUrl = (
-  process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000/1-800-BIZARRE"
+  process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000"
 ).replace(/\/+$/, "");
 
 test.skip(!API, "E2E_API_URL not set (needs a running backend)");
