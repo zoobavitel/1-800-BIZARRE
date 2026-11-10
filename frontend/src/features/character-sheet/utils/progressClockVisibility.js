@@ -35,11 +35,59 @@ export function isGmManagedProgressClock(clk, campaignGmId) {
 export function progressClockShowsPlayersBadge(clk, campaignGmId) {
   if (!clk) return false;
   if (clk.visible_to_players) return true;
-  if (
-    isGmManagedProgressClock(clk, campaignGmId) &&
-    clk.visible_to_party
-  ) {
+  if (isGmManagedProgressClock(clk, campaignGmId) && clk.visible_to_party) {
     return true;
   }
   return false;
+}
+
+/**
+ * Who sees a clock, as the picker shows it (PC private clocks):
+ * `all` is the "All players" flag (`visible_to_players` on GM clocks,
+ * `visible_to_party` on a player's clock); `ids` are the picked players.
+ * The GM and the clock's creator always see it.
+ */
+export function clockAudience(clk, campaignGmId) {
+  if (!clk) return { all: false, ids: [] };
+  const gmClock = isGmManagedProgressClock(clk, campaignGmId);
+  const all = gmClock ? progressClockShowsPlayersBadge(clk, campaignGmId) : !!clk.visible_to_party;
+  const ids = Array.isArray(clk.visible_to)
+    ? clk.visible_to.map(Number).filter(Number.isFinite)
+    : [];
+  return { all, ids: all ? [] : ids };
+}
+
+/** The API patch that sets a clock's audience to `{ all, ids }`. */
+export function clockAudiencePatch(clk, campaignGmId, { all, ids }) {
+  const visible_to = all ? [] : [...new Set((ids || []).map(Number))];
+  if (isGmManagedProgressClock(clk, campaignGmId)) {
+    return { visible_to_players: !!all, visible_to_party: false, visible_to };
+  }
+  return { visible_to_party: !!all, visible_to };
+}
+
+/**
+ * Players who can be picked to see a clock: the campaign's players (not
+ * the GM), labelled "username (PC name)" when they have a PC there.
+ */
+export function clockPlayerOptions(campaign, excludeUserId = null) {
+  if (!campaign) return [];
+  const gm = normalizeCampaignGmId(campaign.gm);
+  const pcName = new Map();
+  for (const ch of campaign.characters || []) {
+    const uid = Number(ch?.user?.id ?? ch?.user);
+    const name = ch?.true_name || ch?.name;
+    if (Number.isFinite(uid) && name && !pcName.has(uid)) pcName.set(uid, name);
+  }
+  const out = [];
+  const seen = new Set();
+  for (const p of campaign.players || []) {
+    const id = Number(p?.id ?? p);
+    if (!Number.isFinite(id) || id === gm || seen.has(id)) continue;
+    if (excludeUserId != null && id === Number(excludeUserId)) continue;
+    seen.add(id);
+    const username = p?.username || `Player ${id}`;
+    out.push({ id, label: pcName.has(id) ? `${username} (${pcName.get(id)})` : username });
+  }
+  return out;
 }

@@ -34,6 +34,7 @@ def _log_progress_clock_audit(clock, user, action, extra=None):
         action=action,
         payload=payload,
     )
+from ..clock_visibility import can_change_visibility, visible_clocks_q
 from ..serializers import (
     ClaimSerializer, CrewSpecialAbilitySerializer, CrewPlaybookSerializer,
     CrewUpgradeSerializer, XPHistorySerializer, ProgressClockSerializer
@@ -124,7 +125,6 @@ class ProgressClockViewSet(viewsets.ModelViewSet):
     serializer_class = ProgressClockSerializer
 
     def get_queryset(self):
-        from django.db.models import Q
         from ..models import Campaign
         qs = ProgressClock.objects.all()
         campaign_id = self.request.query_params.get('campaign')
@@ -157,57 +157,17 @@ class ProgressClockViewSet(viewsets.ModelViewSet):
         ):
             qs = qs.filter(dismissed_at__isnull=True)
         user = self.request.user
-        qs = qs.filter(
-            models.Q(campaign__gm=user) |
-            models.Q(campaign__characters__user=user) |
-            models.Q(campaign__players=user)
-        ).distinct()
-        if campaign_id:
-            try:
-                campaign = Campaign.objects.get(id=campaign_id)
-                if campaign.gm_id != user.id:
-                    # Non-GM completed filter: own character / created clocks.
-                    if completed in ("1", "true", "True"):
-                        qs = qs.filter(
-                            models.Q(character__user=user)
-                            | models.Q(crew__members__user=user)
-                            | models.Q(created_by=user)
-                        )
-                    showcased_npc_ids = list(campaign.showcased_npcs.values_list('npc_id', flat=True))
-                    campaign_player_ids = list(campaign.players.values_list('id', flat=True)) + list(
-                        campaign.characters.values_list('user_id', flat=True).distinct()
-                    )
-                    active_sid = getattr(campaign, "active_session_id", None)
-                    gm_public_session = Q(session__isnull=True)
-                    if active_sid:
-                        gm_public_session |= Q(session_id=active_sid)
-                    legacy_gm_session_visible = (
-                        Q(
-                            created_by__isnull=True,
-                            visible_to_players=True,
-                            session_id=active_sid,
-                        )
-                        if active_sid
-                        else Q(pk__in=[])
-                    )
-                    qs = qs.filter(
-                        Q(
-                            Q(created_by__isnull=True, visible_to_players=True)
-                            & (Q(npc__isnull=True) | Q(npc_id__in=showcased_npc_ids))
-                        )
-                        | Q(created_by_id=user.id)
-                        | Q(visible_to_party=True, created_by_id__in=campaign_player_ids)
-                        | (
-                            Q(created_by_id=campaign.gm_id, visible_to_players=True)
-                            & gm_public_session
-                        )
-                        | legacy_gm_session_visible
-                    )
-                    qs = qs.filter(
-                        Q(npc__isnull=True) | Q(npc__campaign_id=campaign_id)
-                    )
-            except Campaign.DoesNotExist:
-                pass
+        # One visibility rule for list and detail, with or without
+        # ?campaign= (PC private clocks).
+        qs = qs.filter(visible_clocks_q(user)).distinct()
+        if campaign_id and completed in ("1", "true", "True"):
+            # Non-GM finished list: own PC, own crew or own clocks only.
+            if not Campaign.objects.filter(id=campaign_id, gm=user).exists():
+                qs = qs.filter(
+                    models.Q(character__user=user)
+                    | models.Q(crew__members__user=user)
+                    | models.Q(created_by=user)
+                ).distinct()
         return qs
 
     def perform_create(self, serializer):
@@ -252,12 +212,9 @@ class ProgressClockViewSet(viewsets.ModelViewSet):
                 campaign.players.filter(id=user.id).exists()
                 or campaign.characters.filter(user_id=user.id).exists()
             )
-            # Party-visible OR GM-visible-to-players clocks: members may tick segments only.
-            if (
-                (obj.visible_to_party or obj.visible_to_players)
-                and in_campaign
-                and set(data.keys()) <= party_tick_keys
-            ):
+            # A member who can see the clock (get_queryset checked) may tick
+            # its segments.
+            if in_campaign and set(data.keys()) <= party_tick_keys:
                 pass
             elif obj.created_by_id == user.id:
                 if "visible_to_players" in data and data.get(
@@ -268,6 +225,8 @@ class ProgressClockViewSet(viewsets.ModelViewSet):
                     )
             else:
                 raise PermissionDenied("Only the creator or GM can update this clock.")
+            if ("visible_to" in data or "visible_to_party" in data) and not can_change_visibility(user, obj):
+                raise PermissionDenied("Only the creator or GM can change who sees this clock.")
         _check_clock_links(user, data, instance=obj, is_gm=bool(is_gm))
 
         before = {
@@ -276,6 +235,7 @@ class ProgressClockViewSet(viewsets.ModelViewSet):
             "name": obj.name,
             "visible_to_party": obj.visible_to_party,
             "visible_to_players": obj.visible_to_players,
+            "visible_to": list(obj.visible_to.values_list("id", flat=True)),
             "completed": obj.completed,
         }
         serializer.save()
