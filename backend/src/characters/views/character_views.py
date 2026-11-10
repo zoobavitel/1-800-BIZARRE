@@ -120,8 +120,9 @@ def _allocation_list_response(character):
     )
     return serializer.data
 
-def _character_response(character):
-    return CharacterSerializer(character).data
+def _character_response(character, request=None):
+    # The request lets the sheet hide clocks this user can't see.
+    return CharacterSerializer(character, context={"request": request}).data
 
 
 logger = logging.getLogger(__name__)
@@ -1925,7 +1926,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
                         "latest_undoable_allocation_id": allocation.id,
                     },
                 ).data,
-                "character": _character_response(character),
+                "character": _character_response(character, request),
                 "allocations": _allocation_list_response(character),
             }
         )
@@ -1970,7 +1971,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
             payload = {
                 "success": True,
                 "direction": "down",
-                "character": _character_response(character),
+                "character": _character_response(character, request),
                 "allocations": _allocation_list_response(character),
                 "pending_stand_a_reward": get_pending_stand_a_reward(character),
             }
@@ -2004,7 +2005,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
                         "latest_undoable_allocation_id": allocation.id,
                     },
                 ).data,
-                "character": _character_response(character),
+                "character": _character_response(character, request),
                 "allocations": _allocation_list_response(character),
                 "pending_stand_a_reward": get_pending_stand_a_reward(character),
             }
@@ -2036,7 +2037,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
                         "latest_undoable_allocation_id": allocation.id,
                     },
                 ).data,
-                "character": _character_response(character),
+                "character": _character_response(character, request),
                 "allocations": _allocation_list_response(character),
                 "pending_stand_a_reward": get_pending_stand_a_reward(character),
             }
@@ -2072,7 +2073,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
                         "latest_undoable_allocation_id": allocation.id,
                     },
                 ).data,
-                "character": _character_response(character),
+                "character": _character_response(character, request),
                 "allocations": _allocation_list_response(character),
             }
         )
@@ -2107,7 +2108,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
                         "latest_undoable_allocation_id": allocation.id,
                     },
                 ).data,
-                "character": _character_response(character),
+                "character": _character_response(character, request),
                 "allocations": _allocation_list_response(character),
             }
         )
@@ -2142,7 +2143,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
                         "latest_undoable_allocation_id": allocation.id,
                     },
                 ).data,
-                "character": _character_response(character),
+                "character": _character_response(character, request),
                 "allocations": _allocation_list_response(character),
             }
         )
@@ -2174,7 +2175,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 "success": True,
                 "undone_allocation_id": allocation.id,
                 "summary": summary,
-                "character": _character_response(character),
+                "character": _character_response(character, request),
                 "allocations": _allocation_list_response(character),
             }
         )
@@ -2279,7 +2280,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 "spent": result.get("spent"),
                 "dropped_ids": result.get("dropped_ids"),
                 "minted_ids": result.get("minted_ids"),
-                "character": _character_response(character),
+                "character": _character_response(character, request),
                 "allocations": _allocation_list_response(character),
             }
         )
@@ -2304,7 +2305,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
         return Response(
             {
                 "success": True,
-                "character": _character_response(character),
+                "character": _character_response(character, request),
                 "allocations": _allocation_list_response(character),
                 **result,
             }
@@ -2327,7 +2328,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
         return Response(
             {
                 "success": True,
-                "character": _character_response(character),
+                "character": _character_response(character, request),
                 "allocations": _allocation_list_response(character),
                 **result,
             }
@@ -2352,7 +2353,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
         return Response(
             {
                 "success": True,
-                "character": _character_response(character),
+                "character": _character_response(character, request),
                 "allocations": _allocation_list_response(character),
                 **result,
             }
@@ -2376,7 +2377,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
         return Response(
             {
                 "success": True,
-                "character": _character_response(character),
+                "character": _character_response(character, request),
                 "allocations": _allocation_list_response(character),
                 **result,
             }
@@ -2392,7 +2393,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
         return Response(
             {
                 "success": True,
-                "character": _character_response(character),
+                "character": _character_response(character, request),
                 "allocations": _allocation_list_response(character),
             }
         )
@@ -2428,7 +2429,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 "success": True,
                 "redone_allocation_id": allocation.id,
                 "summary": summary,
-                "character": _character_response(character),
+                "character": _character_response(character, request),
                 "allocations": _allocation_list_response(character),
             }
         )
@@ -2470,7 +2471,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 "success": True,
                 "undone_allocation_id": allocation.id,
                 "summary": summary,
-                "character": _character_response(character),
+                "character": _character_response(character, request),
                 "allocations": _allocation_list_response(character),
             }
         )
@@ -2576,7 +2577,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 "pendings_minted": credited["pendings_minted"],
                 "unallocated_xp": locked.unallocated_xp,
                 "xp_clocks": locked.xp_clocks,
-                "character": _character_response(locked),
+                "character": _character_response(locked, request),
             }
         )
 
@@ -2695,7 +2696,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 "new_track_total": new_xp,
                 "unallocated_xp": locked.unallocated_xp,
                 "xp_clocks": locked.xp_clocks,
-                "character": _character_response(locked),
+                "character": _character_response(locked, request),
             }
         )
 
@@ -3065,7 +3066,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 **result,
                 "xp_clocks": locked.xp_clocks,
                 "unallocated_xp": locked.unallocated_xp,
-                "character": _character_response(locked),
+                "character": _character_response(locked, request),
                 "message": (
                     f"Cancelled {result['track']} pending: "
                     f"+{result['pool_refund']} Available XP, "
