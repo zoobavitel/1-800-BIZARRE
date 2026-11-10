@@ -6,6 +6,7 @@ from rest_framework.validators import UniqueValidator
 from .media_urls import own_media_file_name
 from django.contrib.auth.models import User
 from .models import (
+    other_pc_in_campaign,
     _default_stash_slots,
     AssistHelpPending,
     UserProfile,
@@ -2090,6 +2091,20 @@ class CharacterSerializer(serializers.ModelSerializer):
                 if not is_member:
                     raise serializers.ValidationError(
                         {"campaign": "You can only add a character to a campaign you're in."}
+                    )
+                # One PC per user per campaign.
+                owner_id = instance.user_id if instance else user.id
+                existing = other_pc_in_campaign(
+                    owner_id, new_id, getattr(instance, "pk", None)
+                )
+                if existing is not None:
+                    raise serializers.ValidationError(
+                        {
+                            "campaign": (
+                                f'You already have "{existing.true_name}" in this '
+                                "campaign. Remove it first."
+                            )
+                        }
                     )
 
     def validate(self, data):

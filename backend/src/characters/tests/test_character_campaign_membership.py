@@ -113,7 +113,9 @@ class CharacterCampaignMembershipTests(TestCase):
         # Through the sheet save...
         saved = self.client.patch(f"/api/characters/{pc.pk}/", {"campaign": self.campaign.pk}, format="json")
         self.assertEqual(saved.status_code, 200, saved.content)
-        # ...and through assign-character.
+        # ...and through assign-character (one PC per campaign, so the
+        # first one leaves first).
+        Character.objects.filter(pk=pc.pk).update(campaign=None)
         pc2 = self._pc(self.newbie)
         assigned = self.client.post(
             f"/api/campaigns/{self.campaign.pk}/assign-character/", {"character_id": pc2.pk}, format="json"

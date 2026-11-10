@@ -802,6 +802,19 @@ def bump_character_version(character_id, instance=None):
         instance.refresh_from_db(fields=["version"])
 
 
+def other_pc_in_campaign(user_id, campaign_id, exclude_pk=None):
+    """Return the user's PC already in this campaign, or None.
+
+    A user has at most one PC in a campaign. Unassigned PCs are unlimited.
+    """
+    if not user_id or not campaign_id:
+        return None
+    qs = Character.objects.filter(user_id=user_id, campaign_id=campaign_id)
+    if exclude_pk:
+        qs = qs.exclude(pk=exclude_pk)
+    return qs.only("id", "true_name").first()
+
+
 class Character(models.Model):
     objects = CharacterQuerySet.as_manager()
 
