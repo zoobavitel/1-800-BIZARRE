@@ -115,7 +115,7 @@ EXPECTED = {
     # The SRD catalog is the one thing staff manage through the API (the body
     # creates a TEMPLATE item). Everything else is closed to staff (2026-11-08).
     "POST /api/equipment-items/ as staff": (OPEN, "BY DESIGN: staff add SRD catalog items"),
-    "POST /api/characters/ as member": (OPEN, "BY DESIGN: a player may add a PC to a campaign they play in"),
+    "POST /api/characters/ as member": (INVALID, "BY DESIGN: a player may add one PC to a campaign they play in; the member already has one there, so 400 (test_one_pc_per_campaign)"),
     "POST /api/crews/ as member": (OPEN, "BY DESIGN: a player may create a crew in their campaign"),
     "PATCH /api/crews/{id}/ as member": (OPEN, "BY DESIGN: crew members edit the shared crew sheet, including level, xp, coin, rep, hold, turf and wanted_level (user, 2026-11-02; see test_member_crew_stat_patch)"),
     "POST /api/crews/{id}/propose-name/ as member": (OPEN, "BY DESIGN: crew members propose crew names"),
