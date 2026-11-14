@@ -160,6 +160,13 @@ export default function HamburgerMenu({
             >
               Ability Browser
             </button>
+            <button
+              type="button"
+              className="nav-item"
+              onClick={() => handleNav("homebrew")}
+            >
+              View Homebrew
+            </button>
             <span className="nav-item nav-item-soon">Virtual Table</span>
           </div>
         </div>

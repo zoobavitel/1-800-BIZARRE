@@ -257,7 +257,8 @@ class EquipmentCatalogPermissionTests(TestCase):
         self.client = APIClient()
 
     def test_creator_cannot_delete_own_site_item(self):
-        """The site catalog is staff-only; staff manage it in Django admin."""
+        # Site items are core catalog: staff-only, even for their creator
+        # (user's rule, 2026-11-06).
         item = EquipmentItem.objects.create(
             name="Creator Site Widget",
             category="gear",
