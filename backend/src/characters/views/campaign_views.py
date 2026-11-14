@@ -11,6 +11,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from ..models import (
+    other_pc_in_campaign,
     Campaign,
     CampaignAuditLog,
     CampaignInvitation,
@@ -431,6 +432,18 @@ class CampaignViewSet(viewsets.ModelViewSet):
                 {
                     "error": (
                         f'Remove this character from "{character.campaign.name}" first.'
+                    )
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        existing = other_pc_in_campaign(request.user.id, campaign.id, character.pk)
+        if existing is not None:
+            return Response(
+                {
+                    "error": (
+                        f'You already have "{existing.true_name}" in this campaign. '
+                        "Remove it first."
                     )
                 },
                 status=status.HTTP_409_CONFLICT,
