@@ -1377,6 +1377,30 @@ const CharacterSheetWrapper = ({
     [campaignId, characterId],
   );
 
+  // S8: the sheet's owner saves (private) or publishes one of their custom
+  // items as homebrew.
+  const handleShareItem = useCallback(
+    async (item, { public: isPublic = true } = {}) => {
+      if (characterId == null || !String(item?.name || "").trim()) return null;
+      try {
+        return await equipmentAPI.share({
+          name: item.name,
+          detail: item.detail,
+          category: item.category,
+          load: item.load,
+          quality: item.quality,
+          coin_value: item.coin_value,
+          source_character: characterId,
+          public: isPublic,
+        });
+      } catch (err) {
+        console.error("Make homebrew failed:", err);
+        return null;
+      }
+    },
+    [characterId],
+  );
+
   // Portrait state
   const [imageUrl, setImageUrl] = useState(character?.image_url || "");
   const [imagePreview, setImagePreview] = useState(
@@ -15842,6 +15866,11 @@ const CharacterSheetWrapper = ({
                         isGM={isGM}
                         onPromoteToCampaign={
                           isGM ? handlePromoteItemToCampaign : undefined
+                        }
+                        onShareItem={
+                          character?.id && character?.user_id === user?.id
+                            ? handleShareItem
+                            : undefined
                         }
                       />
                     ) : null}

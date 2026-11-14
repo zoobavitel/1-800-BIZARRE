@@ -208,6 +208,7 @@ class EquipmentItem(models.Model):
         ("TEMPLATE", "Template"),
         ("CAMPAIGN", "Campaign"),
         ("SITE", "Site"),
+        ("SHARED", "Shared"),
     ]
 
     name = models.CharField(max_length=200)
@@ -255,6 +256,10 @@ class EquipmentItem(models.Model):
     available_when_adding = models.BooleanField(
         default=True,
         help_text="When false, hidden from add-item picker for this campaign.",
+    )
+    is_public = models.BooleanField(
+        default=True,
+        help_text="SHARED items only: false once the creator unshares it (hidden from new adds).",
     )
 
     class Meta:

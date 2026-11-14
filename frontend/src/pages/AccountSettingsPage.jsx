@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { buildRouteHref } from "../utils/spaNavigation";
 import { authAPI, useAuth } from "../features/auth";
 import { useTheme } from "../features/theme/ThemeContext";
 import { resolveMediaUrl } from "../features/character-sheet/services/api";
@@ -737,6 +738,18 @@ export default function AccountSettingsPage() {
                 {passwordMessage}
               </span>
             )}
+          </div>
+        </section>
+
+        <section style={S.section}>
+          <h2 style={S.sectionTitle}>My homebrew</h2>
+          <div style={S.card}>
+            <p style={S.mutedSmall}>
+              Your homebrew items moved to the Homebrew page.{" "}
+              <a href={buildRouteHref("homebrew", { tab: "creations" })} style={{ color: "inherit" }}>
+                Open My creations
+              </a>
+            </p>
           </div>
         </section>
 

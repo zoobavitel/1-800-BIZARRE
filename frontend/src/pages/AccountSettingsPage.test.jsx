@@ -9,6 +9,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import AccountSettingsPage from "./AccountSettingsPage";
 import { authAPI, useAuth } from "../features/auth";
 import { useTheme } from "../features/theme/ThemeContext";
+import { equipmentAPI } from "../features/character-sheet/services/api";
 
 jest.mock("../features/auth", () => ({
   authAPI: {
@@ -25,6 +26,7 @@ jest.mock("../features/theme/ThemeContext", () => ({
 
 jest.mock("../features/character-sheet/services/api", () => ({
   resolveMediaUrl: jest.fn((value) => value || ""),
+  equipmentAPI: { list: jest.fn() },
 }));
 
 jest.mock("../components/AvatarCropModal", () => () => null);
@@ -33,6 +35,7 @@ describe("AccountSettingsPage avatar upload validation", () => {
   beforeEach(() => {
     useAuth.mockReturnValue({ user: { username: "tester" } });
     useTheme.mockReturnValue({ theme: "dark", setTheme: jest.fn() });
+    equipmentAPI.list.mockResolvedValue([]);
     authAPI.getProfile.mockResolvedValue(null);
     authAPI.updateProfile.mockResolvedValue({});
     authAPI.changePassword.mockResolvedValue({

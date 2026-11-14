@@ -129,7 +129,9 @@ function CatalogSearchCard({
                   ? "Campaign"
                   : c.scope === "SITE"
                     ? "Site"
-                    : "Template"}{" "}
+                    : c.scope === "SHARED"
+                      ? `Shared by ${c.created_by_username || "a player"}`
+                      : "Template"}{" "}
                 · {categoryLabel(c.category)} · load {c.load_slots ?? 1}
               </span>
               <span style={{ display: "block", fontWeight: "bold" }}>{c.name}</span>
@@ -398,6 +400,7 @@ export default function CharacterSheetInventoryList({
   characterId,
   isGM = false,
   onPromoteToCampaign,
+  onShareItem,
   allowArmor = true,
   hideAggregateLoad = false,
 }) {
@@ -796,6 +799,38 @@ export default function CharacterSheetInventoryList({
                 >
                   Save to campaign library
                 </button>
+              ) : null}
+              {onShareItem &&
+              !readOnly &&
+              !armorKind &&
+              item.catalog_id == null &&
+              String(item.name || "").trim() ? (
+                <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                  {[
+                    ["Save", false],
+                    ["Publish", true],
+                  ].map(([verb, isPublic]) => (
+                    <button
+                      key={verb}
+                      type="button"
+                      style={{ ...btnStyle, fontSize: "10px" }}
+                      aria-label={`${verb} ${item.name} as homebrew`}
+                      onClick={async () => {
+                        const made = await onShareItem(item, { public: isPublic });
+                        if (made?.id == null) return;
+                        // Link the row to its homebrew item so it isn't made twice.
+                        onInventoryTouch?.();
+                        onChange(
+                          inv.map((row) =>
+                            row.id === item.id ? { ...row, catalog_id: made.id } : row,
+                          ),
+                        );
+                      }}
+                    >
+                      {verb} as homebrew
+                    </button>
+                  ))}
+                </div>
               ) : null}
             </div>
           );
