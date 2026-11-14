@@ -56,11 +56,16 @@ const SHEET_SYNC_INTERVAL_MS = 30000;
 /** Coalesce SSE campaign_update bursts into one sheet sync (ms). */
 const SHEET_SSE_DEBOUNCE_MS = 1000;
 
-/** Creator / campaign GM may edit; campaign players view See-on NPCs read-only. */
-function userCanEditNpcSheet(user, npc, campaigns) {
+/**
+ * Creator / campaign GM may edit; campaign players view See-on NPCs read-only.
+ * `known` is the NPC record the page loaded. The sheet's save data has no
+ * creator, so the creator comes from there when the save data lacks it.
+ */
+export function userCanEditNpcSheet(user, npc, campaigns, known = null) {
   if (!user?.id) return false;
   if (!npc?.id) return true;
-  const creatorId = npc.creator ?? npc.creator_id;
+  const creatorId =
+    npc.creator ?? npc.creator_id ?? known?.creator ?? known?.creator_id;
   if (creatorId != null && Number(creatorId) === Number(user.id)) return true;
   const campaignId = npc.campaign ?? npc.campaign_id;
   if (campaignId == null) return false;
@@ -533,6 +538,11 @@ export default function CharacterPage({
   const [npcsLoading, setNpcsLoading] = useState(false);
   const [campaignId] = useState(null);
   const [npcTabs, setNpcTabs] = useState([]);
+  // Read by the NPC save check without re-creating the save callback.
+  const npcTabsRef = useRef(npcTabs);
+  npcTabsRef.current = npcTabs;
+  const npcsRef = useRef(npcs);
+  npcsRef.current = npcs;
   const [activeNpcTabId, setActiveNpcTabId] = useState(null);
   const npcTabsInitialized = useRef(false);
 
@@ -1533,7 +1543,19 @@ export default function CharacterPage({
 
   const handleSaveNpc = useCallback(
     async (npcData) => {
-      if (!userCanEditNpcSheet(user, npcData, campaigns)) {
+      const knownNpc =
+        npcData?.id != null
+          ? npcTabsRef.current.find(
+              (t) =>
+                Number(t.npcId) === Number(npcData.id) ||
+                Number(t.npc?.id) === Number(npcData.id),
+            )?.npc ||
+            npcsRef.current.find(
+              (n) => Number(n.id) === Number(npcData.id),
+            ) ||
+            null
+          : null;
+      if (!userCanEditNpcSheet(user, npcData, campaigns, knownNpc)) {
         const err = new Error("You do not have permission to edit this NPC.");
         console.error("Save NPC refused:", err);
         throw err;
