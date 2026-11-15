@@ -1198,6 +1198,8 @@ const NPCSheet = ({
   campaigns = [],
   allNpcs = [],
   isGM = false,
+  /** Creator or GM: may set what players see of this NPC (not session or faction flags). */
+  canEditVisibility = false,
   readOnly = false,
   onFactionChange,
   onCampaignRefresh,
@@ -1274,7 +1276,19 @@ const NPCSheet = ({
       ...prev,
       [key]: !npcSectionVisible(prev, key),
     }));
-  const showNpcSection = (key) => isGM || npcSectionVisible(playersSee, key);
+  const canEditNpcVisibility = isGM || canEditVisibility;
+  // Players get no Stand coin / a null vulnerability clock until the GM reveals
+  // them in the current session; don't draw default grades in their place.
+  const playerStandCoinHidden =
+    !canEditNpcVisibility &&
+    npc?.id != null &&
+    Object.keys(npc?.stand_coin_stats || {}).length === 0;
+  const playerVulnHidden =
+    !canEditNpcVisibility &&
+    npc?.id != null &&
+    npc?.vulnerability_clock_max == null;
+  const showNpcSection = (key) =>
+    canEditNpcVisibility || npcSectionVisible(playersSee, key);
   const showFactionSection = (flag) =>
     isGM || (factionVisibleToPlayers && flag !== false);
   const [showFactionItemPicker, setShowFactionItemPicker] = useState(false);
@@ -3448,7 +3462,7 @@ const NPCSheet = ({
             </button>
           ))}
         </div>
-        {isGM && !readOnly ? (
+        {canEditNpcVisibility && !readOnly ? (
           <button
             type="button"
             onClick={() => setVisibilityEditMode((v) => !v)}
@@ -3477,7 +3491,7 @@ const NPCSheet = ({
           </button>
         ) : null}
       </div>
-      {visibilityEditMode && isGM ? (
+      {visibilityEditMode && canEditNpcVisibility ? (
         <div
           style={{
             background: "#052e1a",
@@ -3504,7 +3518,7 @@ const NPCSheet = ({
               <div style={{ display: "flex", gap: "16px", alignItems: "flex-start", flexWrap: "wrap" }}>
                 {/* Left: portrait + level */}
                 <VisEditSection
-                  active={visibilityEditMode && isGM}
+                  active={visibilityEditMode && canEditNpcVisibility}
                   visible={!!npcVisibleToPlayers}
                   label="NPC"
                   onToggle={() => setNpcVisibleToPlayers((v) => !v)}
@@ -3651,7 +3665,7 @@ const NPCSheet = ({
                 {/* Right: stacked identity fields */}
                 <div style={{ flex: "1 1 220px", minWidth: 0, display: "flex", flexDirection: "column", gap: "8px" }}>
                   <VisEditSection
-                    active={visibilityEditMode && isGM}
+                    active={visibilityEditMode && canEditNpcVisibility}
                     visible={!!npcVisibleToPlayers}
                     label="NPC"
                     onToggle={() => setNpcVisibleToPlayers((v) => !v)}
@@ -3668,7 +3682,7 @@ const NPCSheet = ({
                   </VisEditSection>
                   {playbook === "STAND" && showNpcSection("stand_identity") && (
                     <VisEditSection
-                      active={visibilityEditMode && isGM}
+                      active={visibilityEditMode && canEditNpcVisibility}
                       visible={npcSectionVisible(playersSee, "stand_identity")}
                       label="Stand identity"
                       onToggle={() => togglePlayersSee("stand_identity")}
@@ -3714,7 +3728,7 @@ const NPCSheet = ({
                   </div>
                   {showNpcSection("faction_membership") ? (
                   <VisEditSection
-                    active={visibilityEditMode && isGM}
+                    active={visibilityEditMode && canEditNpcVisibility}
                     visible={npcSectionVisible(playersSee, "faction_membership")}
                     label="Faction membership"
                     onToggle={() => togglePlayersSee("faction_membership")}
@@ -3833,7 +3847,7 @@ const NPCSheet = ({
                   ) : null}
                   {showNpcSection("heritage") ? (
                   <VisEditSection
-                    active={visibilityEditMode && isGM}
+                    active={visibilityEditMode && canEditNpcVisibility}
                     visible={npcSectionVisible(playersSee, "heritage")}
                     label="Heritage"
                     onToggle={() => togglePlayersSee("heritage")}
@@ -4072,6 +4086,7 @@ const NPCSheet = ({
                     </div>
 
                     {playbook === "STAND" &&
+                    !playerVulnHidden &&
                     (isDurS ? (
                       /* S-DURABILITY — No vulnerability clock */
                       <div
@@ -4657,7 +4672,7 @@ const NPCSheet = ({
                 {/* Inventory — structured kit (same field as CREW mode when no faction) */}
                 {!(readOnly && playersSeeInventory === false) ? (
                 <VisEditSection
-                  active={visibilityEditMode && isGM}
+                  active={visibilityEditMode && canEditNpcVisibility}
                   visible={!!playersSeeInventory}
                   label="Inventory"
                   onToggle={() => setPlayersSeeInventory((v) => !v)}
@@ -5536,7 +5551,7 @@ const NPCSheet = ({
                 {/* GM Notes */}
                 {showNpcSection("notes") ? (
                 <VisEditSection
-                  active={visibilityEditMode && isGM}
+                  active={visibilityEditMode && canEditNpcVisibility}
                   visible={npcSectionVisible(playersSee, "notes")}
                   label="GM notes"
                   onToggle={() => togglePlayersSee("notes")}
@@ -5581,7 +5596,7 @@ const NPCSheet = ({
                     <span style={{ ...S.lbl, margin: 0 }}>PLAYBOOK</span>
                     {showNpcSection("playbook") ? (
                     <VisEditSection
-                      active={visibilityEditMode && isGM}
+                      active={visibilityEditMode && canEditNpcVisibility}
                       visible={npcSectionVisible(playersSee, "playbook")}
                       label="Playbook"
                       onToggle={() => togglePlayersSee("playbook")}
@@ -5627,7 +5642,7 @@ const NPCSheet = ({
                     </div>
                     {showNpcSection("stand_identity") ? (
                     <VisEditSection
-                      active={visibilityEditMode && isGM}
+                      active={visibilityEditMode && canEditNpcVisibility}
                       visible={npcSectionVisible(playersSee, "stand_identity")}
                       label="Stand identity"
                       onToggle={() => togglePlayersSee("stand_identity")}
@@ -5706,7 +5721,7 @@ const NPCSheet = ({
                     ) : null}
                     {showNpcSection("forms") ? (
                     <VisEditSection
-                      active={visibilityEditMode && isGM}
+                      active={visibilityEditMode && canEditNpcVisibility}
                       visible={npcSectionVisible(playersSee, "forms")}
                       label="Forms"
                       onToggle={() => togglePlayersSee("forms")}
@@ -5847,7 +5862,7 @@ const NPCSheet = ({
                     ) : null}
                     {showNpcSection("consciousness") ? (
                     <VisEditSection
-                      active={visibilityEditMode && isGM}
+                      active={visibilityEditMode && canEditNpcVisibility}
                       visible={npcSectionVisible(playersSee, "consciousness")}
                       label="Consciousness"
                       onToggle={() => togglePlayersSee("consciousness")}
@@ -5889,7 +5904,7 @@ const NPCSheet = ({
                 {/* Heritage (inside unified PLAYBOOK card) */}
                 {showNpcSection("heritage") ? (
                 <VisEditSection
-                  active={visibilityEditMode && isGM}
+                  active={visibilityEditMode && canEditNpcVisibility}
                   visible={npcSectionVisible(playersSee, "heritage")}
                   label="Heritage"
                   onToggle={() => togglePlayersSee("heritage")}
@@ -6151,7 +6166,7 @@ const NPCSheet = ({
                 ) : null}
 
                 {/* Stand Coin — inside PLAYBOOK card */}
-                {playbook === "STAND" && (
+                {playbook === "STAND" && !playerStandCoinHidden && (
                   <div
                     style={{
                       marginTop: 14,
@@ -6379,7 +6394,7 @@ const NPCSheet = ({
                 {/* Abilities — Stand-playbook NPCs only */}
                 {playbook === "STAND" && showNpcSection("abilities") && (
                 <VisEditSection
-                  active={visibilityEditMode && isGM}
+                  active={visibilityEditMode && canEditNpcVisibility}
                   visible={npcSectionVisible(playersSee, "abilities")}
                   label="Abilities"
                   onToggle={() => togglePlayersSee("abilities")}
@@ -6403,7 +6418,7 @@ const NPCSheet = ({
                 {/* Playbook Abilities — Hamon / Spin / Non-Bizarre */}
                 {playbook !== "STAND" && showNpcSection("abilities") && (
                 <VisEditSection
-                  active={visibilityEditMode && isGM}
+                  active={visibilityEditMode && canEditNpcVisibility}
                   visible={npcSectionVisible(playersSee, "abilities")}
                   label="Abilities"
                   onToggle={() => togglePlayersSee("abilities")}
@@ -6720,7 +6735,7 @@ const NPCSheet = ({
                 {/* PC Standing — own card under PLAYBOOK / Stand Abilities */}
                 {showNpcSection("pc_standing") ? (
                 <VisEditSection
-                  active={visibilityEditMode && isGM}
+                  active={visibilityEditMode && canEditNpcVisibility}
                   visible={npcSectionVisible(playersSee, "pc_standing")}
                   label="PC standing"
                   onToggle={() => togglePlayersSee("pc_standing")}
@@ -7383,7 +7398,9 @@ const NPCSheet = ({
                 ? showFactionSection(factionPlayersSeeContacts)
                 : showNpcSection("contacts")) ? (
               <VisEditSection
-                active={visibilityEditMode && isGM}
+                active={
+                  visibilityEditMode && (faction ? isGM : canEditNpcVisibility)
+                }
                 visible={
                   faction
                     ? factionPlayersSeeContacts
@@ -8012,7 +8029,7 @@ const NPCSheet = ({
               campaignId !== "" &&
               campaignCrews.length > 0 ? (
                 <VisEditSection
-                  active={visibilityEditMode && isGM}
+                  active={visibilityEditMode && canEditNpcVisibility}
                   visible={npcSectionVisible(playersSee, "crew_standing")}
                   label="Player crew standing"
                   onToggle={() => togglePlayersSee("crew_standing")}
@@ -8206,7 +8223,9 @@ const NPCSheet = ({
               ? showFactionSection(factionPlayersSeeInventory)
               : isGM || playersSeeInventory !== false) ? (
             <VisEditSection
-              active={visibilityEditMode && isGM}
+              active={
+                  visibilityEditMode && (faction ? isGM : canEditNpcVisibility)
+                }
               visible={
                 faction
                   ? factionPlayersSeeInventory
