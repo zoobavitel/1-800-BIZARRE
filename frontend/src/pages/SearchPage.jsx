@@ -89,6 +89,7 @@ const CATEGORIES = [
   { id: "playbook", label: "Playbooks" },
   { id: "ability", label: "Abilities" },
   { id: "heritage", label: "Character options" },
+  { id: "homebrew", label: "Homebrew" },
 ];
 
 const TYPE_COLORS = {
@@ -100,12 +101,14 @@ const TYPE_COLORS = {
   spin_ability: "#7c3aed",
   stand_ability: "#1d4ed8",
   heritage: "#059669",
+  homebrew_item: "#e07b39",
 };
 
 export default function SearchPage({
   onNavigateToCharacter,
   onNavigateToCampaign,
   onNavigateToAbilities,
+  onNavigateToHomebrew,
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
@@ -144,6 +147,8 @@ export default function SearchPage({
       : results.filter((r) => {
           if (category === "npc") return r.type === "npc";
           if (category === "heritage") return r.type === "heritage";
+          if (category === "homebrew" || category === "item")
+            return r.type === "homebrew_item";
           if (category === "ability")
             return [
               "ability",
@@ -157,7 +162,10 @@ export default function SearchPage({
         });
 
   const handleResultClick = (r) => {
-    if (r.type === "character" && onNavigateToCharacter)
+    if (r.type === "homebrew_item") {
+      if (onNavigateToHomebrew) onNavigateToHomebrew({ tab: "browse", q: r.title });
+      else window.location.hash = buildRouteHref("homebrew", { tab: "browse", q: r.title });
+    } else if (r.type === "character" && onNavigateToCharacter)
       onNavigateToCharacter(r.id);
     else if (r.type === "campaign" && onNavigateToCampaign)
       onNavigateToCampaign(r.id);
@@ -185,6 +193,7 @@ export default function SearchPage({
     if (r.type === "character") return buildRouteHref("character", { characterId: r.id });
     if (r.type === "campaign") return buildRouteHref("campaigns", { campaignId: r.id });
     if (r.type === "heritage") return buildRouteHref("abilities", { filter: "heritage" });
+    if (r.type === "homebrew_item") return buildRouteHref("homebrew", { tab: "browse", q: r.title });
     if (["ability", "hamon_ability", "spin_ability", "stand_ability"].includes(r.type)) {
       const filter =
         r.type === "hamon_ability"
@@ -206,7 +215,7 @@ export default function SearchPage({
           <SearchIcon size={18} style={S.searchIcon} />
           <input
             type="text"
-            placeholder="Search characters, abilities, heritages..."
+            placeholder="Search characters, abilities, heritages, homebrew..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             style={S.searchInput}
@@ -250,7 +259,7 @@ export default function SearchPage({
                   }}
                 >
                   <span style={S.tag(TYPE_COLORS[r.type] || "#4b5563")}>
-                    {r.type?.toUpperCase()}
+                    {r.type?.replace(/_/g, " ").toUpperCase()}
                   </span>
                   <span style={S.cardTitle}>{r.title}</span>
                 </div>

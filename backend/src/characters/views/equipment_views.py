@@ -5,7 +5,13 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 
-from ..models import Campaign, Character, EquipmentItem, CampaignEquipmentAccess
+from ..models import (
+    Campaign,
+    CampaignEquipmentAccess,
+    Character,
+    EquipmentItem,
+    HomebrewCollectionEntry,
+)
 from ..serializers import (
     EquipmentItemSerializer,
     CampaignEquipmentAccessSerializer,
@@ -22,6 +28,9 @@ class EquipmentItemViewSet(viewsets.ModelViewSet):
         campaign_id = self.request.query_params.get("campaign")
         scope = self.request.query_params.get("scope")
         available_only = self.request.query_params.get("available_for_campaign")
+        homebrew = self.request.query_params.get("homebrew")
+        if homebrew in HOMEBREW_LISTS and getattr(self, "action", None) == "list":
+            return self._homebrew_list(user, homebrew)
 
         cid = None
         if campaign_id not in (None, ""):
@@ -103,6 +112,44 @@ class EquipmentItemViewSet(viewsets.ModelViewSet):
                 )
             )
         return base.order_by("category", "name")
+
+    def _homebrew_list(self, user, which):
+        """Homebrew page lists (S9). Published homebrew is SITE (staff-made)
+        or public SHARED; mine is my SITE/SHARED rows, private or not."""
+        published = models.Q(scope="SITE") | models.Q(scope="SHARED", is_public=True)
+        qs = EquipmentItem.objects.select_related("created_by")
+        if which == "browse":
+            qs = qs.filter(published)
+            q = str(self.request.query_params.get("q") or "").strip()
+            if q:
+                qs = qs.filter(models.Q(name__icontains=q) | models.Q(description__icontains=q))
+        elif which == "mine":
+            qs = qs.filter(scope__in=("SITE", "SHARED"), created_by=user)
+        else:  # collection: hide items their creator unpublished since
+            qs = qs.filter(collected_by__user=user).filter(
+                published | models.Q(scope="SHARED", created_by=user)
+            )
+        return qs.distinct().order_by("name")
+
+    @action(detail=True, methods=["post"], url_path="collect")
+    def collect(self, request, pk=None):
+        item = self._collectable(request)
+        HomebrewCollectionEntry.objects.get_or_create(user=request.user, item=item)
+        return Response(self.get_serializer(item).data)
+
+    @action(detail=True, methods=["post"], url_path="uncollect")
+    def uncollect(self, request, pk=None):
+        item = self.get_object()
+        HomebrewCollectionEntry.objects.filter(user=request.user, item=item).delete()
+        return Response(self.get_serializer(item).data)
+
+    def _collectable(self, request):
+        item = self.get_object()
+        if item.scope not in ("SITE", "SHARED"):
+            raise ValidationError({"scope": ["Only homebrew items go in a collection."]})
+        if item.scope == "SHARED" and not item.is_public and item.created_by_id != request.user.id:
+            self.permission_denied(request, message="That homebrew item is private.")
+        return item
 
     def get_serializer_context(self):
         ctx = super().get_serializer_context()
@@ -460,6 +507,9 @@ class EquipmentItemViewSet(viewsets.ModelViewSet):
             campaign=campaign, item=item, defaults={"enabled": False}
         )
         return self._shared_response(copy, created=True)
+
+
+HOMEBREW_LISTS = ("browse", "mine", "collection")
 
 
 def _truthy(value):

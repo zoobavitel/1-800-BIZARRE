@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 
 import { equipmentAPI } from "../features/character-sheet/services/api";
 import MySharedItems from "../features/character-sheet/components/MySharedItems";
@@ -41,14 +41,36 @@ const S = {
 };
 
 const ITEM_TABS = [
+  { id: "browse", label: "Browse" },
+  { id: "collection", label: "My collection" },
   { id: "creations", label: "My creations" },
   { id: "create", label: "Create item" },
 ];
 
+// Homebrew kinds, like D&D Beyond's homebrew page. Only items exist so far;
+// the rest are planned stories (S12 to S14).
+const KINDS = [
+  { id: "items", label: "Items", live: true },
+  { id: "heritages", label: "Heritages" },
+  { id: "standard", label: "Standard abilities" },
+  { id: "spin", label: "Spin abilities" },
+  { id: "hamon", label: "Hamon abilities" },
+];
+
 const EMPTY_FORM = { name: "", description: "", category: "gear", load: 1, quality: 1 };
 
+function formFromItem(item) {
+  return {
+    name: item.name || "",
+    description: item.description || "",
+    category: item.category || "gear",
+    load: item.load_slots ?? 1,
+    quality: item.quality ?? 1,
+  };
+}
+
 /** Create a homebrew item from scratch or from an existing item (S8). */
-function CreateHomebrewItem() {
+function CreateHomebrewItem({ initialTemplate = null }) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [template, setTemplate] = useState(null);
   const [search, setSearch] = useState("");
@@ -73,14 +95,15 @@ function CreateHomebrewItem() {
   const pickTemplate = (item) => {
     setTemplate(item);
     setSearch("");
-    setForm({
-      name: item.name || "",
-      description: item.description || "",
-      category: item.category || "gear",
-      load: item.load_slots ?? 1,
-      quality: item.quality ?? 1,
-    });
+    setForm(formFromItem(item));
   };
+
+  useEffect(() => {
+    if (!initialTemplate) return;
+    setTemplate(initialTemplate);
+    setSearch("");
+    setForm(formFromItem(initialTemplate));
+  }, [initialTemplate]);
 
   const save = async (isPublic) => {
     const name = form.name.trim();
@@ -216,25 +239,161 @@ function CreateHomebrewItem() {
   );
 }
 
+function makerLabel(item) {
+  return item.scope === "TEMPLATE" ? "SRD" : `by ${item.created_by_username || "admin"}`;
+}
+
+/** Published homebrew (browse) or my collection, with collect buttons (S9). */
+function HomebrewItemList({ which, initialQuery = "", onUseTemplate, onSearch }) {
+  const [query, setQuery] = useState(initialQuery);
+  const [items, setItems] = useState([]);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    setQuery(initialQuery);
+  }, [initialQuery]);
+
+  const load = useCallback(() => {
+    const q = query.trim();
+    const params = which === "browse" ? { homebrew: "browse", ...(q ? { q } : {}) } : { homebrew: "collection" };
+    equipmentAPI
+      .list(params)
+      .then((list) => setItems(Array.isArray(list) ? list : []))
+      .catch(() => setItems([]));
+  }, [which, query]);
+
+  useEffect(() => {
+    const t = setTimeout(load, which === "browse" && query ? 250 : 0);
+    return () => clearTimeout(t);
+  }, [load, which, query]);
+
+  const toggle = async (item) => {
+    setError(null);
+    try {
+      const updated = item.in_my_collection || which === "collection"
+        ? await equipmentAPI.uncollect(item.id)
+        : await equipmentAPI.collect(item.id);
+      if (which === "collection") load();
+      else setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, ...updated } : i)));
+    } catch (e) {
+      setError(e.message || "Could not update your collection.");
+    }
+  };
+
+  return (
+    <div>
+      {which === "browse" ? (
+        <input
+          style={{ ...S.inp, width: "100%", marginBottom: "10px" }}
+          aria-label="Search homebrew items"
+          placeholder="Search published homebrew items"
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            onSearch?.(e.target.value);
+          }}
+        />
+      ) : null}
+      {error ? <div style={{ color: "var(--sheet-label)", fontSize: "12px" }}>{error}</div> : null}
+      {items.length === 0 ? (
+        <div style={S.muted}>
+          {which === "browse"
+            ? "No published homebrew matches."
+            : "Your collection is empty. Add items from Browse."}
+        </div>
+      ) : (
+        items.map((item) => {
+          const collected = which === "collection" || item.in_my_collection;
+          return (
+            <div
+              key={item.id}
+              style={{ padding: "8px 0", borderBottom: "1px solid var(--border)", fontSize: "12px" }}
+            >
+              <strong>{item.name}</strong>
+              <span style={{ ...S.muted, marginLeft: "8px" }}>
+                {makerLabel(item)} · {categoryLabel(item.category)} · load {item.load_slots} · Q{item.quality}
+              </span>
+              {item.description ? <div style={{ ...S.muted, marginTop: "2px" }}>{item.description}</div> : null}
+              <div style={{ display: "flex", gap: "6px", marginTop: "6px", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  style={S.btn}
+                  aria-label={
+                    collected ? `Remove ${item.name} from my collection` : `Add ${item.name} to my collection`
+                  }
+                  onClick={() => toggle(item)}
+                >
+                  {collected ? "Remove from collection" : "Add to collection"}
+                </button>
+                <button
+                  type="button"
+                  style={S.btn}
+                  aria-label={`Use ${item.name} as template`}
+                  onClick={() => onUseTemplate(item)}
+                >
+                  Use as template
+                </button>
+              </div>
+            </div>
+          );
+        })
+      )}
+    </div>
+  );
+}
+
 /**
- * Homebrew page (S8): make your own items and manage them. Browse, the
- * collection and other homebrew kinds come in later stories.
+ * Homebrew page, modelled on D&D Beyond's: pick a kind, then browse
+ * published homebrew, keep a collection, manage your creations or create
+ * one (S8, S9). Only items exist so far.
  */
-export default function HomebrewPage({ tab, onNavigate }) {
-  const initial = ITEM_TABS.some((t) => t.id === tab) ? tab : "creations";
+export default function HomebrewPage({ tab, query = "", onNavigate }) {
+  const initial = ITEM_TABS.some((t) => t.id === tab) ? tab : "browse";
   const [current, setCurrent] = useState(initial);
+  const [template, setTemplate] = useState(null);
 
   useEffect(() => {
     if (ITEM_TABS.some((t) => t.id === tab)) setCurrent(tab);
   }, [tab]);
 
-  const go = (id) => {
+  const go = (id, extra) => {
     setCurrent(id);
-    onNavigate?.({ tab: id });
+    onNavigate?.({ tab: id, ...extra });
+  };
+
+  const startFromTemplate = (item) => {
+    setTemplate(item);
+    go("create");
   };
 
   return (
     <div style={S.page}>
+      <div style={S.card}>
+        <h2 style={S.title}>Homebrew</h2>
+        <div style={S.muted}>
+          Make your own content, find what other players and GMs published, and keep the ones you like in your
+          collection.
+        </div>
+        <div style={{ ...S.tabs, marginTop: "10px", marginBottom: 0 }}>
+          {KINDS.map((k) => (
+            <button
+              key={k.id}
+              type="button"
+              disabled={!k.live}
+              aria-label={k.live ? k.label : `${k.label} (coming later)`}
+              style={{
+                ...S.btn,
+                opacity: k.live ? 1 : 0.5,
+                cursor: k.live ? "pointer" : "default",
+                borderColor: k.live ? "var(--sheet-label)" : "var(--border)",
+              }}
+            >
+              {k.label}
+              {k.live ? "" : " · coming later"}
+            </button>
+          ))}
+        </div>
+      </div>
       <div style={S.card}>
         <h2 style={S.title}>Homebrew items</h2>
         <div style={S.tabs} role="tablist">
@@ -254,7 +413,17 @@ export default function HomebrewPage({ tab, onNavigate }) {
             </button>
           ))}
         </div>
-        {current === "create" ? <CreateHomebrewItem /> : <MySharedItems />}
+        {current === "create" ? (
+          <CreateHomebrewItem initialTemplate={template} />
+        ) : current === "creations" ? (
+          <MySharedItems />
+        ) : (
+          <HomebrewItemList
+            which={current}
+            initialQuery={current === "browse" ? query : ""}
+            onUseTemplate={startFromTemplate}
+          />
+        )}
       </div>
     </div>
   );

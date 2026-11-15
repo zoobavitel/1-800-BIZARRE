@@ -288,6 +288,28 @@ class CampaignEquipmentAccess(models.Model):
         return f"{self.campaign.name} / {self.item.name} ({state})"
 
 
+class HomebrewCollectionEntry(models.Model):
+    """A homebrew item a user added to their collection (S9). Only published
+    homebrew, or the user's own, can be added. Unpublishing hides the item
+    from other users' collections but keeps the entry."""
+
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="homebrew_collection"
+    )
+    item = models.ForeignKey(
+        EquipmentItem, on_delete=models.CASCADE, related_name="collected_by"
+    )
+    added_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["user", "item"], name="unique_homebrew_collection_entry")
+        ]
+
+    def __str__(self):
+        return f"{self.user.username} / {self.item.name}"
+
+
 class UserProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="profile")
     avatar = models.FileField(upload_to="avatars/", null=True, blank=True)
