@@ -1037,8 +1037,11 @@
   flex-shrink: 1;
   min-width: 0;
 }
-.home-poc .p-card-tags .p-tag:last-child,
-.home-poc .npc-card-meta .p-tag:last-child {
+.home-poc .p-card-tags .p-tag:last-child {
+  flex-shrink: 0;
+}
+/* NPC cards: keep the level tag whole; the role tag truncates. */
+.home-poc .npc-card-meta .p-tag:first-child {
   flex-shrink: 0;
 }
 
