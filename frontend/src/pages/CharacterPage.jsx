@@ -465,6 +465,7 @@ function seedBlankCharacter(campaignId = null) {
 export default function CharacterPage({
   initialCharacterId = null,
   initialNewCampaignId = null,
+  initialNewCharacter = false,
   initialNpcId = null,
   initialNpcCampaignId = null,
   preferNpcMode = false,
@@ -810,10 +811,10 @@ export default function CharacterPage({
           // Fall through (e.g. no access or invalid id)
         }
       }
-      // #npcs mounts a fresh CharacterPage with preferNpcMode — do not seed a PC
-      // tab until the user opens CHARACTERS (avoids phantom "New Character" /
-      // autosave when they only wanted NPCs).
-      if (preferNpcMode) {
+      // Only an explicit "new" route opens a blank sheet. Plain #character
+      // and #npcs leave the tabs empty, so the picker shows (no phantom
+      // "New Character" or autosave when the user only wanted to choose).
+      if (preferNpcMode || (initialNewCampaignId == null && !initialNewCharacter)) {
         setCharTabs([]);
         setActiveCharTabId(null);
         return;
@@ -827,20 +828,6 @@ export default function CharacterPage({
       setActiveCharTabId(blank.tabId);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  /** When charTabs was left empty (NPC-first mount), add one blank tab before showing PC mode. */
-  const seedEmptyCharacterTabs = useCallback(() => {
-    setCharTabs((prev) => {
-      if (prev.length > 0) return prev;
-      const blank = {
-        tabId: nextTabId++,
-        characterId: null,
-        character: createDefaultCharacter(),
-      };
-      setActiveCharTabId(blank.tabId);
-      return [blank];
-    });
   }, []);
 
   // ── Character tab handlers ───────────────────────────────────────────────
@@ -1945,7 +1932,6 @@ export default function CharacterPage({
         if (filtered.length === 0) {
           setNpcTabs([]);
           setActiveNpcTabId(null);
-          seedEmptyCharacterTabs();
           setMode(MODES.CHARACTER);
           if (typeof window !== "undefined")
             window.location.hash = "character";
@@ -1976,7 +1962,6 @@ export default function CharacterPage({
     activeCharTabId,
     activeNpcTabId,
     npcTabs,
-    seedEmptyCharacterTabs,
   ]);
   const saveActiveUnsavedCharacter = useCallback(async () => {
     const tab = charTabs.find((t) => t.tabId === activeCharTabId);
@@ -2468,7 +2453,7 @@ export default function CharacterPage({
                 lineHeight: 1.45,
               }}
             >
-              Open an existing character, or start a new blank sheet.
+              Open one of your PCs or NPCs, or start a new one.
             </div>
             {characters.length > 0 ? (
               <select
@@ -2513,25 +2498,83 @@ export default function CharacterPage({
                 No saved characters yet.
               </div>
             )}
-            <button
-              type="button"
-              onClick={() => {
-                handleCreateNewCharacterTab();
-                if (typeof window !== "undefined") {
-                  window.location.hash = "character";
-                }
-              }}
-              style={{
-                ...PAGE_STYLES.modeSelect,
-                width: "100%",
-                cursor: "pointer",
-                borderStyle: "dashed",
-                color: "#93c5fd",
-                borderColor: "#1d4ed8",
-              }}
-            >
-              + New Character
-            </button>
+            {npcs.length > 0 ? (
+              <select
+                aria-label="Choose NPC to view"
+                style={{
+                  ...PAGE_STYLES.modeSelect,
+                  width: "100%",
+                  marginBottom: "10px",
+                  color: "#e5e7eb",
+                }}
+                value=""
+                onChange={(e) => {
+                  const id = parseInt(e.target.value, 10);
+                  e.target.value = "";
+                  if (!Number.isFinite(id)) return;
+                  const npc = npcs.find((n) => Number(n.id) === id);
+                  if (npc) handleOpenNpcFromCharacterToolbar(npc);
+                }}
+              >
+                <option value="">Select NPC…</option>
+                {npcs.map((n) => (
+                  <option key={n.id} value={n.id}>
+                    {n.name || `NPC #${n.id}`}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <div
+                style={{
+                  fontSize: "12px",
+                  color: "#6b7280",
+                  marginBottom: "10px",
+                }}
+              >
+                No saved NPCs yet.
+              </div>
+            )}
+            <div style={{ display: "flex", gap: "8px" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  handleCreateNewCharacterTab();
+                  if (typeof window !== "undefined") {
+                    window.location.hash = "character";
+                  }
+                }}
+                style={{
+                  ...PAGE_STYLES.modeSelect,
+                  flex: 1,
+                  cursor: "pointer",
+                  borderStyle: "dashed",
+                  color: "#93c5fd",
+                  borderColor: "#1d4ed8",
+                }}
+              >
+                + New PC
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMode(MODES.NPC);
+                  handleCreateNewNpcTab();
+                  if (typeof window !== "undefined") {
+                    window.location.hash = "npcs";
+                  }
+                }}
+                style={{
+                  ...PAGE_STYLES.modeSelect,
+                  flex: 1,
+                  cursor: "pointer",
+                  borderStyle: "dashed",
+                  color: "#93c5fd",
+                  borderColor: "#1d4ed8",
+                }}
+              >
+                + New NPC
+              </button>
+            </div>
           </div>
         ) : (
           <CharacterSheetWrapper
