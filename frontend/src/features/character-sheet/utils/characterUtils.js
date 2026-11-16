@@ -764,6 +764,7 @@ export const SERVER_OWNED_FIELD_TOUCH_KEYS = [
   "stash",
   "heritage",
   "armor",
+  "harm",
 ];
 
 /** Sheet armor counts covered by the "armor" touch key. */
@@ -844,6 +845,12 @@ export function mergeServerOwnedCharacterFields(
         next[key] = serverCharacter[key];
       }
     }
+  }
+  // Harm: same as armor. A reload after a save must not leave the tab's old
+  // harm for the sheet to load back and the autosave to send.
+  if (!touches.harm && serverCharacter.harm && typeof serverCharacter.harm === "object") {
+    next.harm = serverCharacter.harm;
+    next.harmEntries = serverCharacter.harmEntries || serverCharacter.harm;
   }
   // XP tracks + free pool are server-owned (autosave never sends them). Take the
   // server copy unless the player is mid-spend on the XP card.

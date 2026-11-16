@@ -56,6 +56,22 @@ const SHEET_SYNC_INTERVAL_MS = 30000;
 /** Coalesce SSE campaign_update bursts into one sheet sync (ms). */
 const SHEET_SSE_DEBOUNCE_MS = 1000;
 
+/** PATCH keys for the six harm slots (sent only when harm is touched). */
+const HARM_BODY_KEYS = [
+  "harm_level1_used",
+  "harm_level1_name",
+  "harm_level1_slot2_used",
+  "harm_level1_slot2_name",
+  "harm_level2_used",
+  "harm_level2_name",
+  "harm_level2_slot2_used",
+  "harm_level2_slot2_name",
+  "harm_level3_used",
+  "harm_level3_name",
+  "harm_level4_used",
+  "harm_level4_name",
+];
+
 /**
  * Creator / campaign GM may edit; campaign players view See-on NPCs read-only.
  * `known` is the NPC record the page loaded. The sheet's save data has no
@@ -1080,6 +1096,11 @@ export default function CharacterPage({
           delete body.spin_armor_used;
           delete body.hamon_armor_used;
           delete body.special_armor_used;
+        }
+        // Same for harm: an old copy in this tab must not clear harm saved
+        // from here or elsewhere.
+        if (!touches.harm) {
+          for (const key of HARM_BODY_KEYS) delete body[key];
         }
         return body;
       };
