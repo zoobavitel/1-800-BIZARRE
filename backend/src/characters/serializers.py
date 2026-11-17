@@ -1865,6 +1865,12 @@ class CharacterSerializer(serializers.ModelSerializer):
     wanted_stars = serializers.IntegerField(
         source="campaign.wanted_stars", read_only=True
     )
+    # S11: in a campaign, its homebrew switch decides; null with no campaign.
+    campaign_homebrew_enabled = serializers.SerializerMethodField()
+
+    def get_campaign_homebrew_enabled(self, obj):
+        campaign = getattr(obj, "campaign", None)
+        return None if campaign is None else bool(campaign.homebrew_enabled)
     stand = StandSerializer(read_only=True)
     crew = CrewSerializer(read_only=True)
     crew_id = serializers.PrimaryKeyRelatedField(
@@ -3039,12 +3045,12 @@ class EquipmentItemSerializer(serializers.ModelSerializer):
         return "admin" if obj.scope in ("SITE", "TEMPLATE") else None
 
     def get_homebrew_source(self, obj):
-        """In the sheet's owned-homebrew list only: "mine" (the owner's
-        creation or collection) or "gm" (turned on by the campaign's GM)."""
+        """In the sheet's owned-homebrew list only: "mine" (the owner made or
+        saved it) or "campaign" (another member of the campaign did)."""
         owner_ids = self.context.get("homebrew_owner_ids")
         if owner_ids is None:
             return None
-        return "mine" if obj.id in owner_ids else "gm"
+        return "mine" if obj.id in owner_ids else "campaign"
 
     def get_in_my_collection(self, obj):
         if obj.scope not in ("SITE", "SHARED"):
@@ -3467,6 +3473,7 @@ class CampaignSerializer(serializers.ModelSerializer):
             "wanted_stars",
             "is_active",
             "allow_character_assignment",
+            "homebrew_enabled",
             "created_at",
             "factions",
             "crews",

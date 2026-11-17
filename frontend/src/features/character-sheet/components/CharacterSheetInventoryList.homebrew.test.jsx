@@ -20,7 +20,7 @@ const coin = {
 };
 const charm = {
   id: 62, name: "GM Charm", description: "", category: "gear", load_slots: 1, quality: 1,
-  scope: "SHARED", created_by_username: "gm", homebrew_source: "gm",
+  scope: "SHARED", created_by_username: "gm", homebrew_source: "campaign",
 };
 
 function renderSheet(props) {
@@ -33,6 +33,7 @@ function renderSheet(props) {
       onLoadoutChange={jest.fn()}
       campaignId={3}
       characterId={12}
+      homebrewEnabled
       {...props}
     />,
   );
@@ -53,7 +54,7 @@ describe("Add owned homebrew item (S10)", () => {
     );
   });
 
-  it("lists the owner's homebrew and the GM's, and adds one as a linked row", async () => {
+  it("lists the owner's homebrew and the table's, and adds one as a linked row", async () => {
     const onChange = jest.fn();
     renderSheet({ onChange });
     fireEvent.click(screen.getByRole("button", { name: "Add owned homebrew item" }));
@@ -62,7 +63,7 @@ describe("Add owned homebrew item (S10)", () => {
       expect(equipmentAPI.list).toHaveBeenCalledWith({ homebrew: "owned", character: 12 }),
     );
     expect(await screen.findByRole("option", { name: /Lucky Coin/ })).toHaveTextContent("by player1");
-    expect(screen.getByRole("option", { name: /GM Charm/ })).toHaveTextContent("from your GM");
+    expect(screen.getByRole("option", { name: /GM Charm/ })).toHaveTextContent("by gm · from your table");
 
     fireEvent.click(screen.getByRole("option", { name: /Lucky Coin/ }));
     const added = onChange.mock.calls[0][0];
@@ -84,5 +85,32 @@ describe("Add owned homebrew item (S10)", () => {
       expect(equipmentAPI.list).toHaveBeenCalledWith({ campaign: 3, available_for_campaign: true }),
     );
     expect(equipmentAPI.list).not.toHaveBeenCalledWith(expect.objectContaining({ homebrew: "owned" }));
+  });
+});
+
+describe("homebrew switch on the sheet (S11)", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    equipmentAPI.list.mockResolvedValue([]);
+  });
+
+  it("hides Add owned homebrew item while homebrew is off", () => {
+    renderSheet({ homebrewEnabled: false });
+    expect(screen.queryByRole("button", { name: "Add owned homebrew item" })).toBeNull();
+  });
+
+  it("tells a campaign sheet that the GM sets the switch", () => {
+    renderSheet({ homebrewEnabled: false });
+    expect(screen.getByText(/Homebrew: off \(your GM sets this\)/)).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: "Enable homebrew for this sheet" })).toBeNull();
+  });
+
+  it("gives a sheet with no campaign its own switch", () => {
+    const onHomebrewChange = jest.fn();
+    renderSheet({ campaignId: null, homebrewEnabled: false, onHomebrewChange });
+    const box = screen.getByRole("checkbox", { name: "Enable homebrew for this sheet" });
+    expect(box).not.toBeChecked();
+    fireEvent.click(box);
+    expect(onHomebrewChange).toHaveBeenCalledWith(true);
   });
 });

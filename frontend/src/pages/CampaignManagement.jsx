@@ -16,6 +16,7 @@ import { normalizeListResponse } from "../features/character-sheet/services/api"
 import { EQUIPMENT_CATEGORY_OPTIONS, categoryLabel } from "../features/character-sheet/utils/loadoutUtils";
 import { isGmManagedProgressClock } from "../features/character-sheet/utils/progressClockVisibility";
 import { useAuth } from "../features/auth";
+import { buildRouteHref } from "../utils/spaNavigation";
 import { isCampaignSseHealthy } from "../features/character-sheet/services/campaignEvents";
 // One stream per browser, shared by its tabs (PR 5b).
 import { subscribeCampaignEventsShared } from "../features/character-sheet/services/campaignEventsShared";
@@ -517,8 +518,43 @@ export function CampaignEquipmentPanel({ campaign, onRefresh }) {
 
   const campaignItems = items.filter((i) => i.scope === "CAMPAIGN");
   const templates = items.filter((i) => i.scope === "TEMPLATE");
-  const siteItems = items.filter((i) => i.scope === "SITE");
-  const sharedItems = items.filter((i) => i.scope === "SHARED");
+  const isGm = Boolean(
+    user && campaign?.gm?.id != null && Number(campaign.gm.id) === Number(user.id),
+  );
+
+  // S11: the campaign's homebrew switch, and the GM's list of homebrew in it.
+  const [homebrewOn, setHomebrewOn] = useState(Boolean(campaign?.homebrew_enabled));
+  const [homebrewItems, setHomebrewItems] = useState([]);
+
+  useEffect(() => {
+    setHomebrewOn(Boolean(campaign?.homebrew_enabled));
+  }, [campaign?.homebrew_enabled]);
+
+  const loadHomebrew = useCallback(() => {
+    if (!campaign?.id || !isGm || !homebrewOn) {
+      setHomebrewItems([]);
+      return;
+    }
+    equipmentAPI
+      .list({ homebrew: "campaign", campaign: campaign.id })
+      .then((list) => setHomebrewItems(Array.isArray(list) ? list : []))
+      .catch(() => setHomebrewItems([]));
+  }, [campaign?.id, isGm, homebrewOn]);
+
+  useEffect(() => {
+    loadHomebrew();
+  }, [loadHomebrew]);
+
+  const toggleHomebrew = async (value) => {
+    setError(null);
+    try {
+      await campaignAPI.patchCampaign(campaign.id, { homebrew_enabled: value });
+      setHomebrewOn(value);
+      onRefresh?.();
+    } catch (e) {
+      setError(e.message || "Could not change the homebrew switch.");
+    }
+  };
 
   const canDeleteCatalogItem = (item) => {
     if (!user) return false;
@@ -635,6 +671,7 @@ export function CampaignEquipmentPanel({ campaign, onRefresh }) {
     try {
       const copy = await equipmentAPI.copyToCampaign(item.id, campaign.id);
       loadItems();
+      loadHomebrew();
       if (copy?.id != null) startEdit(copy);
     } catch (e) {
       setError(e.message || "Could not copy the item.");
@@ -790,94 +827,70 @@ export function CampaignEquipmentPanel({ campaign, onRefresh }) {
           ))}
         </div>
       ) : null}
-      {siteItems.length > 0 ? (
-        <div style={{ marginTop: "10px" }}>
-          <div style={{ color: "var(--text-muted)", fontSize: "11px", marginBottom: "6px" }}>
-            Site catalog (hidden from add-item until you enable for this campaign)
+      {isGm ? (
+        <div style={{ marginTop: "12px", paddingTop: "8px", borderTop: "1px solid var(--bg-header)" }}>
+          <label style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px" }}>
+            <input
+              type="checkbox"
+              aria-label="Enable homebrew"
+              checked={homebrewOn}
+              onChange={(e) => toggleHomebrew(e.target.checked)}
+            />
+            Enable homebrew
+          </label>
+          <div style={{ color: "var(--text-dim)", fontSize: "11px", marginTop: "4px" }}>
+            {homebrewOn
+              ? "Everyone at the table can add homebrew any member made or saved to their collection. Agree together what you use."
+              : "Off: no sheet in this campaign can add homebrew."}
           </div>
-          {siteItems.map((item) => (
-            <div
-              key={`access-${item.id}`}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-                fontSize: "11px",
-                color: "var(--hftf-text-cream)",
-                marginBottom: "4px",
-                flexWrap: "wrap",
-              }}
-            >
-              <label style={{ display: "inline-flex", alignItems: "center" }}>
-                <input
-                  type="checkbox"
-                  checked={Boolean(item.enabled_for_campaign)}
-                  onChange={(e) => toggleAccess(item, e.target.checked)}
-                  style={{ marginRight: "6px" }}
-                />
-                Site: {item.name}
-              </label>
-              {canDeleteCatalogItem(item) ? (
-                <button
-                  type="button"
-                  style={{
-                    ...S.btn,
-                    fontSize: "10px",
-                    color: "var(--sheet-label)",
-                    padding: "2px 6px",
-                  }}
-                  onClick={() => handleDelete(item)}
-                >
-                  Delete
-                </button>
-              ) : null}
+          {homebrewOn ? (
+            <div style={{ marginTop: "8px" }}>
+              <div style={{ color: "var(--text-muted)", fontSize: "11px", marginBottom: "6px" }}>
+                Homebrew in this campaign
+              </div>
+              {homebrewItems.length === 0 ? (
+                <div style={{ color: "var(--text-dim)", fontSize: "12px" }}>
+                  None yet. Members make homebrew, or save published homebrew to their collection, on the Homebrew page.
+                </div>
+              ) : (
+                homebrewItems.map((item) => (
+                  <div
+                    key={`homebrew-${item.id}`}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      fontSize: "11px",
+                      color: "var(--hftf-text-cream)",
+                      marginBottom: "4px",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <strong>{item.name}</strong>
+                    <span style={{ color: "var(--text-dim)" }}>
+                      by {item.created_by_username || "admin"} · {categoryLabel(item.category)}
+                    </span>
+                    {!item.is_mine ? (
+                      <button
+                        type="button"
+                        aria-label={`Copy ${item.name} to my library and edit`}
+                        style={{ ...S.btn, fontSize: "10px", padding: "2px 6px" }}
+                        onClick={() => handleCopyShared(item)}
+                      >
+                        Copy to my library and edit
+                      </button>
+                    ) : null}
+                  </div>
+                ))
+              )}
+              <a
+                href={buildRouteHref("homebrew", { tab: "browse" })}
+                style={{ color: "var(--text-muted)", fontSize: "11px", display: "inline-block", marginTop: "6px" }}
+              >
+                Find more on the Homebrew page
+              </a>
             </div>
-          ))}
-        </div>
-      ) : null}
-      {sharedItems.length > 0 ? (
-        <div style={{ marginTop: "10px" }}>
-          <div style={{ color: "var(--text-muted)", fontSize: "11px", marginBottom: "6px" }}>
-            Shared by players and GMs (hidden until you enable it for this campaign)
-          </div>
-          {sharedItems.map((item) => (
-            <div
-              key={`shared-${item.id}`}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-                fontSize: "11px",
-                color: "var(--hftf-text-cream)",
-                marginBottom: "4px",
-                flexWrap: "wrap",
-              }}
-            >
-              <label style={{ display: "inline-flex", alignItems: "center" }}>
-                <input
-                  type="checkbox"
-                  checked={Boolean(item.enabled_for_campaign)}
-                  onChange={(e) => toggleAccess(item, e.target.checked)}
-                  style={{ marginRight: "6px" }}
-                />
-                {item.name}
-              </label>
-              <span style={{ color: "var(--text-dim)" }}>
-                Shared by {item.created_by_username || "a player"} · {categoryLabel(item.category)} · load{" "}
-                {item.load_slots} · Q{item.quality}
-              </span>
-              {campaign?.gm?.id != null && Number(campaign.gm.id) === Number(user?.id) ? (
-                <button
-                  type="button"
-                  aria-label={`Copy ${item.name} to my library and edit`}
-                  style={{ ...S.btn, fontSize: "10px", padding: "2px 6px" }}
-                  onClick={() => handleCopyShared(item)}
-                >
-                  Copy to my library and edit
-                </button>
-              ) : null}
-            </div>
-          ))}
+          ) : null}
         </div>
       ) : null}
       {form ? (

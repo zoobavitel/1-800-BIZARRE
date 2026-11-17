@@ -2,10 +2,9 @@
 
 - Add to a character: put one of my homebrew items, or one in my
   collection, on one of my own sheets.
-- Use in a campaign: the GM turns a homebrew item on for their campaign,
-  so every player there can add it.
 - A sheet's "Add owned homebrew item" lists the owner's creations and
-  collection, plus items the GM turned on for the sheet's campaign.
+  collection. In a campaign with homebrew on, it lists the whole table's
+  pool (S11), so the GM's homebrew is there too.
 - Add Item no longer mixes in homebrew: it's SRD plus the campaign library.
 """
 
@@ -35,7 +34,8 @@ class UseHomebrewTests(TestCase):
         self.gm = User.objects.create_user(username="uh_gm", password="pw-uh-gm-1")
         self.player = User.objects.create_user(username="uh_player", password="pw-uh-player-1")
         self.other = User.objects.create_user(username="uh_other", password="pw-uh-other-1")
-        self.campaign = Campaign.objects.create(name="Use Camp", gm=self.gm)
+        # S11: homebrew needs the campaign's switch on.
+        self.campaign = Campaign.objects.create(name="Use Camp", gm=self.gm, homebrew_enabled=True)
         self.campaign.players.add(self.player)
         self.pc = Character.objects.create(
             user=self.player, campaign=self.campaign, true_name="Use PC", heritage=heritage
@@ -109,42 +109,24 @@ class UseHomebrewTests(TestCase):
         )
         self.assertEqual(response.status_code, 400)
 
-    # Use in a campaign
-
-    def test_the_gm_turns_their_own_private_item_on_for_their_campaign(self):
-        response = self.as_user(self.gm).post(
-            f"{URL}{self.gm_item.id}/set-campaign-access/",
-            {"campaign": self.campaign.id, "enabled": True},
-            format="json",
-        )
-        self.assertEqual(response.status_code, 200, response.data)
-
-    def test_a_player_cannot_turn_items_on_for_the_campaign(self):
-        response = self.as_user(self.player).post(
-            f"{URL}{self.my_public.id}/set-campaign-access/",
-            {"campaign": self.campaign.id, "enabled": True},
-            format="json",
-        )
-        self.assertEqual(response.status_code, 403)
-
     # Add owned homebrew item (sheet picker)
 
     def test_picker_lists_my_creations_and_collection(self):
         response, names = self.owned(self.player, self.pc)
         self.assertEqual(response.status_code, 200, response.data)
-        self.assertEqual(names, {"My Coin": "mine", "My Lantern": "mine", "Their Hook": "mine"})
+        self.assertEqual(
+            {k: v for k, v in names.items() if v == "mine"},
+            {"My Coin": "mine", "My Lantern": "mine", "Their Hook": "mine"},
+        )
 
-    def test_picker_adds_items_the_gm_turned_on(self):
-        self.turn_on(self.gm_item)
-        self.turn_on(self.staff_item)
+    def test_picker_adds_the_gms_homebrew_from_the_campaign_pool(self):
         _, names = self.owned(self.player, self.pc)
-        self.assertEqual(names["GM Charm"], "gm")
-        self.assertEqual(names["Admin Rope"], "gm")
+        self.assertEqual(names["GM Charm"], "campaign")
 
-    def test_picker_never_lists_someone_elses_private_item_even_if_turned_on(self):
-        self.turn_on(self.others_private)
+    def test_picker_never_lists_an_outsiders_private_item(self):
         _, names = self.owned(self.player, self.pc)
         self.assertNotIn("Their Secret", names)
+        self.assertNotIn("Admin Rope", names)
 
     def test_the_gm_viewing_a_players_sheet_sees_the_players_list(self):
         response, names = self.owned(self.gm, self.pc)
@@ -158,8 +140,6 @@ class UseHomebrewTests(TestCase):
     # Add Item
 
     def test_add_item_no_longer_lists_homebrew(self):
-        self.turn_on(self.gm_item)
-        self.turn_on(self.staff_item)
         response = self.as_user(self.player).get(
             URL, {"campaign": self.campaign.id, "available_for_campaign": 1}
         )

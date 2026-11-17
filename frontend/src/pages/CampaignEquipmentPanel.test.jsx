@@ -7,7 +7,7 @@ import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import { CampaignEquipmentPanel } from "./CampaignManagement";
-import { equipmentAPI } from "../features/character-sheet";
+import { campaignAPI, equipmentAPI } from "../features/character-sheet";
 import { useAuth } from "../features/auth";
 
 jest.mock("../features/character-sheet", () => ({
@@ -18,9 +18,11 @@ jest.mock("../features/character-sheet", () => ({
     update: jest.fn(),
     delete: jest.fn(),
     setCampaignAccess: jest.fn(),
+    clearCampaignAccess: jest.fn(),
     share: jest.fn(),
     copyToCampaign: jest.fn(),
   },
+  campaignAPI: { patchCampaign: jest.fn() },
 }));
 
 jest.mock("../features/auth", () => ({
@@ -86,56 +88,84 @@ describe("CampaignEquipmentPanel: GM edits a campaign catalog item", () => {
   });
 });
 
-describe("CampaignEquipmentPanel: public items (S8) and core catalog", () => {
-  const shared = {
-    id: 77, name: "Grappling Gun", description: "", category: "tools",
-    load_slots: 1, quality: 1, scope: "SHARED", campaign: null,
-    created_by: 50, created_by_username: "player1", is_public: true,
-    enabled_for_campaign: false,
+describe("CampaignEquipmentPanel: homebrew switch and shared pool (S11)", () => {
+  const charm = {
+    id: 62, name: "GM Charm", category: "gear", load_slots: 1, quality: 1, scope: "SHARED",
+    created_by_username: "gm", is_mine: true,
   };
+  const coin = {
+    id: 61, name: "Player Coin", category: "gear", load_slots: 0, quality: 0, scope: "SHARED",
+    created_by_username: "player1", is_mine: false,
+  };
+  const on = { ...campaign, homebrew_enabled: true };
 
   beforeEach(() => {
     jest.clearAllMocks();
     useAuth.mockReturnValue({ user: GM });
-    equipmentAPI.list.mockResolvedValue([lockpicks, shared]);
-    equipmentAPI.setCampaignAccess.mockResolvedValue({});
+    equipmentAPI.list.mockImplementation((params) =>
+      Promise.resolve(params?.homebrew === "campaign" ? [charm, coin] : [lockpicks]),
+    );
     equipmentAPI.share.mockResolvedValue({ id: 78, scope: "SHARED" });
     equipmentAPI.copyToCampaign.mockResolvedValue({
-      ...shared, id: 79, scope: "CAMPAIGN", campaign: campaign.id, created_by: GM.id,
+      ...coin, id: 79, scope: "CAMPAIGN", campaign: campaign.id, created_by: GM.id,
     });
+    campaignAPI.patchCampaign.mockResolvedValue({ ...campaign, homebrew_enabled: true });
   });
 
-  it("lists public items off, with who shared them, and the GM turns one on", async () => {
-    render(<CampaignEquipmentPanel campaign={campaign} />);
-    expect(await screen.findByText(/Shared by player1/)).toBeInTheDocument();
-    const box = screen.getByRole("checkbox", { name: /Grappling Gun/ });
+  it("starts off, hides the homebrew list, and the GM turns it on", async () => {
+    render(<CampaignEquipmentPanel campaign={{ ...campaign, homebrew_enabled: false }} />);
+    const box = await screen.findByRole("checkbox", { name: "Enable homebrew" });
     expect(box).not.toBeChecked();
+    expect(screen.queryByText("Homebrew in this campaign")).toBeNull();
+    expect(equipmentAPI.list).not.toHaveBeenCalledWith(expect.objectContaining({ homebrew: "campaign" }));
+
     fireEvent.click(box);
-    await waitFor(() => expect(equipmentAPI.setCampaignAccess).toHaveBeenCalledWith(77, campaign.id, true));
+    await waitFor(() =>
+      expect(campaignAPI.patchCampaign).toHaveBeenCalledWith(campaign.id, { homebrew_enabled: true }),
+    );
+    expect(await screen.findByText("Homebrew in this campaign")).toBeInTheDocument();
   });
 
-  it("copies a public item into the library and opens the copy to edit", async () => {
-    render(<CampaignEquipmentPanel campaign={campaign} />);
-    fireEvent.click(await screen.findByRole("button", { name: "Copy Grappling Gun to my library and edit" }));
-    await waitFor(() => expect(equipmentAPI.copyToCampaign).toHaveBeenCalledWith(77, campaign.id));
-    expect(await screen.findByPlaceholderText("Name")).toHaveValue("Grappling Gun");
-    expect(equipmentAPI.update).not.toHaveBeenCalledWith(77, expect.anything());
+  it("lists the table's shared pool, with who made each item and no block buttons", async () => {
+    render(<CampaignEquipmentPanel campaign={on} />);
+    await waitFor(() =>
+      expect(equipmentAPI.list).toHaveBeenCalledWith({ homebrew: "campaign", campaign: campaign.id }),
+    );
+    expect(await screen.findByText(/by player1/)).toBeInTheDocument();
+    expect(screen.getByText(/by gm/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Block|^Unblock|^Turn off/ })).toBeNull();
+  });
+
+  it("copies someone else's item into the library and opens the copy to edit", async () => {
+    render(<CampaignEquipmentPanel campaign={on} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Copy Player Coin to my library and edit" }));
+    await waitFor(() => expect(equipmentAPI.copyToCampaign).toHaveBeenCalledWith(61, campaign.id));
+    expect(await screen.findByPlaceholderText("Name")).toHaveValue("Player Coin");
+    expect(screen.queryByRole("button", { name: "Copy GM Charm to my library and edit" })).toBeNull();
+  });
+
+  it("links to the Homebrew page to find more", async () => {
+    render(<CampaignEquipmentPanel campaign={on} />);
+    expect(await screen.findByRole("link", { name: /Find more on the Homebrew page/ })).toHaveAttribute(
+      "href",
+      "#homebrew/browse",
+    );
+  });
+
+  it("gives a player no switch and no homebrew list", async () => {
+    useAuth.mockReturnValue({ user: PLAYER });
+    render(<CampaignEquipmentPanel campaign={on} />);
+    await screen.findByText("GM Lockpicks");
+    expect(screen.queryByRole("checkbox", { name: "Enable homebrew" })).toBeNull();
+    expect(screen.queryByText("Homebrew in this campaign")).toBeNull();
   });
 
   it.each([
     ["Save GM Lockpicks as homebrew", false],
     ["Publish GM Lockpicks as homebrew", true],
   ])("%s from the library", async (label, isPublic) => {
-    render(<CampaignEquipmentPanel campaign={campaign} />);
+    render(<CampaignEquipmentPanel campaign={on} />);
     fireEvent.click(await screen.findByRole("button", { name: label }));
     await waitFor(() => expect(equipmentAPI.share).toHaveBeenCalledWith({ item: 41, public: isPublic }));
-  });
-
-  it("gives a non-staff GM no Delete on a site item they published long ago", async () => {
-    const oldSite = { ...lockpicks, id: 15, scope: "SITE", campaign: null, enabled_for_campaign: true };
-    equipmentAPI.list.mockResolvedValue([oldSite]);
-    render(<CampaignEquipmentPanel campaign={campaign} />);
-    await screen.findByText(/Site: GM Lockpicks/);
-    expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
   });
 });

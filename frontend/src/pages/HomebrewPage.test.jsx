@@ -168,16 +168,6 @@ describe("Homebrew page: use homebrew (S10)", () => {
     expect(await screen.findByText(/Added to Player One PC/)).toBeInTheDocument();
   });
 
-  it("turns one of my creations on for a campaign I run, and only lists those", async () => {
-    render(<HomebrewPage tab="creations" />);
-    const select = await screen.findByLabelText("Campaign for Lucky Coin");
-    await screen.findByRole("option", { name: "My Table" });
-    expect(screen.queryByRole("option", { name: "Someone Else's Table" })).toBeNull();
-    fireEvent.change(select, { target: { value: "3" } });
-    fireEvent.click(screen.getByRole("button", { name: "Use Lucky Coin in the campaign" }));
-    await waitFor(() => expect(equipmentAPI.setCampaignAccess).toHaveBeenCalledWith(99, 3, true));
-  });
-
   it("offers the same actions on my collection", async () => {
     render(<HomebrewPage tab="collection" />);
     expect(await screen.findByLabelText("Sheet for Lucky Coin")).toBeInTheDocument();
