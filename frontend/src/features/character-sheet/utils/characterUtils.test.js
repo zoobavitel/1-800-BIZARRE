@@ -673,3 +673,28 @@ describe("mergeServerOwnedCharacterFields armor", () => {
     expect(freshFieldTouches()).toHaveProperty("armor", false);
   });
 });
+
+describe("mergeServerOwnedCharacterFields harm", () => {
+  // Harm was not merged from the server, so after a save whose reply was
+  // dropped the sheet loaded old empty harm and autosaved it back.
+  const { mergeServerOwnedCharacterFields, freshFieldTouches } = require("./characterUtils");
+  const empty = { level4: [""], level3: [""], level2: ["", ""], level1: ["", ""] };
+  const hurt = { level4: [""], level3: ["Broken arm"], level2: ["Cut", ""], level1: ["Bruised", ""] };
+  const local = { harm: empty, harmEntries: empty };
+  const server = { harm: hurt, harmEntries: hurt };
+
+  test("takes the server's harm when harm is untouched", () => {
+    const next = mergeServerOwnedCharacterFields(local, server, {});
+    expect(next.harm).toEqual(hurt);
+    expect(next.harmEntries).toEqual(hurt);
+  });
+
+  test("keeps the tab's harm while harm is touched", () => {
+    const next = mergeServerOwnedCharacterFields(local, server, { harm: true });
+    expect(next.harm).toEqual(empty);
+  });
+
+  test("harm is a touch key", () => {
+    expect(freshFieldTouches()).toHaveProperty("harm", false);
+  });
+});
