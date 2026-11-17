@@ -2726,6 +2726,7 @@ export default function CharacterPage({
                   campaigns={campaigns}
                   allNpcs={npcs}
                   isGM={isNpcGm}
+                  canEditVisibility={canEditNpc}
                   readOnly={!canEditNpc}
                   onFactionChange={refreshCampaigns}
                   onCampaignRefresh={refreshCampaigns}

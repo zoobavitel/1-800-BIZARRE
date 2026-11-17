@@ -206,6 +206,8 @@ class ProgressClockViewSet(viewsets.ModelViewSet):
                     qs = qs.filter(
                         Q(npc__isnull=True) | Q(npc__campaign_id=campaign_id)
                     )
+                    # A See-off NPC's clocks never reach players.
+                    qs = qs.exclude(npc__visible_to_players=False)
             except Campaign.DoesNotExist:
                 pass
         return qs

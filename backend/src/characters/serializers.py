@@ -65,6 +65,8 @@ from .services.faction_status_visibility import (
 from .services.npc_section_visibility import (
     normalize_npc_players_see,
     npc_section_visible,
+    player_session_reveals,
+    redact_npc_hidden_fields_for_player,
     redact_npc_player_payload,
     redact_npc_summary_for_player,
 )
@@ -3240,11 +3242,23 @@ class ShowcasedNPCSerializer(serializers.ModelSerializer):
             "show_clocks_to_party",
         ]
 
+    def _viewer_is_gm(self, obj):
+        request = self.context.get("request")
+        user = getattr(request, "user", None) if request else None
+        if not user or not getattr(user, "is_authenticated", False):
+            return False
+        return obj.campaign.gm_id == user.id
+
     def get_npc(self, obj):
+        stand_name = obj.npc.stand_name or ""
+        if not self._viewer_is_gm(obj) and not npc_section_visible(
+            getattr(obj.npc, "players_see", None), "stand_identity"
+        ):
+            stand_name = ""
         data = {
             "id": obj.npc.id,
             "name": obj.npc.name,
-            "stand_name": obj.npc.stand_name or "",
+            "stand_name": stand_name,
         }
         if obj.reveal_items:
             data["inventory"] = obj.npc.inventory or []
@@ -3450,7 +3464,7 @@ class CampaignSerializer(serializers.ModelSerializer):
     )
     active_session_detail = serializers.SerializerMethodField()
     sessions = serializers.SerializerMethodField()
-    showcased_npcs = ShowcasedNPCSerializer(many=True, read_only=True)
+    showcased_npcs = serializers.SerializerMethodField()
     current_scene_type = serializers.ChoiceField(
         choices=Campaign.SCENE_TYPE_CHOICES, required=False, default="NONE"
     )
@@ -3593,11 +3607,10 @@ class CampaignSerializer(serializers.ModelSerializer):
                 "revealed_stand_coin_stats": inv.revealed_stand_coin_stats or [],
                 "revealed_ability_names": inv.revealed_ability_names or [],
             }
-        show_all = inv.show_clocks_to_players
-        show_vuln = inv.show_clocks_to_players or inv.show_vulnerability_clock_to_players
-        revealed_conflict = set(inv.revealed_conflict_clock_names or [])
-        revealed_alt = set(inv.revealed_alt_clock_names or [])
-        revealed_progress_ids = set(inv.revealed_progress_clock_ids or [])
+        rev = player_session_reveals(npc, inv)
+        show_all = rev["show_all_clocks"]
+        show_vuln = rev["show_vulnerability"]
+        revealed_progress_ids = rev["revealed_progress_clock_ids"]
         base_progress = list(npc.progress_clocks.all().values(*clock_fields))
         if show_all:
             progress_clocks = base_progress
@@ -3605,36 +3618,9 @@ class CampaignSerializer(serializers.ModelSerializer):
             progress_clocks = [
                 c for c in base_progress if int(c.get("id") or 0) in revealed_progress_ids
             ]
-        # When Master "Clocks" (show_clocks_to_players) is off, rely only on
-        # session reveal lists—not per-clock JSON flags on the NPC—which would
-        # bypass what the GM expects from the session toggle (see SessionNPCInvolvement).
-        conflict_clocks = (
-            npc.conflict_clocks
-            if show_all
-            else [
-                c
-                for c in (npc.conflict_clocks or [])
-                if str(c.get("name") or "") in revealed_conflict
-            ]
-        )
-        alt_clocks = (
-            npc.alt_clocks
-            if show_all
-            else [
-                c
-                for c in (npc.alt_clocks or [])
-                if str(c.get("name") or "") in revealed_alt
-            ]
-        )
-        stand_stats = {}
-        if inv.show_stand_coin_to_players:
-            revealed_stats = [str(k).upper() for k in (inv.revealed_stand_coin_stats or [])]
-            if revealed_stats:
-                for key in revealed_stats:
-                    if key in (npc.stand_coin_stats or {}):
-                        stand_stats[key] = npc.stand_coin_stats.get(key)
-            else:
-                stand_stats = npc.stand_coin_stats or {}
+        conflict_clocks = rev["conflict_clocks"]
+        alt_clocks = rev["alt_clocks"]
+        stand_stats = rev["stand_coin_stats"]
         abilities = []
         campaign_abilities = npc_section_visible(
             getattr(npc, "players_see", None), "abilities"
@@ -3696,7 +3682,9 @@ class CampaignSerializer(serializers.ModelSerializer):
         )
         base_qs = s.npc_involvements.select_related("npc")
         if not viewer_is_gm_or_staff:
-            base_qs = base_qs.filter(npc__campaign_id=obj.id)
+            base_qs = base_qs.filter(
+                npc__campaign_id=obj.id, npc__visible_to_players=True
+            )
         involvements = list(base_qs.order_by("npc__name"))
         # Minimal roster for any viewer (e.g. PC spends coin on NPC heal fortune);
         # not filtered by session visibility toggles.
@@ -3787,6 +3775,12 @@ class CampaignSerializer(serializers.ModelSerializer):
             for s in sessions
         ]
 
+    def get_showcased_npcs(self, obj):
+        qs = obj.showcased_npcs.select_related("npc", "campaign")
+        if not self._campaign_viewer_is_gm_or_staff(obj):
+            qs = qs.filter(npc__visible_to_players=True)
+        return ShowcasedNPCSerializer(qs, many=True, context=self.context).data
+
     def get_progress_clocks(self, obj):
         request = self.context.get("request")
         if not request or not request.user:
@@ -3829,6 +3823,8 @@ class CampaignSerializer(serializers.ModelSerializer):
             )
             | legacy_gm_session_visible
         )
+        # A See-off NPC's clocks never reach players.
+        clocks = clocks.exclude(npc__visible_to_players=False)
         return ProgressClockSerializer(clocks, many=True).data
 
 class NPCSerializer(serializers.ModelSerializer):
@@ -4051,22 +4047,26 @@ class NPCSerializer(serializers.ModelSerializer):
             "heal_recover_in_play_effect",
         ]
 
-    def _viewer_is_gm_or_staff(self, instance):
+    def _viewer_sees_full_npc(self, instance):
+        """Campaign GM or the NPC's creator (who must not save redacted data back)."""
         request = self.context.get("request")
         user = getattr(request, "user", None) if request else None
         if not user or not getattr(user, "is_authenticated", False):
             return False
+        if instance.creator_id and instance.creator_id == user.id:
+            return True
         campaign = getattr(instance, "campaign", None)
         return bool(campaign and campaign.gm_id == user.id)
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
-        if self._viewer_is_gm_or_staff(instance):
+        if self._viewer_sees_full_npc(instance):
             return data
         if not getattr(instance, "players_see_inventory", True):
             data["inventory"] = []
             data["items"] = []
             data["inventory_notes"] = ""
+        redact_npc_hidden_fields_for_player(data, instance)
         return redact_npc_player_payload(data, instance)
 
     def validate_players_see(self, value):
