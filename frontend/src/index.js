@@ -257,6 +257,7 @@ function routeStateFromHash(hash) {
     currentPage: "home",
     characterPageId: null,
     characterNewCampaignId: null,
+    characterNewBlank: false,
     campaignPageId: null,
     campaignSessionId: null,
     npcPageId: null,
@@ -345,6 +346,9 @@ function routeStateFromHash(hash) {
   }
   if (hash === "character" || hash.startsWith("character/")) {
     const idPart = hash.replace(/^character\/?/, "");
+    if (idPart === "new") {
+      return { ...base, currentPage: "character", characterNewBlank: true };
+    }
     if (idPart.startsWith("new/")) {
       const campaignPart = idPart.replace(/^new\/?/, "");
       return {
@@ -375,6 +379,9 @@ const App = () => {
   );
   const [characterNewCampaignId, setCharacterNewCampaignId] = useState(
     initialRoute.characterNewCampaignId,
+  );
+  const [characterNewBlank, setCharacterNewBlank] = useState(
+    initialRoute.characterNewBlank,
   );
   const [campaignPageId, setCampaignPageId] = useState(
     initialRoute.campaignPageId,
@@ -415,6 +422,7 @@ const App = () => {
     setCurrentPage(s.currentPage);
     setCharacterPageId(s.characterPageId);
     setCharacterNewCampaignId(s.characterNewCampaignId ?? null);
+    setCharacterNewBlank(Boolean(s.characterNewBlank));
     setCampaignPageId(s.campaignPageId);
     setCampaignSessionId(s.campaignSessionId ?? null);
     setNpcPageId(s.npcPageId);
@@ -462,8 +470,11 @@ const App = () => {
         characterId == null && payload?.campaignId != null
           ? payload.campaignId
           : null;
+      const newBlank =
+        characterId == null && newCampaignId == null && Boolean(payload?.newCharacter);
       setCharacterPageId(characterId);
       setCharacterNewCampaignId(newCampaignId);
+      setCharacterNewBlank(newBlank);
       // Drop NPC route ids so CharacterPage remounts do not flash NPC mode
       // from a leftover initialNpcId while preferNpcMode is false.
       setNpcPageId(null);
@@ -474,6 +485,7 @@ const App = () => {
       window.location.hash = buildRouteHash(page, {
         characterId,
         campaignId: newCampaignId,
+        newCharacter: newBlank,
       });
     } else if (page === "campaigns") {
       const cur = campaignRouteRef.current;
@@ -579,7 +591,7 @@ const App = () => {
   }, []);
 
   const handleMenuNewCharacter = useCallback(() => {
-    handlePageChange("character", { characterId: null });
+    handlePageChange("character", { characterId: null, newCharacter: true });
   }, []);
 
   const toggleMenu = () => setMenuOpen((o) => !o);
@@ -632,8 +644,11 @@ const App = () => {
               onToggleMenu={toggleMenu}
               onSearch={() => handlePageChange("search")}
               onOpenAccountMenu={() => setUserMenuOpen(true)}
-              onNavigateToCharacter={(characterId) =>
-                handlePageChange("character", { characterId })
+              onNavigateToCharacter={(characterId, opts) =>
+                handlePageChange("character", {
+                  characterId,
+                  newCharacter: Boolean(opts?.newCharacter),
+                })
               }
               onNavigateToCharacterOptions={() =>
                 handlePageChange("character-options")
@@ -655,6 +670,7 @@ const App = () => {
           <CharacterPage
             initialCharacterId={characterPageId}
             initialNewCampaignId={characterNewCampaignId}
+            initialNewCharacter={characterNewBlank}
             initialNpcId={npcPageId}
             initialNpcCampaignId={npcCampaignId}
             preferNpcMode={currentPage === "npcs"}
