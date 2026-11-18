@@ -370,6 +370,9 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./frontend/build
           force_orphan: true
+          # force_orphan rewrites gh-pages with no CNAME file, and GitHub then
+          # drops the custom domain. Write it on every deploy.
+          cname: 1-800-bizarre.com
 
   deploy-lxc:
     needs: [automated-ui-smoke]
