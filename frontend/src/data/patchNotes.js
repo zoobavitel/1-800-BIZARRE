@@ -4,13 +4,146 @@
  */
 export const PATCH_NOTES = [
   {
-    "date": "2026-11-01",
+    "date": "2026-11-09",
     "version": null,
     "sections": [
       {
         "title": "Other",
         "items": [
-          "wip armor"
+          "Merge pull request #286 from zoobavitel/fix/npc-no-campaign-save",
+          "Merge pull request #282 from zoobavitel/fix/no-staff-powers-on-site",
+          "Merge remote-tracking branch 'origin/master' into fix/no-staff-powers-on-site"
+        ]
+      },
+      {
+        "title": "Fixed",
+        "items": [
+          "let the creator save their own NPC that has no campaign"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-11-08",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #285 from zoobavitel/fix/catalog-edit-test-mock",
+          "Merge pull request #275 from zoobavitel/fix/sheet-edit-detaches-catalog",
+          "Merge pull request #274 from zoobavitel/fix/no-campaign-srd-catalog",
+          "Merge pull request #273 from zoobavitel/feature/catalog-item-edit",
+          "Merge pull request #259 from zoobavitel/fix/equipment-scope-checks",
+          "Merge pull request #260 from zoobavitel/fix/campaign-delete-keeps-characters",
+          "Merge remote-tracking branch 'origin/master' into fix/campaign-delete-keeps-characters",
+          "Merge pull request #265 from zoobavitel/fix/pc-campaign-move-needs-unassign",
+          "Merge pull request #261 from zoobavitel/fix/crew-delete-needs-empty-campaign",
+          "Merge pull request #267 from zoobavitel/fix/crew-stats-member-editable",
+          "Merge pull request #266 from zoobavitel/fix/sheet-spin-hamon-armor-save",
+          "Merge pull request #280 from zoobavitel/chore/secrets-out-of-code",
+          "Merge remote-tracking branch 'origin/master' into chore/secrets-out-of-code",
+          "Merge pull request #271 from zoobavitel/fix/stash-personal-backend",
+          "Merge pull request #272 from zoobavitel/fix/stash-personal-frontend",
+          "Merge pull request #279 from zoobavitel/fix/sheet-armor-ticks-stick",
+          "Merge pull request #268 from zoobavitel/fix/crew-autosave-skip-unchanged",
+          "Merge origin/master into fix/no-campaign-srd-catalog",
+          "Merge remote-tracking branch 'origin/master' into fix/crew-stats-member-editable",
+          "Merge remote-tracking branch 'origin/master' into fix/crew-autosave-skip-unchanged",
+          "Merge pull request #270 from zoobavitel/fix/sheet-no-autosave-on-open",
+          "Merge pull request #269 from zoobavitel/fix/crew-patch-noop-quiet",
+          "Merge pull request #264 from zoobavitel/fix/sheet-load-save-once",
+          "Merge pull request #262 from zoobavitel/fix/sheet-heritage-picks-stick"
+        ]
+      },
+      {
+        "title": "Tests",
+        "items": [
+          "catalogEdit test mocks equipmentAPI.list in beforeEach",
+          "name the renderHook result utils (lint)"
+        ]
+      },
+      {
+        "title": "Fixed",
+        "items": [
+          "0134 depends on #271's 0133",
+          "staff get no special access on the site; support work moves to Django admin",
+          "renumber to 0134 after #271's 0133"
+        ]
+      },
+      {
+        "title": "Maintenance",
+        "items": [
+          "private host names out of the code; gitleaks blocks new ones"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-11-06",
+    "version": null,
+    "sections": [
+      {
+        "title": "Fixed",
+        "items": [
+          "only staff edit or delete core catalog items (SRD and site)",
+          "editing a catalog item on a sheet makes it a custom item",
+          "a sheet with no campaign can search the SRD catalog"
+        ]
+      },
+      {
+        "title": "Maintenance",
+        "items": [
+          "no hardcoded seed passwords; admin tailnet-only in Caddy"
+        ]
+      },
+      {
+        "title": "Added",
+        "items": [
+          "GM can edit a campaign catalog item"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-11-03",
+    "version": null,
+    "sections": [
+      {
+        "title": "Fixed",
+        "items": [
+          "stash is personal; remove the crew stash",
+          "stash is personal, crew or not",
+          "opening a sheet no longer shows Saving/Saved",
+          "a crew PATCH that changes nothing doesn't save",
+          "crew autosave skips values the server already has"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-11-02",
+    "version": null,
+    "sections": [
+      {
+        "title": "Fixed",
+        "items": [
+          "crew members may change crew stats again",
+          "save spin, hamon and special armor ticks",
+          "a PC must leave its campaign before joining another"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-11-01",
+    "version": null,
+    "sections": [
+      {
+        "title": "Fixed",
+        "items": [
+          "send the session load save once, not on every render",
+          "armor ticks stick after a save"
         ]
       }
     ]
@@ -32,15 +165,20 @@ export const PATCH_NOTES = [
     "version": null,
     "sections": [
       {
-        "title": "Other",
+        "title": "Fixed",
         "items": [
-          "Merge pull request #258 from zoobavitel/fix/clock-fk-checks"
+          "a crew is deleted only once its campaign has no players",
+          "deleting a campaign keeps players' PCs, NPCs and their rolls",
+          "only admins publish to the site catalog; kit items stay in-campaign",
+          "equipment scope rules hold on create and edit (S7)",
+          "a clock only points at things in its own campaign (S6)"
         ]
       },
       {
-        "title": "Fixed",
+        "title": "Other",
         "items": [
-          "a clock only points at things in its own campaign (S6)"
+          "Merge origin/master into fix/equipment-scope-checks",
+          "Merge pull request #258 from zoobavitel/fix/clock-fk-checks"
         ]
       }
     ]
@@ -486,8 +624,7 @@ export const PATCH_NOTES = [
         "items": [
           "show contact, faction, and crew portraits",
           "GM visibility gear, cancel pending XP, desperate XP harden",
-          "campaign/session Rep edits, peer visibility, home NPC links",
-          "toggle NPC clock visibility from Campaign Management"
+          "campaign/session Rep edits, peer visibility, home NPC links"
         ]
       },
       {
@@ -495,179 +632,6 @@ export const PATCH_NOTES = [
         "items": [
           "run Black autofix on Python 3.11",
           "align NPC players_see_inventory help_text with migration 0128"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-10-07",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #200 from zoobavitel/docs/scrub-1password-refs",
-          "Merge pull request #199 from zoobavitel/fix/deploy-prod-env-group-read"
-        ]
-      },
-      {
-        "title": "Documentation",
-        "items": [
-          "scrub leftover 1Password refs from agent-safety docs"
-        ]
-      },
-      {
-        "title": "Fixed",
-        "items": [
-          "put bizarre-deploy in bizarre group for prod.env read",
-          "protect harm edits from poll/SSE hydrate flicker"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-10-06",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #198 from zoobavitel/fix/harm-dirty-intent",
-          "Merge pull request #197 from zoobavitel/fix/agent-sudoers-usr-bin",
-          "Merge pull request #196 from zoobavitel/fix/sse-bound-gthread-recycle",
-          "Merge pull request #195 from zoobavitel/fix/downtime-recover-no-stress-harm"
-        ]
-      },
-      {
-        "title": "Fixed",
-        "items": [
-          "sudoers /usr/bin paths and prod.env 640 root:bizarre",
-          "bound streams so gthread recycles can drain",
-          "durability stress track, downtime recover, fuller PDF export"
-        ]
-      },
-      {
-        "title": "Tests",
-        "items": [
-          "align L1 stress fixtures with Durability track caps"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-10-05",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #194 from zoobavitel/fix/faction-npc-strip-playbook-back"
-        ]
-      },
-      {
-        "title": "Fixed",
-        "items": [
-          "sync faction NPC strip, create/playbook, and Back nav"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-10-01",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #193 from zoobavitel/feature/agent-safety-guardrails",
-          "Add restore-drill Cursor skill for OPSEC-safe backup practice.",
-          "Harden agent safety: write-target hooks, nightly DB+media backup, secrets hygiene.",
-          "Merge pull request #192 from zoobavitel/feature/agent-safety-guardrails",
-          "Merge pull request #191 from zoobavitel/feature/delete-confirm-modal",
-          "Add agent safety hooks, CT103 least-privilege setup, and backup policy docs.",
-          "Merge pull request #190 from zoobavitel/fix/sanitize-test-script-url-lint",
-          "Merge pull request #189 from zoobavitel/fix/equal-roster-column-height",
-          "Merge pull request #188 from zoobavitel/fix/api-default-127-host"
-        ]
-      },
-      {
-        "title": "Added",
-        "items": [
-          "confirm before PC, NPC, and faction deletes"
-        ]
-      },
-      {
-        "title": "Tests",
-        "items": [
-          "quiet no-script-url on XSS payload"
-        ]
-      },
-      {
-        "title": "Fixed",
-        "items": [
-          "readable campaign stats over full-bleed art",
-          "use profile avatars on campaign GM/player chips",
-          "show accurate PC heritage and level on cards",
-          "drop Collapse; use Show NPC/PC only",
-          "equal-height columns, compact tokens, avatar footer"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-09-30",
-    "version": null,
-    "sections": [
-      {
-        "title": "Fixed",
-        "items": [
-          "prefer 127.0.0.1 over localhost for local API",
-          "persist NPC −/+ without flicker after save refresh",
-          "split prod tree from agent workspace",
-          "stop tab clobber; close last tabs; contact pickers",
-          "show newest campaign session first in list"
-        ]
-      },
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #187 from zoobavitel/feature/npc-standing-open-sheet",
-          "Merge pull request #186 from zoobavitel/fix/npc-standing-autosave",
-          "Merge pull request #185 from zoobavitel/feature/standing-display-clarity",
-          "Merge pull request #184 from zoobavitel/fix/deploy-prod-tree-split",
-          "Merge pull request #183 from zoobavitel/feature/npc-standing-visibility",
-          "Merge pull request #182 from zoobavitel/fix/faction-member-visibility",
-          "Fix See checkbox snapping back after toggle.",
-          "Fix GM hide/show of faction NPCs for players.",
-          "Merge pull request #181 from zoobavitel/feature/npc-sheet-restructure",
-          "Merge pull request #180 from zoobavitel/fix/session-list-newest-first"
-        ]
-      },
-      {
-        "title": "Added",
-        "items": [
-          "open See-on standing/strip NPCs as read-only sheets",
-          "sync faction↔faction status both ways",
-          "show NPCs without revealing faction",
-          "restructure layout, PC/NPC standing, XP collapse"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-09-29",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #179 from zoobavitel/chore/dedupe-resistance-stress-dead-dice-rolling"
-        ]
-      },
-      {
-        "title": "Maintenance",
-        "items": [
-          "dedupe resistance stress cost, remove dead dice-rolling"
         ]
       }
     ]

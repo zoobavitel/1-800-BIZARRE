@@ -92,3 +92,28 @@ describe("apiConfig without a baked host", () => {
     expect(api.getApiBaseUrl()).toBe("https://bizarre-api.tailnet.ts.net/api");
   });
 });
+
+describe("apiConfig on the Cloudflare frontend host", () => {
+  const saved = process.env.REACT_APP_API_URL;
+  const realLocation = window.location;
+  let api;
+
+  beforeEach(() => {
+    localStorage.clear();
+    delete process.env.REACT_APP_API_URL;
+    delete window.location;
+    window.location = new URL("https://1-800-bizarre.com/#npcs/42");
+    jest.isolateModules(() => {
+      api = require("./apiConfig");
+    });
+  });
+
+  afterEach(() => {
+    window.location = realLocation;
+    if (saved !== undefined) process.env.REACT_APP_API_URL = saved;
+  });
+
+  test("defaults to the public API host, not :8000 on the same host", () => {
+    expect(api.getApiBaseUrl()).toBe("https://api.1-800-bizarre.com/api");
+  });
+});

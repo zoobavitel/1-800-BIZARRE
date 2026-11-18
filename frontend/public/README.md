@@ -16,4 +16,4 @@ Static assets served as-is by Create React App / `react-scripts`. Files in this 
 ## Conventions
 
 - Put **hashed, processed assets** (anything imported from JSX/CSS) in [`src/assets/`](../src/assets/) instead. Use `public/` only for files you need at a stable URL or that must not be processed.
-- The CRA `homepage` field in [`../package.json`](../package.json) determines the public path prefix for these assets (currently the GitHub Pages URL).
+- The CRA `homepage` field in [`../package.json`](../package.json) determines the public path prefix for these assets. It is unset, so assets are served from `/`.

@@ -8,6 +8,8 @@ const FORBIDDEN_HOST_SNIPPETS = [
   "github.io/1-800-BIZARRE",
   // Live API (Cloudflare Tunnel). Players are on it; never load-test it.
   "api.1-800-bizarre.com",
+  // Live frontend (Cloudflare). Same players.
+  "//1-800-bizarre.com",
 ];
 
 /**

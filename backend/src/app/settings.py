@@ -169,7 +169,8 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     # "http://192.168.1.X:3000",  # add your LAN IP here if needed
-    "https://zoobavitel.github.io",  # GitHub Pages frontend
+    "https://1-800-bizarre.com",  # Cloudflare frontend
+    "https://zoobavitel.github.io",  # old GitHub Pages frontend
 ]
 
 CORS_ALLOW_CREDENTIALS = True

@@ -4,7 +4,7 @@ React 18 SPA ([Create React App](https://create-react-app.dev/): `react-scripts`
 
 **API:** JSON to Django under `/api/...` via [`config/apiConfig.js`](../../frontend/src/config/apiConfig.js) (base URL ends with `/api`). Token: `localStorage.authToken`. Most calls use **`fetch`** in `features/character-sheet/services/api.js` and `features/auth/services/authService.js`.
 
-**Build:** [`frontend/package.json`](../../frontend/package.json) `homepage` targets GitHub Pages; production often needs a user-set API URL (see apiConfig). `prestart` / `prebuild` run `scripts/generatePatchNotes.js` and `scripts/copySrd.js`.
+**Build:** [`frontend/package.json`](../../frontend/package.json) has no `homepage`, so the app is served from `/` (Cloudflare, 1-800-bizarre.com); production bakes the API URL (see apiConfig). `prestart` / `prebuild` run `scripts/generatePatchNotes.js` and `scripts/copySrd.js`.
 
 **Quick entry:** [`frontend/src/README.md`](../../frontend/src/README.md) — short orientation; this file is the full map.
 

@@ -31,7 +31,7 @@ The primary purpose of this directory is to:
 - **Styling**: HFTF CSS variables (`src/styles/global.css`) and component CSS; Tailwind/PostCSS are configured but not primary in `src/`.
 - **UI bits**: `lucide-react` (icons), `react-burger-menu` (mobile nav), `react-markdown` (SRD / patch-note rendering), `recharts` (charts).
 - **Testing**: Jest + React Testing Library (unit/component) and Playwright (`npm exec playwright test`) for browser E2E.
-- **Deploy target**: Static bundle served from `build/`. Production homepage is configured for GitHub Pages (`https://zoobavitel.github.io/1-800-BIZARRE`); `nginx.conf` covers self-hosted deployments.
+- **Deploy target**: Static bundle served from `build/`. Served at the site root on Cloudflare (`https://1-800-bizarre.com`, see [docs/DEPLOY_FRONTEND.md](../docs/DEPLOY_FRONTEND.md)); `nginx.conf` covers self-hosted deployments.
 
 ## Code Quality and Structure
 
@@ -48,4 +48,4 @@ The frontend follows a standard React project structure, promoting:
 - **Create React App + CRACO** was kept (rather than migrating to Vite) because the existing test, ESLint, and PostCSS pipeline already works and the bundle size is not currently a bottleneck. CRACO is wired up so the CRA webpack config can be overridden without ejecting.
 - **CSS variables + component styles** carry the HFTF look; Tailwind remains available via PostCSS if needed for new UI.
 - **Playwright** handles end-to-end smoke testing in a real browser, complementing Jest unit tests.
-- **GitHub Pages** is the default static host so the frontend can be demoed without infrastructure; `nginx.conf` exists for self-hosted deployments where the API is on the same origin.
+- **Cloudflare static assets** host the frontend apart from the API box; `nginx.conf` exists for self-hosted deployments where the API is on the same origin.

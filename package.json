@@ -1,15 +1,13 @@
 {
   "name": "1-800-bizarre",
   "version": "1.0.1",
-  "homepage": "https://zoobavitel.github.io/1-800-BIZARRE/",
+  "homepage": "https://1-800-bizarre.com",
   "description": "A comprehensive web platform for the JoJo's Bizarre Adventure TTRPG",
   "private": true,
   "workspaces": [
     "frontend"
   ],
   "scripts": {
-    "predeploy": "npm run build",
-    "deploy": "gh-pages -d frontend/build",
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:frontend": "cd frontend && npm start",
     "dev:backend": "source .venv/bin/activate && cd backend/src && python manage.py runserver",
@@ -47,7 +45,6 @@
   "devDependencies": {
     "autoprefixer": "^10.4.21",
     "concurrently": "^8.2.2",
-    "gh-pages": "^5.0.0",
     "postcss": "^8.5.6",
     "postcss-flexbugs-fixes": "^5.0.2",
     "postcss-preset-env": "^10.2.4",

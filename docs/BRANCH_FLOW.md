@@ -7,7 +7,7 @@
 | **playersheet** | Feature work         | — (merge into dev when ready)     |
 | **dev**         | Integration / dev   | Full CI (test, build). No deploy.  |
 | **pat**         | Non-prod / staging  | Full CI (test, build). No deploy.  |
-| **main**        | Production          | Full CI + **deploy to GitHub Pages** |
+| **main**        | Production          | Full CI + **deploy frontend to Cloudflare** |
 
 (If you still use **master** as prod, the workflow treats it like **main** and deploys from it.)
 
@@ -20,7 +20,7 @@
    Merge `dev` → `pat` (or push to `pat`). CI runs (frontend + backend tests, build). No deploy; use this to verify the pipeline.
 
 3. **Prod (main)**  
-   When pat looks good, merge `pat` → `main` (or `dev` → `main`). CI runs and, on **main**, the workflow deploys the frontend build to GitHub Pages (https://zoobavitel.github.io/1-800-BIZARRE/).
+   When pat looks good, merge `pat` → `main` (or `dev` → `main`). CI runs and, on **main**, the workflow deploys the frontend build to Cloudflare (https://1-800-bizarre.com).
 
 ## Making main = prod
 

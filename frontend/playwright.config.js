@@ -1,10 +1,8 @@
 const { defineConfig } = require("@playwright/test");
 
-/** Matches CRA `homepage` / GitHub Pages path (see frontend/package.json). */
-const APP_BASE_PATH = "/1-800-BIZARRE";
+/** The app is served at the site root (1-800-bizarre.com). */
 const DEFAULT_ORIGIN = "http://127.0.0.1:3000";
-const baseURL =
-  process.env.PLAYWRIGHT_BASE_URL || `${DEFAULT_ORIGIN}${APP_BASE_PATH}`;
+const baseURL = process.env.PLAYWRIGHT_BASE_URL || DEFAULT_ORIGIN;
 
 const webServer = process.env.PLAYWRIGHT_SKIP_WEBSERVER
   ? undefined

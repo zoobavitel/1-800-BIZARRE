@@ -27,7 +27,7 @@ For the `characters` app and API behavior, see [backend-characters-core.md](back
 | `DATABASES` | SQLite `db.sqlite3` under `backend/src/` |
 | `INSTALLED_APPS` | `characters`, DRF, `rest_framework.authtoken`, `corsheaders`, Django contrib |
 | `REST_FRAMEWORK` | Session + token auth; default permission `IsAuthenticated` |
-| `CORS_ALLOWED_ORIGINS` | Local React, optional LAN IP, GitHub Pages frontend URL |
+| `CORS_ALLOWED_ORIGINS` | Local React, optional LAN IP, frontend origin `https://1-800-bizarre.com` |
 | `CORS_ALLOW_HEADERS` | Includes `ngrok-skip-browser-warning` for ngrok free tier |
 | `MEDIA_ROOT` / `MEDIA_URL` | User-uploaded media under `backend/src/media` |
 | `LOGGING` | Console + `debug.log` under `backend/src/` |

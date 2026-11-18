@@ -3,7 +3,7 @@
  *
  * Needs a running backend. Skipped unless E2E_API_URL is set, e.g.
  *   E2E_API_URL=http://127.0.0.1:8765/api PLAYWRIGHT_SKIP_WEBSERVER=1 \
- *   PLAYWRIGHT_BASE_URL=http://127.0.0.1:3765/1-800-BIZARRE \
+ *   PLAYWRIGHT_BASE_URL=http://127.0.0.1:3765 \
  *   npx playwright test e2e/sheet-version.spec.js
  * The backend must allow the app's origin in CORS_ALLOWED_ORIGINS.
  *
@@ -15,7 +15,7 @@ const { test, expect } = require("@playwright/test");
 
 const API = process.env.E2E_API_URL;
 const appUrl = (
-  process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000/1-800-BIZARRE"
+  process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000"
 ).replace(/\/+$/, "");
 
 test.skip(!API, "E2E_API_URL not set (needs a running backend)");
