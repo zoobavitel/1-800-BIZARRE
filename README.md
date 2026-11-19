@@ -2,7 +2,7 @@
 
 Monorepo for the **1-800-BIZARRE** TTRPG platform: a Django REST backend (`backend/`) and a React SPA frontend (`frontend/`) for the JoJo-flavored Bizarre tabletop ruleset.
 
-Live site (GitHub Pages): <https://zoobavitel.github.io/1-800-BIZARRE/>
+Live site: <https://1-800-bizarre.com/> (GitHub Pages, custom domain; see [docs/DEPLOY_GITHUB_PAGES.md](docs/DEPLOY_GITHUB_PAGES.md))
 
 ## Repo layout
 
