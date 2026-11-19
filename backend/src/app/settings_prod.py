@@ -81,6 +81,15 @@ MEDIA_ROOT = config("MEDIA_ROOT", default="/var/lib/bizarre/media")
 CELERY_BROKER_URL = config("REDIS_URL", default="redis://127.0.0.1:6379/0")
 CELERY_RESULT_BACKEND = config("CELERY_RESULT_BACKEND", default=CELERY_BROKER_URL)
 REALTIME_REDIS_URL = config("REALTIME_REDIS_URL", default=CELERY_BROKER_URL)
+
+# Shared cache for login/signup throttles (app/throttles.py). A separate Redis
+# DB keeps these keys away from Celery (0) and the SSE/pub-sub traffic.
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": config("CACHE_REDIS_URL", default="redis://127.0.0.1:6379/2"),
+    }
+}
 CELERY_TASK_ALWAYS_EAGER = False
 # Decouple reads the env file. os.environ in settings.py does not see it.
 REALTIME_CHANNEL_PREFIX = config(

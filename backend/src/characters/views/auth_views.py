@@ -9,6 +9,7 @@ from rest_framework.authtoken.views import ObtainAuthToken
 from knox.models import AuthToken
 from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 
+from app import throttles
 from ..models import UserProfile
 from ..serializers import (
     RegisterSerializer, UserProfileSerializer,
@@ -56,6 +57,11 @@ class RegisterView(APIView):
     authentication_classes = []
 
     def post(self, request):
+        ip = throttles.client_ip(request)
+        if throttles.is_limited('signup-ip', ip, throttles.SIGNUP_LIMIT_PER_IP, throttles.SIGNUP_WINDOW):
+            return throttles.too_many_attempts(throttles.SIGNUP_WINDOW, throttles.SIGNUP_MESSAGE)
+        # Every attempt counts, valid or not, so signup can't be used as a probe.
+        throttles.record('signup-ip', ip, throttles.SIGNUP_WINDOW)
         serializer = RegisterSerializer(data=request.data)
         if serializer.is_valid():
             user = serializer.save()
@@ -73,15 +79,28 @@ class LoginView(ObtainAuthToken):
     authentication_classes = []
 
     def post(self, request, *args, **kwargs):
+        ip = throttles.client_ip(request)
+        data = request.data if isinstance(request.data, dict) else {}
+        username = str(data.get('username', '') or '').strip().lower()[:150]
+        if (
+            throttles.is_limited('login-ip', ip, throttles.LOGIN_LIMIT_PER_IP, throttles.LOGIN_WINDOW)
+            or (username and throttles.is_limited(
+                'login-user', username, throttles.LOGIN_LIMIT_PER_USER, throttles.LOGIN_WINDOW))
+        ):
+            return throttles.too_many_attempts(throttles.LOGIN_WINDOW, throttles.LOGIN_MESSAGE)
+
         serializer = self.serializer_class(
             data=request.data,
             context={'request': request},
         )
         if serializer.is_valid():
             user = serializer.validated_data['user']
-            ip = request.META.get('REMOTE_ADDR', '?')
             logger.info("Login successful: user=%s ip=%s", user.username, ip)
             return Response(_login_response_body(user))
+        # Only failed attempts count, so a correct sign-in never uses up the limit.
+        throttles.record('login-ip', ip, throttles.LOGIN_WINDOW)
+        if username:
+            throttles.record('login-user', username, throttles.LOGIN_WINDOW)
         body = dict(serializer.errors)
         body['message'] = (
             'Invalid username or password. Check your credentials and try again.'
