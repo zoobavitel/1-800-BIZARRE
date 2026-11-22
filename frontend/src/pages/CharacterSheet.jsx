@@ -6,6 +6,7 @@ import React, {
   useCallback,
   useMemo,
 } from "react";
+import ClockAudiencePicker from "../components/clocks/ClockAudiencePicker";
 import {
   GRADE,
   GRADE_INDEX,
@@ -112,6 +113,7 @@ import {
 import { computeAbilityHeritageRollBonuses } from "../features/character-sheet/utils/rollAbilityHeritageModifiers";
 import { defaultPositionEffectFromSessionDetail } from "../features/character-sheet/utils/sessionPositionEffectDefaults";
 import {
+  clockPlayerOptions,
   isGmManagedProgressClock,
   normalizeCampaignGmId,
 } from "../features/character-sheet/utils/progressClockVisibility";
@@ -3098,7 +3100,8 @@ const CharacterSheetWrapper = ({
   const [clockEditorOpen, setClockEditorOpen] = useState(false);
   const [newClockName, setNewClockName] = useState("");
   const [newClockSegments, setNewClockSegments] = useState(4);
-  const [newClockShared, setNewClockShared] = useState(false);
+  // Who sees a new clock (PC private clocks): only me, all players, or picked players.
+  const [newClockAudience, setNewClockAudience] = useState({ all: false, ids: [] });
   const [hideCompletedClocks, setHideCompletedClocks] = useState(() =>
     readCharSheetBool(characterId, "hide-completed-clocks", true),
   );
@@ -7489,7 +7492,11 @@ const CharacterSheetWrapper = ({
                 type: "clock",
                 text: `${sTag} Clock ${clk.name}: ${clk.filled_segments}/${clk.max_segments}`,
                 modifiers: [
-                  clk.visible_to_party ? "Shared party" : "Private",
+                  clk.visible_to_party
+                    ? "Shared party"
+                    : Array.isArray(clk.visible_to) && clk.visible_to.length > 0
+                      ? `Shared with ${clk.visible_to.length}`
+                      : "Private",
                 ],
               });
             });
@@ -7686,7 +7693,11 @@ const CharacterSheetWrapper = ({
             characterId: null,
             type: "clock",
             text: `Clock ${clk.name}: ${clk.filled_segments}/${clk.max_segments}`,
-            modifiers: [clk.visible_to_party ? "Shared party" : "Private"],
+            modifiers: [clk.visible_to_party
+                    ? "Shared party"
+                    : Array.isArray(clk.visible_to) && clk.visible_to.length > 0
+                      ? `Shared with ${clk.visible_to.length}`
+                      : "Private"],
           });
         });
 
@@ -10005,13 +10016,14 @@ const CharacterSheetWrapper = ({
         max_segments: boundedSegments,
         filled: 0,
         filled_segments: 0,
-        visible_to_party: !!newClockShared,
+        visible_to_party: !!newClockAudience.all,
+        visible_to: newClockAudience.all ? [] : newClockAudience.ids,
         created_by: user?.id ?? null,
       },
     ]);
     setNewClockName("");
     setNewClockSegments(4);
-    setNewClockShared(false);
+    setNewClockAudience({ all: false, ids: [] });
     setClockEditorOpen(false);
   };
 
@@ -14300,7 +14312,7 @@ const CharacterSheetWrapper = ({
                             setClockEditorOpen(false);
                             setNewClockName("");
                             setNewClockSegments(4);
-                            setNewClockShared(false);
+                            setNewClockAudience({ all: false, ids: [] });
                           }
                           return !prev;
                         })
@@ -14560,7 +14572,11 @@ const CharacterSheetWrapper = ({
                                 );
                               }}
                             />
-                            Shared
+                            {!clk.visible_to_party &&
+                            Array.isArray(clk.visible_to) &&
+                            clk.visible_to.length > 0
+                              ? `${clk.visible_to.length} player${clk.visible_to.length === 1 ? "" : "s"}`
+                              : "Shared"}
                           </label>
                           )}
                           <button
@@ -14639,22 +14655,13 @@ const CharacterSheetWrapper = ({
                             />
                           </div>
                           <div style={{ display: "flex", alignItems: "end" }}>
-                            <label
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "6px",
-                                fontSize: "12px",
-                                color: "#9ca3af",
-                              }}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={newClockShared}
-                                onChange={(e) => setNewClockShared(e.target.checked)}
-                              />
-                              Shared party
-                            </label>
+                            <ClockAudiencePicker
+                              idPrefix="sheet-new-clock"
+                              players={clockPlayerOptions(charCampaign, user?.id)}
+                              noneLabel="Only me"
+                              value={newClockAudience}
+                              onChange={setNewClockAudience}
+                            />
                           </div>
                         </div>
                         <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
@@ -14663,7 +14670,7 @@ const CharacterSheetWrapper = ({
                               setClockEditorOpen(false);
                               setNewClockName("");
                               setNewClockSegments(4);
-                              setNewClockShared(false);
+                              setNewClockAudience({ all: false, ids: [] });
                             }}
                             style={S.btnGhost}
                           >

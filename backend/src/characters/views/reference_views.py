@@ -147,7 +147,7 @@ class CharacterHistoryViewSet(viewsets.ReadOnlyModelViewSet):
             {
                 "success": True,
                 "history_id": entry.id,
-                "character": _character_response(character),
+                "character": _character_response(character, request),
             }
         )
 

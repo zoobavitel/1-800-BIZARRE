@@ -2225,6 +2225,14 @@ class ProgressClock(models.Model):
         default=False,
         help_text="For player clocks: when True, other players in campaign can see it",
     )
+    # Players picked to see this clock, on top of the creator and the GM.
+    # "All players" stays the flags above; this is for "some players".
+    visible_to = models.ManyToManyField(
+        User,
+        blank=True,
+        related_name="visible_progress_clocks",
+        help_text="Players chosen to see this clock (the GM and creator always do).",
+    )
     created_by = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,

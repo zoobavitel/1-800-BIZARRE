@@ -14,7 +14,13 @@ import {
 } from "../features/character-sheet";
 import { normalizeListResponse } from "../features/character-sheet/services/api";
 import { EQUIPMENT_CATEGORY_OPTIONS, categoryLabel } from "../features/character-sheet/utils/loadoutUtils";
-import { isGmManagedProgressClock } from "../features/character-sheet/utils/progressClockVisibility";
+import {
+  clockAudience,
+  clockAudiencePatch,
+  clockPlayerOptions,
+  isGmManagedProgressClock,
+} from "../features/character-sheet/utils/progressClockVisibility";
+import ClockAudiencePicker from "../components/clocks/ClockAudiencePicker";
 import { useAuth } from "../features/auth";
 import { buildRouteHref } from "../utils/spaNavigation";
 import { isCampaignSseHealthy } from "../features/character-sheet/services/campaignEvents";
@@ -2336,9 +2342,14 @@ function ClockManager({
   sessionId,
   setError,
   campaignGmId = null,
+  players = [],
+  userId = null,
 }) {
   const [showCreate, setShowCreate] = useState(false);
   const [createName, setCreateName] = useState("");
+  // New clocks start GM only (PC private clocks).
+  const [createAudience, setCreateAudience] = useState({ all: false, ids: [] });
+  const isGm = userId != null && Number(userId) === Number(campaignGmId);
   const [createSegments, setCreateSegments] = useState(4);
   const [createType, setCreateType] = useState("CUSTOM");
   const [creating, setCreating] = useState(false);
@@ -2355,6 +2366,11 @@ function ClockManager({
         name: createName.trim() || "New Clock",
         clock_type: createType,
         max_segments: createSegments,
+        ...clockAudiencePatch(
+          { created_by: isGm ? campaignGmId : userId },
+          campaignGmId,
+          createAudience,
+        ),
       });
       const list = normalizeListResponse(
         await progressClockAPI.getProgressClocks({
@@ -2370,6 +2386,7 @@ function ClockManager({
       setCreateName("");
       setCreateSegments(4);
       setCreateType("CUSTOM");
+      setCreateAudience({ all: false, ids: [] });
       setShowCreate(false);
     } catch (e) {
       const msg = e?.message || "Could not create clock.";
@@ -2473,6 +2490,15 @@ function ClockManager({
                 ))}
               </select>
             </div>
+            <div style={{ marginBottom: "8px" }}>
+              <ClockAudiencePicker
+                idPrefix="new-session-clock"
+                players={isGm ? players : players.filter((p) => p.id !== Number(userId))}
+                noneLabel={isGm ? "GM only" : "Only me"}
+                value={createAudience}
+                onChange={setCreateAudience}
+              />
+            </div>
             <div style={{ display: "flex", gap: "8px" }}>
               <button
                 type="button"
@@ -2571,36 +2597,21 @@ function ClockManager({
               </button>
             </div>
             <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-              {isGMClock ? (
-                <label style={{ fontSize: "11px" }}>
-                  <input
-                    type="checkbox"
-                    checked={
-                      !!clk.visible_to_players || !!clk.visible_to_party
-                    }
-                    onChange={(e) =>
-                      updateClock({
-                        visible_to_players: e.target.checked,
-                        // Party-share is for player-owned clocks; clear so GM
-                        // mistoggles that only set visible_to_party get repaired.
-                        visible_to_party: false,
-                      })
-                    }
-                  />
-                  Visible to players
-                </label>
-              ) : (
-                <label style={{ fontSize: "11px" }}>
-                  <input
-                    type="checkbox"
-                    checked={clk.visible_to_party}
-                    onChange={(e) =>
-                      updateClock({ visible_to_party: e.target.checked })
-                    }
-                  />
-                  Visible to party
-                </label>
-              )}
+              {isGm || (clk.created_by != null && Number(clk.created_by) === Number(userId)) ? (
+                <ClockAudiencePicker
+                  idPrefix={`session-clock-${clk.id}`}
+                  players={
+                    isGMClock
+                      ? players
+                      : players.filter((p) => p.id !== Number(clk.created_by))
+                  }
+                  noneLabel={isGMClock ? "GM only" : isGm ? "Creator only" : "Only me"}
+                  value={clockAudience(clk, campaignGmId)}
+                  onChange={(next) =>
+                    updateClock(clockAudiencePatch(clk, campaignGmId, next))
+                  }
+                />
+              ) : null}
             </div>
           </div>
         );
@@ -5443,6 +5454,8 @@ function SessionDetail({
         sessionId={session.id}
         setError={setError}
         campaignGmId={campaign?.gm?.id ?? campaign?.gm ?? null}
+        players={clockPlayerOptions(campaign)}
+        userId={user?.id ?? null}
       />
     </div>
   );
