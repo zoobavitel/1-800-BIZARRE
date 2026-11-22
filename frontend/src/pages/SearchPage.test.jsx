@@ -31,7 +31,7 @@ describe("site search: homebrew results (S9)", () => {
     render(<SearchPage />);
     fireEvent.change(screen.getByPlaceholderText(/Search/), { target: { value: "lantern" } });
     const link = await screen.findByRole("link", { name: /Odd Lantern/ }, { timeout: 2000 });
-    expect(link).toHaveAttribute("href", "#homebrew/browse/Odd%20Lantern");
+    expect(link).toHaveAttribute("href", "#homebrew/items/Odd%20Lantern");
   });
 
   it("has a Homebrew filter that shows only homebrew", async () => {

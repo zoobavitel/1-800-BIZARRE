@@ -1,8 +1,10 @@
-from django.db import models
+import uuid
+
+from django.db import models, transaction
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.response import Response
 
 from ..models import (
@@ -31,6 +33,10 @@ class EquipmentItemViewSet(viewsets.ModelViewSet):
         homebrew = self.request.query_params.get("homebrew")
         if homebrew in HOMEBREW_LISTS and getattr(self, "action", None) == "list":
             return self._homebrew_list(user, homebrew)
+        if homebrew == "owned" and getattr(self, "action", None) == "list":
+            return self._owned_homebrew(user)
+        if homebrew == "campaign" and getattr(self, "action", None) == "list":
+            return self._campaign_homebrew(user)
 
         cid = None
         if campaign_id not in (None, ""):
@@ -94,17 +100,13 @@ class EquipmentItemViewSet(viewsets.ModelViewSet):
             disabled_template_ids = access.filter(enabled=False).values_list(
                 "item_id", flat=True
             )
-            # SITE and SHARED items are opt-in: off until the GM ticks them.
-            enabled_opt_in_ids = access.filter(enabled=True).values_list(
-                "item_id", flat=True
-            )
+            # Add Item is SRD plus the campaign library. Homebrew (SITE and
+            # SHARED) has its own picker, ?homebrew=owned (S10).
             base = base.filter(
                 (
                     models.Q(scope="TEMPLATE")
                     & ~models.Q(id__in=disabled_template_ids)
                 )
-                | models.Q(scope="SITE", id__in=enabled_opt_in_ids)
-                | models.Q(scope="SHARED", is_public=True, id__in=enabled_opt_in_ids)
                 | models.Q(
                     scope="CAMPAIGN",
                     campaign_id=cid,
@@ -131,6 +133,109 @@ class EquipmentItemViewSet(viewsets.ModelViewSet):
             )
         return qs.distinct().order_by("name")
 
+    @staticmethod
+    def _campaign_members(campaign):
+        """GM, invited players, and owners of the campaign's characters."""
+        ids = set(campaign.players.values_list("id", flat=True))
+        ids |= set(
+            Character.objects.filter(campaign=campaign, user__isnull=False).values_list("user_id", flat=True)
+        )
+        ids.add(campaign.gm_id)
+        return ids
+
+    @staticmethod
+    def _homebrew_of(user_ids):
+        """Homebrew these users made (private or published) or saved to their
+        collection (published, or made by one of them)."""
+        published = models.Q(scope="SITE") | models.Q(scope="SHARED", is_public=True)
+        made = models.Q(scope__in=("SITE", "SHARED"), created_by_id__in=user_ids)
+        saved = models.Q(scope__in=("SITE", "SHARED"), collected_by__user_id__in=user_ids) & (
+            published | models.Q(created_by_id__in=user_ids)
+        )
+        return set(EquipmentItem.objects.filter(made | saved).values_list("id", flat=True))
+
+    def _owned_homebrew(self, user):
+        """The sheet's "Add owned homebrew item" list.
+
+        Like D&D Beyond's campaign content sharing (user's rule, 2026-11-08):
+        with the campaign's switch on, everyone in it shares one pool, the
+        homebrew any member made or saved. No site-wide catalog and no block
+        list; the table agrees what to use. A sheet with no campaign gets its
+        owner's own homebrew when its own switch is on. The sheet's owner
+        or its GM may read it."""
+        try:
+            character = Character.objects.select_related("campaign").get(
+                pk=self.request.query_params.get("character")
+            )
+        except (Character.DoesNotExist, TypeError, ValueError):
+            raise NotFound("Character not found.")
+        campaign = character.campaign
+        if not (
+            character.user_id == user.id
+            or (campaign is not None and campaign.gm_id == user.id)
+        ):
+            raise PermissionDenied("Only the sheet's owner or GM can see its homebrew.")
+
+        switch_on = campaign.homebrew_enabled if campaign is not None else character.homebrew_enabled
+        owner_ids = self._homebrew_of({character.user_id}) if character.user_id else set()
+        self._homebrew_owner_ids = owner_ids
+        if not switch_on:
+            return EquipmentItem.objects.none()
+        ids = owner_ids
+        if campaign is not None:
+            ids = ids | self._homebrew_of(self._campaign_members(campaign))
+        return EquipmentItem.objects.select_related("created_by").filter(id__in=ids).order_by("name")
+
+    def _campaign_homebrew(self, user):
+        """The campaign's shared pool, for the GM's Equipment catalog card.
+        Members only (GM, players, staff)."""
+        try:
+            campaign = Campaign.objects.get(pk=self.request.query_params.get("campaign"))
+        except (Campaign.DoesNotExist, TypeError, ValueError):
+            raise NotFound("Campaign not found.")
+        members = self._campaign_members(campaign)
+        if user.id not in members:
+            raise PermissionDenied("Only the campaign's members can see its homebrew.")
+        return (
+            EquipmentItem.objects.select_related("created_by")
+            .filter(id__in=self._homebrew_of(members))
+            .order_by("name")
+        )
+
+    @action(detail=True, methods=["post"], url_path="add-to-character")
+    def add_to_character(self, request, pk=None):
+        """Put a homebrew item on one of your own sheets (S10). The item must
+        be yours, in your collection, or published."""
+        try:
+            character_id = int(request.data.get("character"))
+        except (TypeError, ValueError):
+            raise ValidationError({"character": ["A character id is required."]})
+        # The sheet's owner first, so a stranger learns nothing about the item.
+        owner_id = Character.objects.filter(pk=character_id).values_list("user_id", flat=True).first()
+        if owner_id is None and not Character.objects.filter(pk=character_id).exists():
+            raise NotFound("Character not found.")
+        if owner_id != request.user.id:
+            self.permission_denied(request, message="You can only add items to your own sheet.")
+        item = self._collectable(request)
+        with transaction.atomic():
+            character = Character.objects.select_for_update().get(pk=character_id)
+            row = {
+                "id": str(uuid.uuid4()),
+                "name": item.name,
+                "detail": item.description or "",
+                "category": item.category or "other",
+                "load": item.load_slots,
+                "quality": item.quality,
+                "coin_value": item.coin_value,
+                "catalog_id": item.id,
+                "is_armor": False,
+                "armor_kind": "",
+            }
+            inventory = character.inventory if isinstance(character.inventory, list) else []
+            character.inventory = [*inventory, row]
+            character.save(update_fields=["inventory"])
+        return Response({"character": character.id, "row": row})
+
     @action(detail=True, methods=["post"], url_path="collect")
     def collect(self, request, pk=None):
         item = self._collectable(request)
@@ -153,6 +258,8 @@ class EquipmentItemViewSet(viewsets.ModelViewSet):
 
     def get_serializer_context(self):
         ctx = super().get_serializer_context()
+        if hasattr(self, "_homebrew_owner_ids"):
+            ctx["homebrew_owner_ids"] = self._homebrew_owner_ids
         campaign_id = self.request.query_params.get("campaign")
         if campaign_id:
             ctx["campaign_id"] = campaign_id
@@ -248,15 +355,17 @@ class EquipmentItemViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         self._assert_gm(request, campaign)
-        if item.scope not in ("TEMPLATE", "SITE", "SHARED"):
+        # SRD templates only. Homebrew reaches a campaign through its shared
+        # pool when Enable homebrew is on (S11), not per item.
+        if item.scope != "TEMPLATE":
             return Response(
-                {"error": "Only template, site or shared items use campaign access toggles."},
+                {"error": "Only SRD template items use campaign access toggles."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         access, _ = CampaignEquipmentAccess.objects.update_or_create(
             campaign=campaign,
             item=item,
-            defaults={"enabled": bool(enabled)},
+            defaults={"enabled": _truthy(enabled)},
         )
         return Response(CampaignEquipmentAccessSerializer(access).data)
 
@@ -480,17 +589,19 @@ class EquipmentItemViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="copy-to-campaign")
     def copy_to_campaign(self, request, pk=None):
-        """A GM's edit of someone else's public item: copy it into their own
-        campaign library to change it there. The original is untouched and is
-        switched off in that campaign so it isn't listed twice."""
+        """A GM's edit of someone else's homebrew: copy it into their own
+        campaign library to change it there. The original is untouched. The
+        item must be published, or in this campaign's shared pool."""
         item = self.get_object()
         try:
             campaign = Campaign.objects.get(pk=request.data.get("campaign"))
         except (Campaign.DoesNotExist, TypeError, ValueError):
             return Response({"error": "Valid campaign id required."}, status=status.HTTP_400_BAD_REQUEST)
         self._assert_gm(request, campaign)
-        if item.scope != "SHARED" or not item.is_public:
-            raise ValidationError({"scope": ["Only public shared items can be copied."]})
+        if item.scope != "SHARED":
+            raise ValidationError({"scope": ["Only homebrew items can be copied."]})
+        if not (item.is_public or item.created_by_id in self._campaign_members(campaign)):
+            raise ValidationError({"scope": ["Only published homebrew, or a campaign member's, can be copied."]})
         copy = EquipmentItem.objects.create(
             name=item.name,
             description=item.description,
@@ -502,9 +613,6 @@ class EquipmentItemViewSet(viewsets.ModelViewSet):
             campaign=campaign,
             created_by=request.user,
             available_when_adding=True,
-        )
-        CampaignEquipmentAccess.objects.update_or_create(
-            campaign=campaign, item=item, defaults={"enabled": False}
         )
         return self._shared_response(copy, created=True)
 

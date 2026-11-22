@@ -760,6 +760,8 @@ export const equipmentAPI = {
     // Homebrew page lists (S9): "browse" (with q), "mine", "collection".
     if (params.homebrew) q.set("homebrew", params.homebrew);
     if (params.q) q.set("q", params.q);
+    // "owned" (S10) needs the sheet: its owner's homebrew plus the GM's.
+    if (params.character != null) q.set("character", String(params.character));
     const qs = q.toString();
     return apiRequest(`/equipment-items/${qs ? `?${qs}` : ""}`);
   },
@@ -800,6 +802,11 @@ export const equipmentAPI = {
     apiRequest(`/equipment-items/${id}/reshare/`, { method: "POST" }),
   publish: (id) =>
     apiRequest(`/equipment-items/${id}/publish/`, { method: "POST" }),
+  addToCharacter: (id, characterId) =>
+    apiRequest(`/equipment-items/${id}/add-to-character/`, {
+      method: "POST",
+      body: JSON.stringify({ character: characterId }),
+    }),
   collect: (id) =>
     apiRequest(`/equipment-items/${id}/collect/`, { method: "POST" }),
   uncollect: (id) =>
@@ -1672,6 +1679,13 @@ export const transformBackendToFrontend = (backendCharacter) => {
       typeof backendCharacter.fed_today === "boolean"
         ? backendCharacter.fed_today
         : null,
+    // S11: the sheet's own homebrew switch (used with no campaign), and the
+    // campaign's switch (read only; null with no campaign).
+    homebrew_enabled: Boolean(backendCharacter.homebrew_enabled),
+    campaign_homebrew_enabled:
+      typeof backendCharacter.campaign_homebrew_enabled === "boolean"
+        ? backendCharacter.campaign_homebrew_enabled
+        : null,
     disguised_as_human:
       typeof backendCharacter.disguised_as_human === "boolean"
         ? backendCharacter.disguised_as_human
@@ -2082,6 +2096,7 @@ export const transformFrontendToBackend = (frontendCharacter) => {
       typeof frontendCharacter.fed_today === "boolean"
         ? frontendCharacter.fed_today
         : null,
+    homebrew_enabled: Boolean(frontendCharacter.homebrew_enabled),
     disguised_as_human:
       typeof frontendCharacter.disguised_as_human === "boolean"
         ? frontendCharacter.disguised_as_human

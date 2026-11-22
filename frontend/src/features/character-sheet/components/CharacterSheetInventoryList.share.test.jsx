@@ -76,16 +76,4 @@ describe("making homebrew from a sheet item (S8)", () => {
     renderSheet({ inventory: [{ ...customRow, catalog_id: 5 }], onShareItem: jest.fn() });
     expect(screen.queryByRole("button", { name: /homebrew/ })).toBeNull();
   });
-
-  it("labels shared items in Add Item search with who shared them", async () => {
-    equipmentAPI.list.mockResolvedValue([
-      { id: 7, name: "Grappling Gun", category: "tools", load_slots: 1, quality: 1, scope: "SHARED", created_by_username: "player1" },
-    ]);
-    renderSheet({});
-    await waitFor(() => expect(equipmentAPI.list).toHaveBeenCalled());
-
-    fireEvent.click(screen.getByRole("button", { name: "Add Item" }));
-    const option = await screen.findByRole("option", { name: /Grappling Gun/ });
-    expect(option).toHaveTextContent("Shared by player1");
-  });
 });

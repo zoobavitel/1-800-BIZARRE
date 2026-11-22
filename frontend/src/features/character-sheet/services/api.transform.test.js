@@ -764,6 +764,24 @@ describe("transformFrontendToBackend post-allocation autosave omit", () => {
   });
 });
 
+describe("homebrew switch fields (S11)", () => {
+  it("reads the sheet's own switch and its campaign's switch", () => {
+    const front = transformBackendToFrontend({
+      id: 1, homebrew_enabled: true, campaign_homebrew_enabled: false,
+    });
+    expect(front.homebrew_enabled).toBe(true);
+    expect(front.campaign_homebrew_enabled).toBe(false);
+  });
+
+  it("saves the sheet's own switch and never the campaign's", () => {
+    const back = transformFrontendToBackend(
+      makeSheet({ homebrew_enabled: true, campaign_homebrew_enabled: true }),
+    );
+    expect(back.homebrew_enabled).toBe(true);
+    expect(back).not.toHaveProperty("campaign_homebrew_enabled");
+  });
+});
+
 describe("transformFrontendToBackend healing clock size", () => {
   // The server sets healing_clock_segments from the saved detriments
   // (Slower Recovery gives 5). When the sheet also sent it, a stale local

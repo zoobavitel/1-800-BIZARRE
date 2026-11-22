@@ -25,8 +25,11 @@ class PublicItemBase(TestCase):
         self.player = User.objects.create_user(username="sh_player", password="pw-sh-player-1")
         self.player2 = User.objects.create_user(username="sh_player2", password="pw-sh-player2-1")
         self.staff = User.objects.create_user(username="sh_staff", password="pw-sh-staff-1", is_staff=True)
-        self.campaign = Campaign.objects.create(name="Share Camp", gm=self.gm)
-        self.other_campaign = Campaign.objects.create(name="Other Share Camp", gm=self.other_gm)
+        self.campaign = Campaign.objects.create(name="Share Camp", gm=self.gm, homebrew_enabled=True)
+        # S11: homebrew needs the campaign switch on.
+        self.other_campaign = Campaign.objects.create(
+            name="Other Share Camp", gm=self.other_gm, homebrew_enabled=True
+        )
         self.pc = Character.objects.create(
             user=self.player, campaign=self.campaign, true_name="Sharer PC", heritage=heritage
         )
@@ -55,7 +58,10 @@ class PublicItemBase(TestCase):
         return EquipmentItem.objects.get(pk=response.data["id"])
 
     def available_names(self, user, campaign):
-        response = self.as_user(user).get(URL, {"campaign": campaign.id, "available_for_campaign": 1})
+        """What the user's sheet in that campaign can add as homebrew. Since
+        S10 that's the "Add owned homebrew item" picker, not Add Item."""
+        character = Character.objects.filter(user=user, campaign=campaign).first()
+        response = self.as_user(user).get(URL, {"homebrew": "owned", "character": character.id})
         self.assertEqual(response.status_code, 200)
         rows = response.data["results"] if isinstance(response.data, dict) else response.data
         return {row["name"] for row in rows}
@@ -112,13 +118,12 @@ class PublicItemTests(PublicItemBase):
 
     # Campaign opt-in
 
-    def test_a_public_item_is_off_until_the_gm_ticks_it(self):
+    def test_a_published_item_reaches_a_campaign_once_a_member_saves_it(self):
+        # S11 shared pool (2026-11-08): not the whole public catalog, only
+        # homebrew a member of the campaign made or saved.
         item = self.make_shared()
         self.assertNotIn(item.name, self.available_names(self.player2, self.other_campaign))
-
-        response = self.as_user(self.other_gm).post(
-            f"{URL}{item.id}/set-campaign-access/", {"campaign": self.other_campaign.id, "enabled": True}, format="json"
-        )
+        response = self.as_user(self.other_gm).post(f"{URL}{item.id}/collect/")
         self.assertEqual(response.status_code, 200, getattr(response, "data", None))
         self.assertIn(item.name, self.available_names(self.player2, self.other_campaign))
 
@@ -200,8 +205,6 @@ class PublicItemTests(PublicItemBase):
         self.as_user(self.other_gm).patch(f"{URL}{copy.id}/", {"name": "House Coin"}, format="json")
         item.refresh_from_db()
         self.assertEqual(item.name, "Lucky Coin")
-        # The original is switched off there, so the list doesn't show it twice.
-        self.assertFalse(CampaignEquipmentAccess.objects.get(campaign=self.other_campaign, item=item).enabled)
 
     def test_only_that_campaigns_gm_copies_into_it(self):
         item = self.make_shared()
