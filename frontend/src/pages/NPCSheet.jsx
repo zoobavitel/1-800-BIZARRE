@@ -1,3 +1,4 @@
+import { shouldClearNpcCrew } from "../utils/npcCrewGuard";
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   referenceAPI,
@@ -1422,14 +1423,13 @@ const NPCSheet = ({
 
   // Drop crew if campaign changed and crew is not in the new campaign.
   useEffect(() => {
-    if (currentCrewId == null) return;
-    if (campaignId == null || campaignId === "") {
+    // S21: an unloaded campaign list must not clear the crew (it saves as null).
+    if (
+      shouldClearNpcCrew({ currentCrewId, campaignId, activeCampaign })
+    ) {
       setCrew("");
-      return;
     }
-    const ok = campaignCrews.some((c) => Number(c.id) === Number(currentCrewId));
-    if (!ok) setCrew("");
-  }, [campaignId, campaignCrews, currentCrewId]);
+  }, [campaignId, activeCampaign, currentCrewId]);
 
   const currentFactionId = useMemo(() => {
     if (faction === "" || faction == null) return null;
