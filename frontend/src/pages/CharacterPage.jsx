@@ -56,11 +56,32 @@ const SHEET_SYNC_INTERVAL_MS = 30000;
 /** Coalesce SSE campaign_update bursts into one sheet sync (ms). */
 const SHEET_SSE_DEBOUNCE_MS = 1000;
 
-/** Creator / campaign GM may edit; campaign players view See-on NPCs read-only. */
-function userCanEditNpcSheet(user, npc, campaigns) {
+/** PATCH keys for the six harm slots (sent only when harm is touched). */
+const HARM_BODY_KEYS = [
+  "harm_level1_used",
+  "harm_level1_name",
+  "harm_level1_slot2_used",
+  "harm_level1_slot2_name",
+  "harm_level2_used",
+  "harm_level2_name",
+  "harm_level2_slot2_used",
+  "harm_level2_slot2_name",
+  "harm_level3_used",
+  "harm_level3_name",
+  "harm_level4_used",
+  "harm_level4_name",
+];
+
+/**
+ * Creator / campaign GM may edit; campaign players view See-on NPCs read-only.
+ * `known` is the NPC record the page loaded. The sheet's save data has no
+ * creator, so the creator comes from there when the save data lacks it.
+ */
+export function userCanEditNpcSheet(user, npc, campaigns, known = null) {
   if (!user?.id) return false;
   if (!npc?.id) return true;
-  const creatorId = npc.creator ?? npc.creator_id;
+  const creatorId =
+    npc.creator ?? npc.creator_id ?? known?.creator ?? known?.creator_id;
   if (creatorId != null && Number(creatorId) === Number(user.id)) return true;
   const campaignId = npc.campaign ?? npc.campaign_id;
   if (campaignId == null) return false;
@@ -460,6 +481,7 @@ function seedBlankCharacter(campaignId = null) {
 export default function CharacterPage({
   initialCharacterId = null,
   initialNewCampaignId = null,
+  initialNewCharacter = false,
   initialNpcId = null,
   initialNpcCampaignId = null,
   preferNpcMode = false,
@@ -533,6 +555,11 @@ export default function CharacterPage({
   const [npcsLoading, setNpcsLoading] = useState(false);
   const [campaignId] = useState(null);
   const [npcTabs, setNpcTabs] = useState([]);
+  // Read by the NPC save check without re-creating the save callback.
+  const npcTabsRef = useRef(npcTabs);
+  npcTabsRef.current = npcTabs;
+  const npcsRef = useRef(npcs);
+  npcsRef.current = npcs;
   const [activeNpcTabId, setActiveNpcTabId] = useState(null);
   const npcTabsInitialized = useRef(false);
 
@@ -800,10 +827,10 @@ export default function CharacterPage({
           // Fall through (e.g. no access or invalid id)
         }
       }
-      // #npcs mounts a fresh CharacterPage with preferNpcMode — do not seed a PC
-      // tab until the user opens CHARACTERS (avoids phantom "New Character" /
-      // autosave when they only wanted NPCs).
-      if (preferNpcMode) {
+      // Only an explicit "new" route opens a blank sheet. Plain #character
+      // and #npcs leave the tabs empty, so the picker shows (no phantom
+      // "New Character" or autosave when the user only wanted to choose).
+      if (preferNpcMode || (initialNewCampaignId == null && !initialNewCharacter)) {
         setCharTabs([]);
         setActiveCharTabId(null);
         return;
@@ -817,20 +844,6 @@ export default function CharacterPage({
       setActiveCharTabId(blank.tabId);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  /** When charTabs was left empty (NPC-first mount), add one blank tab before showing PC mode. */
-  const seedEmptyCharacterTabs = useCallback(() => {
-    setCharTabs((prev) => {
-      if (prev.length > 0) return prev;
-      const blank = {
-        tabId: nextTabId++,
-        characterId: null,
-        character: createDefaultCharacter(),
-      };
-      setActiveCharTabId(blank.tabId);
-      return [blank];
-    });
   }, []);
 
   // ── Character tab handlers ───────────────────────────────────────────────
@@ -1070,6 +1083,11 @@ export default function CharacterPage({
           delete body.spin_armor_used;
           delete body.hamon_armor_used;
           delete body.special_armor_used;
+        }
+        // Same for harm: an old copy in this tab must not clear harm saved
+        // from here or elsewhere.
+        if (!touches.harm) {
+          for (const key of HARM_BODY_KEYS) delete body[key];
         }
         return body;
       };
@@ -1533,7 +1551,19 @@ export default function CharacterPage({
 
   const handleSaveNpc = useCallback(
     async (npcData) => {
-      if (!userCanEditNpcSheet(user, npcData, campaigns)) {
+      const knownNpc =
+        npcData?.id != null
+          ? npcTabsRef.current.find(
+              (t) =>
+                Number(t.npcId) === Number(npcData.id) ||
+                Number(t.npc?.id) === Number(npcData.id),
+            )?.npc ||
+            npcsRef.current.find(
+              (n) => Number(n.id) === Number(npcData.id),
+            ) ||
+            null
+          : null;
+      if (!userCanEditNpcSheet(user, npcData, campaigns, knownNpc)) {
         const err = new Error("You do not have permission to edit this NPC.");
         console.error("Save NPC refused:", err);
         throw err;
@@ -1923,7 +1953,6 @@ export default function CharacterPage({
         if (filtered.length === 0) {
           setNpcTabs([]);
           setActiveNpcTabId(null);
-          seedEmptyCharacterTabs();
           setMode(MODES.CHARACTER);
           if (typeof window !== "undefined")
             window.location.hash = "character";
@@ -1954,7 +1983,6 @@ export default function CharacterPage({
     activeCharTabId,
     activeNpcTabId,
     npcTabs,
-    seedEmptyCharacterTabs,
   ]);
   const saveActiveUnsavedCharacter = useCallback(async () => {
     const tab = charTabs.find((t) => t.tabId === activeCharTabId);
@@ -2446,7 +2474,7 @@ export default function CharacterPage({
                 lineHeight: 1.45,
               }}
             >
-              Open an existing character, or start a new blank sheet.
+              Open one of your PCs or NPCs, or start a new one.
             </div>
             {characters.length > 0 ? (
               <select
@@ -2491,25 +2519,83 @@ export default function CharacterPage({
                 No saved characters yet.
               </div>
             )}
-            <button
-              type="button"
-              onClick={() => {
-                handleCreateNewCharacterTab();
-                if (typeof window !== "undefined") {
-                  window.location.hash = "character";
-                }
-              }}
-              style={{
-                ...PAGE_STYLES.modeSelect,
-                width: "100%",
-                cursor: "pointer",
-                borderStyle: "dashed",
-                color: "#93c5fd",
-                borderColor: "#1d4ed8",
-              }}
-            >
-              + New Character
-            </button>
+            {npcs.length > 0 ? (
+              <select
+                aria-label="Choose NPC to view"
+                style={{
+                  ...PAGE_STYLES.modeSelect,
+                  width: "100%",
+                  marginBottom: "10px",
+                  color: "#e5e7eb",
+                }}
+                value=""
+                onChange={(e) => {
+                  const id = parseInt(e.target.value, 10);
+                  e.target.value = "";
+                  if (!Number.isFinite(id)) return;
+                  const npc = npcs.find((n) => Number(n.id) === id);
+                  if (npc) handleOpenNpcFromCharacterToolbar(npc);
+                }}
+              >
+                <option value="">Select NPC…</option>
+                {npcs.map((n) => (
+                  <option key={n.id} value={n.id}>
+                    {n.name || `NPC #${n.id}`}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <div
+                style={{
+                  fontSize: "12px",
+                  color: "#6b7280",
+                  marginBottom: "10px",
+                }}
+              >
+                No saved NPCs yet.
+              </div>
+            )}
+            <div style={{ display: "flex", gap: "8px" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  handleCreateNewCharacterTab();
+                  if (typeof window !== "undefined") {
+                    window.location.hash = "character";
+                  }
+                }}
+                style={{
+                  ...PAGE_STYLES.modeSelect,
+                  flex: 1,
+                  cursor: "pointer",
+                  borderStyle: "dashed",
+                  color: "#93c5fd",
+                  borderColor: "#1d4ed8",
+                }}
+              >
+                + New PC
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMode(MODES.NPC);
+                  handleCreateNewNpcTab();
+                  if (typeof window !== "undefined") {
+                    window.location.hash = "npcs";
+                  }
+                }}
+                style={{
+                  ...PAGE_STYLES.modeSelect,
+                  flex: 1,
+                  cursor: "pointer",
+                  borderStyle: "dashed",
+                  color: "#93c5fd",
+                  borderColor: "#1d4ed8",
+                }}
+              >
+                + New NPC
+              </button>
+            </div>
           </div>
         ) : (
           <CharacterSheetWrapper
@@ -2640,6 +2726,7 @@ export default function CharacterPage({
                   campaigns={campaigns}
                   allNpcs={npcs}
                   isGM={isNpcGm}
+                  canEditVisibility={canEditNpc}
                   readOnly={!canEditNpc}
                   onFactionChange={refreshCampaigns}
                   onCampaignRefresh={refreshCampaigns}

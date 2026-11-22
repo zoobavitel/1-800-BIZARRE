@@ -69,6 +69,8 @@ class CampaignGmPlayerManagementTestCase(TestCase):
         self.assertFalse(self.campaign.players.filter(id=self.player.id).exists())
 
     def test_player_can_assign_own_unassigned_character(self):
+        # One PC per player per campaign: take "PC One" out first.
+        Character.objects.filter(pk=self.pc.pk).update(campaign=None)
         spare = Character.objects.create(
             user=self.player,
             campaign=None,

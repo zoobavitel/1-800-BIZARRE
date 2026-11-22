@@ -48,13 +48,20 @@ GitHub must serve the **gh-pages** branch, not the default branch:
    - **Folder:** **/ (root)**
 5. Click **Save**.
 
-Wait 1–2 minutes, then open **https://zoobavitel.github.io/1-800-BIZARRE/** — you should see the app.
+Wait 1–2 minutes, then open **https://1-800-bizarre.com/** — you should see the app.
+
+## Custom domain (1-800-bizarre.com)
+
+- **Pages setting:** repo Settings → Pages → Custom domain = `1-800-bizarre.com`, HTTPS enforced.
+- **CNAME file:** the deploy step (`peaceiris/actions-gh-pages`, `force_orphan: true`) rewrites `gh-pages` without a `CNAME` file, which makes GitHub clear the custom domain. `cname: 1-800-bizarre.com` on the deploy step writes it on every deploy. Keep it there. If the domain returns 404 after a deploy, check that the step still sets `cname`, then re-add the domain in Settings → Pages.
+- **Build:** `frontend/package.json` `homepage` is `https://1-800-bizarre.com`, so built asset paths are absolute from the root. The `zoobavitel.github.io/1-800-BIZARRE/` URL is not a supported entry point: it loads a blank page.
+- **Concurrency:** `ci.yml` cancels in-progress runs on the same branch, so a manual run on master can cancel a push run that is still deploying.
 
 ---
 
 ## Checklist (Create React App deployment)
 
-- [x] **homepage** in **frontend/package.json**: `"https://zoobavitel.github.io/1-800-BIZARRE"` (no trailing slash) — so the build uses correct asset paths.
+- [x] **homepage** in **frontend/package.json**: `"https://1-800-bizarre.com"` (no trailing slash) — so the build uses correct asset paths.
 - [x] **Root package.json**: `predeploy` and `deploy` scripts; `deploy` uses `gh-pages -d frontend/build`.
 - [ ] **You ran** `npm run deploy` from repo root at least once.
 - [ ] **GitHub Settings → Pages**: Source = “Deploy from a branch”, Branch = **gh-pages**, Folder = **/ (root)**.
@@ -63,7 +70,7 @@ Wait 1–2 minutes, then open **https://zoobavitel.github.io/1-800-BIZARRE/** �
 
 ## Remote play: the live site and API host
 
-Players open **https://zoobavitel.github.io/1-800-BIZARRE/**. The Pages build bakes the public API host from the `REACT_APP_API_URL` secret: `https://api.1-800-bizarre.com/api` (Cloudflare Tunnel). Leave **Game server** blank so that host is used.
+Players open **https://1-800-bizarre.com/**. The Pages build bakes the public API host from the `REACT_APP_API_URL` secret: `https://api.1-800-bizarre.com/api` (Cloudflare Tunnel). Leave **Game server** blank so that host is used.
 
 A saved Game server URL overrides the baked host. Clear the field if sign-in reaches the wrong server. A saved Tailscale Funnel URL (`*.ts.net`) is dropped automatically: devices with Tailscale on resolve that name to a private `100.x` address, which fails off the home network.
 
@@ -124,4 +131,4 @@ npm run deploy
 - Runs `predeploy` (builds the frontend into `frontend/build`).
 - Pushes the **contents** of `frontend/build` to the **gh-pages** branch.
 
-The **homepage** in **frontend/package.json** must match your Pages URL (e.g. `https://zoobavitel.github.io/1-800-BIZARRE`).
+The **homepage** in **frontend/package.json** must match the public URL (currently `https://1-800-bizarre.com`; see "Custom domain" above).

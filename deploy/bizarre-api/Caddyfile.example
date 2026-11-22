@@ -19,7 +19,9 @@
 	bind 127.0.0.1
 
 	# Django admin is not reachable from the internet. Use :8081 over the tailnet.
-	@admin path /admin /admin/*
+	# Matches /admin and everything under it. The older "/admin /admin/*" missed
+	# deeper paths such as /admin/login/, which then reached Django.
+	@admin path_regexp adminblock ^/admin(/|$)
 	respond @admin 404
 
 	# Compress JSON and HTML only. SSE (text/event-stream) must stay

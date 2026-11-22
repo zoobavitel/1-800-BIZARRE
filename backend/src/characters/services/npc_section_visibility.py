@@ -91,6 +91,108 @@ def redact_npc_player_payload(data, npc):
     return data
 
 
+# Old narrative fields with no player-facing section. Never sent to players.
+NPC_PLAYER_NEVER_TEXT_FIELDS = (
+    "secret",
+    "rumour",
+    "weakness",
+    "need",
+    "desire",
+    "passion",
+)
+
+
+def player_session_reveals(npc, inv):
+    """Clocks and Stand coin a player may see for one session involvement.
+
+    ``inv`` is the NPC's SessionNPCInvolvement in the campaign's active session,
+    or None (nothing revealed).
+    """
+    if inv is None:
+        return {
+            "show_all_clocks": False,
+            "show_vulnerability": False,
+            "conflict_clocks": [],
+            "alt_clocks": [],
+            "revealed_progress_clock_ids": set(),
+            "stand_coin_stats": {},
+        }
+    show_all = bool(inv.show_clocks_to_players)
+    revealed_conflict = set(inv.revealed_conflict_clock_names or [])
+    revealed_alt = set(inv.revealed_alt_clock_names or [])
+    # When Master "Clocks" (show_clocks_to_players) is off, rely only on
+    # session reveal lists—not per-clock JSON flags on the NPC—which would
+    # bypass what the GM expects from the session toggle (see SessionNPCInvolvement).
+    conflict_clocks = (
+        list(npc.conflict_clocks or [])
+        if show_all
+        else [
+            c
+            for c in (npc.conflict_clocks or [])
+            if str(c.get("name") or "") in revealed_conflict
+        ]
+    )
+    alt_clocks = (
+        list(npc.alt_clocks or [])
+        if show_all
+        else [
+            c
+            for c in (npc.alt_clocks or [])
+            if str(c.get("name") or "") in revealed_alt
+        ]
+    )
+    stand_stats = {}
+    if inv.show_stand_coin_to_players:
+        revealed_stats = [str(k).upper() for k in (inv.revealed_stand_coin_stats or [])]
+        if revealed_stats:
+            for key in revealed_stats:
+                if key in (npc.stand_coin_stats or {}):
+                    stand_stats[key] = npc.stand_coin_stats.get(key)
+        else:
+            stand_stats = npc.stand_coin_stats or {}
+    return {
+        "show_all_clocks": show_all,
+        "show_vulnerability": show_all or bool(inv.show_vulnerability_clock_to_players),
+        "conflict_clocks": conflict_clocks,
+        "alt_clocks": alt_clocks,
+        "revealed_progress_clock_ids": {
+            int(i) for i in (inv.revealed_progress_clock_ids or []) if str(i).isdigit()
+        },
+        "stand_coin_stats": stand_stats,
+    }
+
+
+def active_session_involvement(npc):
+    """The NPC's involvement in its campaign's active session, or None."""
+    from ..models import SessionNPCInvolvement
+
+    campaign = getattr(npc, "campaign", None)
+    active_sid = getattr(campaign, "active_session_id", None) if campaign else None
+    if not active_sid:
+        return None
+    return SessionNPCInvolvement.objects.filter(session_id=active_sid, npc=npc).first()
+
+
+def redact_npc_hidden_fields_for_player(data, npc):
+    """Strip NPC data with no player section, or not revealed this session. Mutates data."""
+    for field in NPC_PLAYER_NEVER_TEXT_FIELDS:
+        if field in data:
+            data[field] = ""
+    if "relationships" in data:
+        data["relationships"] = {}
+    rev = player_session_reveals(npc, active_session_involvement(npc))
+    data["stand_coin_stats"] = rev["stand_coin_stats"]
+    data["conflict_clocks"] = rev["conflict_clocks"]
+    data["alt_clocks"] = rev["alt_clocks"]
+    if not rev["show_vulnerability"]:
+        # None (not 0): S-Durability NPCs legitimately have a 0-segment clock.
+        data["vulnerability_clock_current"] = None
+        data["vulnerability_clock_max"] = None
+    if not player_sees_faction_membership(npc):
+        data["faction_status"] = {}
+    return data
+
+
 def redact_npc_summary_for_player(data, npc):
     see = getattr(npc, "players_see", None)
     if not npc_section_visible(see, "playbook"):

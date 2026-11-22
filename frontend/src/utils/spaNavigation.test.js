@@ -16,3 +16,25 @@ describe("character hash routes", () => {
     ).toBe("character/3");
   });
 });
+
+describe("character picker routes (Characters picker story)", () => {
+  test("plain character route is the picker", () => {
+    expect(buildRouteHash("character", { characterId: null })).toBe("character");
+  });
+
+  test("a new blank character has its own route", () => {
+    expect(
+      buildRouteHash("character", { characterId: null, newCharacter: true }),
+    ).toBe("character/new");
+  });
+
+  test("a campaign new character keeps its route", () => {
+    expect(
+      buildRouteHash("character", {
+        characterId: null,
+        campaignId: 7,
+        newCharacter: true,
+      }),
+    ).toBe("character/new/7");
+  });
+});

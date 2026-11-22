@@ -39,7 +39,7 @@ export function buildRouteHash(page, payload = {}) {
       if (payload.campaignId != null && payload.campaignId !== "") {
         return `character/new/${payload.campaignId}`;
       }
-      return "character";
+      return payload.newCharacter ? "character/new" : "character";
     }
     const id = payload.characterId;
     const slugRaw = payload.characterSlug ?? payload.slug ?? null;

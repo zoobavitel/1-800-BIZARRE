@@ -359,7 +359,7 @@ const HomePage = ({
 
   const handleCreateCharacter = () => {
     if (typeof onNavigateToCharacter === "function")
-      onNavigateToCharacter(null);
+      onNavigateToCharacter(null, { newCharacter: true });
   };
 
   const handleEditCharacter = (character) => {

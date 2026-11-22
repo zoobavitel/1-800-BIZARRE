@@ -2234,6 +2234,13 @@ const CharacterSheetWrapper = ({
       const same = levels.every(
         (lv) => JSON.stringify(prev[lv]) === JSON.stringify(next[lv]),
       );
+      // A harm edit stays until the character prop catches up. The save's own
+      // live event can mark its reply stale, leaving the prop older than the
+      // save; loading it then cleared the harm just saved.
+      if (fieldTouchRef.current.harm) {
+        if (same) fieldTouchRef.current.harm = false;
+        return prev;
+      }
       return same ? prev : { ...prev, ...next };
     });
   }, [
@@ -6295,6 +6302,7 @@ const CharacterSheetWrapper = ({
 
     const nextLevel = downgradeMap[level];
     row[idx] = "";
+    markFieldTouch("harm");
     if (!nextLevel) {
       setHarm(cur);
       return true;
@@ -6311,7 +6319,7 @@ const CharacterSheetWrapper = ({
     toRow[targetSlot] = value;
     setHarm(cur);
     return true;
-  }, [harm]);
+  }, [harm, markFieldTouch]);
 
   const downgradeAllHarmByOneLevel = useCallback((prev) => {
     const p = normalizeHarmObject(prev);
@@ -6331,6 +6339,7 @@ const CharacterSheetWrapper = ({
   const handleHealingClockAdjust = useCallback(
     (nextFilled) => {
       markFieldTouch("healingClock");
+      markFieldTouch("harm");
       const cap = healingClockSegments;
       setHealingClock((prev) => {
         const cur = Math.max(0, Math.min(cap, Number(prev) || 0));
@@ -6359,6 +6368,7 @@ const CharacterSheetWrapper = ({
       const add = Math.max(0, Math.floor(Number(segmentsToAdd) || 0));
       if (!add) return;
       markFieldTouch("healingClock");
+      markFieldTouch("harm");
       setHealingClock((prev) => {
         const { nextFilled, completions } = computeHealingClockAfterSegments({
           currentFilled: prev,
@@ -15370,6 +15380,7 @@ const CharacterSheetWrapper = ({
                             onChange={(e) => {
                               const nextText = e.target.value;
                               editField(() => {
+                                markFieldTouch("harm");
                                 const resetHealingClock =
                                   applyHarmSlotTextChange(
                                     harm,
@@ -15465,6 +15476,7 @@ const CharacterSheetWrapper = ({
                                 onChange={(e) => {
                                   const nextText = e.target.value;
                                   editField(() => {
+                                    markFieldTouch("harm");
                                     const resetHealingClock =
                                       applyHarmSlotTextChange(
                                         harm,
