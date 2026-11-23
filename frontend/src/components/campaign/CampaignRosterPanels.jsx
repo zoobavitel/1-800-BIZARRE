@@ -94,6 +94,7 @@ export default function CampaignRosterPanels({
   handleToggleFactionVisibleToPlayers,
   canAddCharacter = false,
   charactersToAssign = [],
+  ownCharacterInCampaign = null,
   onAssignCharacter,
   handleBulkSetFactionNpcsVisibleToPlayers,
   factionAddNpcId,
@@ -240,6 +241,7 @@ export default function CampaignRosterPanels({
   const addCharacterTile = (
     <RosterAddCharacterTile
       characters={charactersToAssign}
+      existingCharacter={ownCharacterInCampaign}
       onAssign={onAssignCharacter}
       onCreate={
         typeof onNavigateToCharacter === "function"

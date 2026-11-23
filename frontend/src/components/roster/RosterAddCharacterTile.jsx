@@ -17,10 +17,11 @@ const menuItem = {
 
 /**
  * Last card in the PC roster: pick one of your characters for this campaign,
- * or make a new one.
+ * or make a new one. A player can only have one PC in a campaign.
  */
 export default function RosterAddCharacterTile({
   characters = [],
+  existingCharacter = null,
   onAssign,
   onCreate,
 }) {
@@ -112,7 +113,12 @@ export default function RosterAddCharacterTile({
             zIndex: 50,
           }}
         >
-          {characters.length === 0 ? (
+          {existingCharacter ? (
+            <div style={{ fontSize: 10, color: "#9ca3af", padding: "6px 8px" }}>
+              You already have {characterLabel(existingCharacter)} in this
+              campaign. Remove it first.
+            </div>
+          ) : characters.length === 0 ? (
             <div style={{ fontSize: 10, color: "#6b7280", padding: "6px 8px" }}>
               No free characters. Create one instead.
             </div>
@@ -130,7 +136,7 @@ export default function RosterAddCharacterTile({
               </button>
             ))
           )}
-          {typeof onCreate === "function" ? (
+          {!existingCharacter && typeof onCreate === "function" ? (
             <button
               type="button"
               role="menuitem"

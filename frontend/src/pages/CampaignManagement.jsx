@@ -1106,6 +1106,12 @@ function CampaignDetail({
           ch.campaign?.id !== campaign?.id,
       )
     : myCharacters.filter((ch) => !ch.campaign && ch.id);
+  const ownCharacterInCampaign =
+    myCharacters.find(
+      (ch) =>
+        (ch.campaign?.id ?? ch.campaign) === campaign?.id &&
+        (ch.user?.id ?? ch.user ?? user?.id) === user?.id,
+    ) || null;
   const npcsThatCanBeAdded = allNPCs.filter((n) => !n.campaign);
   const campaignNPCs = allNPCs.filter(
     (n) => n.campaign === campaign?.id || n.campaign?.id === campaign?.id,
@@ -2196,6 +2202,7 @@ function CampaignDetail({
               isGM || !!campaign.players?.some((p) => p.id === user?.id)
             }
             charactersToAssign={availableToAssign}
+            ownCharacterInCampaign={ownCharacterInCampaign}
             onAssignCharacter={handleAssignCharacter}
             handleBulkSetFactionNpcsVisibleToPlayers={
               bulkSetFactionNpcsVisibleToPlayers

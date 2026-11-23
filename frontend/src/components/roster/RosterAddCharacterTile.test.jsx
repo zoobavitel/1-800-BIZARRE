@@ -29,6 +29,19 @@ describe("RosterAddCharacterTile", () => {
     expect(onCreate).toHaveBeenCalled();
   });
 
+  it("explains the one PC rule and offers no actions", () => {
+    render(
+      <RosterAddCharacterTile
+        characters={[{ id: 7, true_name: "Jolyne" }]}
+        existingCharacter={{ id: 1, true_name: "Jotaro" }}
+        onCreate={jest.fn()}
+      />,
+    );
+    openMenu();
+    expect(screen.getByText(/You already have Jotaro/)).toBeInTheDocument();
+    expect(screen.queryAllByRole("menuitem")).toHaveLength(0);
+  });
+
   it("closes on Escape", () => {
     render(<RosterAddCharacterTile characters={[]} />);
     openMenu();
