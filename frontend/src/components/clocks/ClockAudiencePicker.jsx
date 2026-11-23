@@ -1,6 +1,7 @@
 import React from "react";
 
 const segment = (on) => ({
+  fontFamily: "inherit",
   background: on ? "var(--sheet-label, #1e3a5f)" : "transparent",
   border: "none",
   color: on ? "var(--bg-card, #fff)" : "var(--text-primary, #e5e7eb)",

@@ -5,6 +5,7 @@ import ClockAudiencePicker from "./ClockAudiencePicker";
 const SIZE_PRESETS = [4, 6, 8, 12];
 
 const btn = {
+  fontFamily: "inherit",
   background: "transparent",
   border: "1px solid var(--border, #374151)",
   borderRadius: "4px",
@@ -85,6 +86,7 @@ export default function ClockEditPopover({
           boxSizing: "border-box",
           color: "var(--text-primary, #e5e7eb)",
           display: "grid",
+          fontFamily: "var(--font-mono, monospace)",
           gap: "12px",
           maxHeight: "90vh",
           maxWidth: "360px",
@@ -110,6 +112,7 @@ export default function ClockEditPopover({
               borderRadius: "4px",
               boxSizing: "border-box",
               color: "inherit",
+              fontFamily: "inherit",
               fontSize: "13px",
               padding: "5px 7px",
               width: "100%",
@@ -149,6 +152,7 @@ export default function ClockEditPopover({
                   border: "1px solid var(--border, #374151)",
                   borderRadius: "4px",
                   color: "inherit",
+                  fontFamily: "inherit",
                   fontSize: "12px",
                   padding: "4px",
                   width: "48px",

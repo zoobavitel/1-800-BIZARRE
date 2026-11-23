@@ -4065,9 +4065,8 @@ const NPCSheet = ({
                         }}
                       >
                         PCs roll action ratings to fill these. Limited=1 tick,
-                        Standard=2, Greater=3. Use{" "}
-                        <strong>Players see</strong> to show individual clocks on
-                        session-linked PC sheets without revealing every clock.
+                        Standard=2, Greater=3. Use a clock's{" "}
+                        <strong>⋯</strong> menu to choose who sees it.
                       </div>
                     </div>
 
