@@ -2192,6 +2192,11 @@ function CampaignDetail({
             handleRemoveNpcFromFaction={handleRemoveNpcFromFaction}
             handleToggleNpcVisibleToPlayers={toggleNpcVisibleToPlayers}
             handleToggleFactionVisibleToPlayers={toggleFactionVisibleToPlayers}
+            canAddCharacter={
+              isGM || !!campaign.players?.some((p) => p.id === user?.id)
+            }
+            charactersToAssign={availableToAssign}
+            onAssignCharacter={handleAssignCharacter}
             handleBulkSetFactionNpcsVisibleToPlayers={
               bulkSetFactionNpcsVisibleToPlayers
             }
@@ -2217,50 +2222,6 @@ function CampaignDetail({
           />
         )}
       </CampaignShellPanels>
-
-      {/* Assign / create character (GM or player in the campaign) */}
-      {(isGM || campaign.players?.some((p) => p.id === user?.id)) && (
-          <div style={S.card}>
-            <span style={S.sectionLbl}>Assign a Character</span>
-            <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-              {availableToAssign.length > 0 ? (
-                <select
-                  style={{ ...S.select, flex: 1, minWidth: 160 }}
-                  defaultValue=""
-                  onChange={(e) =>
-                    e.target.value &&
-                    handleAssignCharacter(parseInt(e.target.value, 10))
-                  }
-                >
-                  <option value="" disabled>
-                    Select a character...
-                  </option>
-                  {availableToAssign.map((ch) => (
-                    <option key={ch.id} value={ch.id}>
-                      {ch.true_name || ch.alias || `Character #${ch.id}`}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <span style={{ fontSize: 12, color: "var(--text-muted)", flex: 1 }}>
-                  No unassigned characters available to link.
-                </span>
-              )}
-              {typeof onNavigateToCharacter === "function" ? (
-                <button
-                  type="button"
-                  style={S.btnPrimary}
-                  onClick={() =>
-                    onNavigateToCharacter(null, { campaignId: campaign.id })
-                  }
-                >
-                  Create character
-                </button>
-              ) : null}
-            </div>
-          </div>
-        )}
-
 
       {/* Showcased NPCs (GM only) — opposition in Entanglement/All-Out-Brawl; GM can share clocks with party */}
       {isGM && (campaign.showcased_npcs || []).length > 0 && (

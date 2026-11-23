@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { factionAPI } from "../../features/character-sheet";
 import RosterCrewInlineSection from "../roster/RosterCrewInlineSection";
 import RosterPcExpandPanel from "../roster/RosterPcExpandPanel";
+import RosterAddCharacterTile from "../roster/RosterAddCharacterTile";
 import RosterNpcColumn from "../roster/RosterNpcColumn";
 import RosterTwoColumnShell from "../roster/RosterTwoColumnShell";
 import RosterCollapsibleSection from "../roster/RosterCollapsibleSection";
@@ -91,6 +92,9 @@ export default function CampaignRosterPanels({
   handleRemoveNpcFromFaction,
   handleToggleNpcVisibleToPlayers,
   handleToggleFactionVisibleToPlayers,
+  canAddCharacter = false,
+  charactersToAssign = [],
+  onAssignCharacter,
   handleBulkSetFactionNpcsVisibleToPlayers,
   factionAddNpcId,
   setFactionAddNpcId,
@@ -232,6 +236,18 @@ export default function CampaignRosterPanels({
       setQuickFactionBusy(false);
     }
   };
+
+  const addCharacterTile = (
+    <RosterAddCharacterTile
+      characters={charactersToAssign}
+      onAssign={onAssignCharacter}
+      onCreate={
+        typeof onNavigateToCharacter === "function"
+          ? () => onNavigateToCharacter(null, { campaignId: campaign.id })
+          : undefined
+      }
+    />
+  );
 
   const canManageCrew =
     isGM || (campaign.players || []).some((p) => p.id === user?.id);
@@ -545,9 +561,16 @@ export default function CampaignRosterPanels({
                 style={{ marginTop: 10, ...pcTokensStyle }}
               >
                 {pcEntries.length === 0 ? (
-                  <div style={{ color: "var(--text-dim)", fontSize: 12 }}>
-                    No characters in this campaign yet.
-                  </div>
+                  <>
+                    <div style={{ color: "var(--text-dim)", fontSize: 12, marginBottom: 8 }}>
+                      No characters in this campaign yet.
+                    </div>
+                    {canAddCharacter ? (
+                      <div className="home-card-grid">
+                        <div className="session-roster-cell">{addCharacterTile}</div>
+                      </div>
+                    ) : null}
+                  </>
                 ) : (
                   <>
                     <div className="session-pc-finder">
@@ -596,6 +619,9 @@ export default function CampaignRosterPanels({
                           </div>
                         );
                       })}
+                      {canAddCharacter ? (
+                        <div className="session-roster-cell">{addCharacterTile}</div>
+                      ) : null}
                     </div>
                     {(() => {
                       if (expandedPcId == null) return null;
