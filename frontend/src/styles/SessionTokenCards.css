@@ -355,3 +355,87 @@
   white-space: nowrap;
   min-width: 0;
 }
+
+/* GM eye toggle on NPC cards. */
+.session-roster-tokens .npc-card {
+  position: relative;
+}
+
+.session-npc-eye {
+  align-items: center;
+  background: rgba(13, 17, 23, 0.85);
+  border: 1px solid #4b5563;
+  border-radius: 4px;
+  color: #d1d5db;
+  cursor: pointer;
+  display: inline-flex;
+  height: 22px;
+  justify-content: center;
+  padding: 0;
+  position: absolute;
+  right: 4px;
+  top: 4px;
+  width: 22px;
+  z-index: 3;
+}
+
+.session-npc-eye:hover {
+  border-color: var(--p1, #7c3aed);
+  color: #fff;
+}
+
+.session-npc-eye.is-off {
+  border-color: #7f1d1d;
+  color: #f87171;
+}
+
+.session-npc-eye.is-compact {
+  border-radius: 3px;
+  height: 14px;
+  right: -3px;
+  top: -3px;
+  width: 14px;
+}
+
+.session-roster-tokens .npc-card.is-hidden-npc .p-card-media,
+.session-roster-tokens .npc-card.is-hidden-npc .npc-card-body,
+.session-npc-strip-cell.is-hidden-npc .session-npc-strip-thumb {
+  opacity: 0.5;
+}
+
+.session-not-in-pool {
+  border-top: 1px solid var(--dark-border, #374151);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 10px;
+}
+
+.session-not-in-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-height: 132px;
+  overflow-y: auto;
+}
+
+.session-not-in-chip {
+  background: transparent;
+  border: 1px dashed #4b5563;
+  border-radius: 4px;
+  color: #d1d5db;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+  padding: 3px 7px;
+}
+
+.session-not-in-chip:hover:not(:disabled) {
+  border-color: var(--p1, #7c3aed);
+  color: #fff;
+}
+
+.session-not-in-chip:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}

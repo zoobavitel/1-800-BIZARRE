@@ -70,7 +70,9 @@ import {
   SessionShellTabBar,
   NestedTabBar,
   SessionHelpTip,
+  filterRosterToInSession,
   groupSessionNpcsByFaction,
+  notInSessionPool,
   npcIdsEqual,
   sessionInvolvedNpcIds,
 } from "./sessionShellUi";
@@ -1140,6 +1142,9 @@ export default function SessionGMManagementPanels({
   }, []);
 
   const [showAddNpc, setShowAddNpc] = useState(false);
+  /** Removing a faction with NPCs here: { id, name, npcCount }. */
+  const [factionRemovePrompt, setFactionRemovePrompt] = useState(null);
+  const [sessionQuickFactionInSession, setSessionQuickFactionInSession] = useState(false);
   /** Modal pane: pick existing campaign NPC, or quick-create. */
   const [addNpcModalMode, setAddNpcModalMode] = useState("pick");
   /** Choice menu on the dashed Add-NPC grid tile. */
@@ -1342,14 +1347,28 @@ export default function SessionGMManagementPanels({
     [campaign, campaignNPCs, npcInvolvements],
   );
 
+  /** The GM's In session factions. Older payloads: the factions of its NPCs. */
+  const inSessionFactionIds = useMemo(() => {
+    if (Array.isArray(sessionData?.factions_involved)) {
+      return new Set(sessionData.factions_involved.map(Number));
+    }
+    const ids = new Set();
+    for (const [fid, list] of sessionFactionNpcGroupsRaw.factionPairs) {
+      if ((list || []).length > 0) ids.add(Number(fid));
+    }
+    return ids;
+  }, [sessionData?.factions_involved, sessionFactionNpcGroupsRaw]);
+
   const sessionFactionNpcGroups = useMemo(() => {
-    if (isGM) return sessionFactionNpcGroupsRaw;
+    if (isGM) {
+      return filterRosterToInSession(sessionFactionNpcGroupsRaw, inSessionFactionIds);
+    }
     return filterSessionFactionPairsForPlayer(
       sessionFactionNpcGroupsRaw.factionPairs,
       factionsById,
       sessionFactionNpcGroupsRaw.ungrouped,
     );
-  }, [isGM, sessionFactionNpcGroupsRaw, factionsById]);
+  }, [isGM, sessionFactionNpcGroupsRaw, factionsById, inSessionFactionIds]);
 
   const isGmUser = isGM;
 
@@ -1379,7 +1398,7 @@ export default function SessionGMManagementPanels({
     [session.id, setSessionData, onRefresh, setError],
   );
 
-  const addNpcToSession = async (npcId) => {
+  const addNpcToSession = async (npcId, { useTargetFaction = true } = {}) => {
     const next = [
       ...npcInvolvements,
       {
@@ -1390,17 +1409,71 @@ export default function SessionGMManagementPanels({
         show_all_abilities_to_players: false,
       },
     ];
-    await patchSessionInv(next);
-    const facTarget = addNpcTargetFactionId;
+    // Set the faction first: joining the session brings the NPC's faction.
+    const facTarget = useTargetFaction ? addNpcTargetFactionId : null;
+    let factionError = null;
     if (facTarget != null && Number.isFinite(Number(facTarget))) {
       try {
         await npcAPI.patchNPC(npcId, { faction: Number(facTarget) });
-        onRefresh();
       } catch (e) {
-        setError(e?.message || "NPC added but faction assign failed.");
+        factionError = e?.message || "NPC added but faction assign failed.";
       }
     }
+    await patchSessionInv(next);
+    if (factionError) setError(factionError);
     setAddNpcTargetFactionId(null);
+  };
+
+  const addFactionToSession = useCallback(
+    async (factionId) => {
+      setSaving(true);
+      setError(null);
+      try {
+        const updated = await sessionAPI.addSessionFaction(session.id, Number(factionId));
+        setSessionData((prev) => ({ ...prev, ...updated }));
+        onRefresh();
+      } catch (e) {
+        setError(e?.message || "Could not add the faction to this session.");
+      } finally {
+        setSaving(false);
+      }
+    },
+    [session.id, setSessionData, onRefresh, setError],
+  );
+
+  const removeFactionFromSession = useCallback(
+    async (factionId, removeNpcs) => {
+      setFactionRemovePrompt(null);
+      setSaving(true);
+      setError(null);
+      try {
+        const updated = await sessionAPI.removeSessionFaction(
+          session.id,
+          Number(factionId),
+          removeNpcs,
+        );
+        setSessionData((prev) => ({ ...prev, ...updated }));
+        setCollapsedFactionCards((p) => {
+          const next = { ...p };
+          delete next[String(factionId)];
+          return next;
+        });
+        onRefresh();
+      } catch (e) {
+        setError(e?.message || "Could not remove the faction from this session.");
+      } finally {
+        setSaving(false);
+      }
+    },
+    [session.id, setSessionData, onRefresh, setError],
+  );
+
+  const requestRemoveFaction = (factionId, name, npcList) => {
+    if (!(npcList || []).length) {
+      void removeFactionFromSession(factionId, false);
+      return;
+    }
+    setFactionRemovePrompt({ id: factionId, name, npcCount: npcList.length });
   };
 
   useEffect(() => {
@@ -3709,7 +3782,7 @@ export default function SessionGMManagementPanels({
   );
 
   /** Create campaign faction; if unassigned session NPCs exist, assign them too. */
-  const handleCreateFactionAndAssignUngrouped = useCallback(async () => {
+  const handleCreateSessionFaction = useCallback(async () => {
     const trimmed = sessionQuickFactionName.trim();
     if (!trimmed || !campaign?.id) {
       setError("Enter a faction name.");
@@ -3722,7 +3795,6 @@ export default function SessionGMManagementPanels({
       setError(`A faction named "${trimmed}" already exists in this campaign.`);
       return;
     }
-    const list = sessionFactionNpcGroups.ungrouped;
     setSessionQuickFactionBusy(true);
     setError(null);
     try {
@@ -3730,26 +3802,53 @@ export default function SessionGMManagementPanels({
         name: trimmed,
         campaign: campaign.id,
       });
-      if (list.length) {
-        await Promise.all(
-          list.map((npc) => npcAPI.patchNPC(npc.id, { faction: created.id })),
-        );
+      if (sessionQuickFactionInSession) {
+        const updated = await sessionAPI.addSessionFaction(session.id, created.id);
+        setSessionData((prev) => ({ ...prev, ...updated }));
       }
       setSessionQuickFactionName("");
+      setSessionQuickFactionInSession(false);
       onRefresh();
     } catch (e) {
-      setError(e.message || "Could not create faction or assign NPCs");
+      setError(e.message || "Could not create faction");
     } finally {
       setSessionQuickFactionBusy(false);
     }
   }, [
     sessionQuickFactionName,
+    sessionQuickFactionInSession,
     campaign?.id,
     campaign?.factions,
-    sessionFactionNpcGroups.ungrouped,
+    session.id,
+    setSessionData,
     onRefresh,
     setError,
   ]);
+
+  const notInSession = useMemo(
+    () =>
+      notInSessionPool(
+        campaign?.factions,
+        campaignNPCs,
+        inSessionFactionIds,
+        involvedNpcIdSet,
+      ),
+    [campaign?.factions, campaignNPCs, inSessionFactionIds, involvedNpcIdSet],
+  );
+
+  const npcIsVisibleToPlayers = useCallback(
+    (npc) =>
+      (npcDetailById[npc?.id]?.visible_to_players ?? npc?.visible_to_players) !== false,
+    [npcDetailById],
+  );
+
+  const toggleNpcVisible = useCallback(
+    (npc, visible) => {
+      if (npc?.id == null) return;
+      void patchNpcExpandFields(npc.id, { visible_to_players: !!visible });
+    },
+    [patchNpcExpandFields],
+  );
 
   const handleNpcStandStep = (npc, key, delta) => {
     if (!canEditNpcStandCoin(user, campaign, npc)) return;
@@ -4868,6 +4967,14 @@ export default function SessionGMManagementPanels({
                   onNpcDragEnd={
                     isGmUser ? clearSessionNpcDrag : undefined
                   }
+                  npcDraggable={isGmUser}
+                  onRemoveFromSession={
+                    isGmUser
+                      ? () => requestRemoveFaction(fid, name, npcList)
+                      : undefined
+                  }
+                  isNpcVisible={isGmUser ? npcIsVisibleToPlayers : undefined}
+                  onToggleNpcVisible={isGmUser ? toggleNpcVisible : undefined}
                 />
               </div>
             );
@@ -4908,14 +5015,32 @@ export default function SessionGMManagementPanels({
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.preventDefault();
-                  handleCreateFactionAndAssignUngrouped();
+                  handleCreateSessionFaction();
                 }
               }}
             />
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 5,
+                fontSize: 10,
+                color: "#9ca3af",
+                cursor: "pointer",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={sessionQuickFactionInSession}
+                disabled={sessionQuickFactionBusy || saving}
+                onChange={(e) => setSessionQuickFactionInSession(e.target.checked)}
+              />
+              Use in this session
+            </label>
             <button
               type="button"
               style={{ ...S.btnPrimary, fontSize: 11, alignSelf: "stretch" }}
-              onClick={handleCreateFactionAndAssignUngrouped}
+              onClick={handleCreateSessionFaction}
               disabled={
                 sessionQuickFactionBusy ||
                 saving ||
@@ -4923,11 +5048,7 @@ export default function SessionGMManagementPanels({
                 !sessionQuickFactionName.trim()
               }
             >
-              {sessionQuickFactionBusy
-                ? "Working…"
-                : sessionFactionNpcGroups.ungrouped.length > 0
-                  ? `Create & assign ${sessionFactionNpcGroups.ungrouped.length}`
-                  : "Create faction"}
+              {sessionQuickFactionBusy ? "Working…" : "Create faction"}
             </button>
           </div>
           <div
@@ -5551,7 +5672,7 @@ export default function SessionGMManagementPanels({
                 }}
               >
                 <span style={{ ...S.sectionLbl, marginBottom: 0, fontSize: 11 }}>
-                  Unassigned NPCs
+                  {isGmUser ? "Other NPCs in session" : "Unassigned NPCs"}
                 </span>
               </div>
               <div className="home-card-grid">
@@ -5563,11 +5684,13 @@ export default function SessionGMManagementPanels({
                     <SessionNpcToken
                       npc={npc}
                       selected={expandedNpcPhotoId === npc.id}
-                      draggable
+                      draggable={isGmUser}
                       sourceFactionKey={NO_FACTION_DROP_KEY}
                       onOpen={() => openNpcPhotoExpand(npc)}
                       onDragBegin={() => setSessionNpcDragging(true)}
                       onDragEnd={clearSessionNpcDrag}
+                      visibleToPlayers={isGmUser ? npcIsVisibleToPlayers(npc) : undefined}
+                      onToggleVisible={isGmUser ? toggleNpcVisible : undefined}
                     />
                   </div>
                 ))}
@@ -5616,8 +5739,121 @@ export default function SessionGMManagementPanels({
               Drop to unassign faction
             </div>
           ) : null}
+
+          {isGmUser ? (
+            <div className="session-not-in-pool">
+              <span style={{ ...S.sectionLbl, marginBottom: 0, marginTop: 0, fontSize: 11 }}>
+                Not in session
+              </span>
+              {notInSession.factions.length === 0 && notInSession.npcs.length === 0 ? (
+                <span style={{ color: "#6b7280", fontSize: 11 }}>
+                  Every NPC and faction is in this session.
+                </span>
+              ) : null}
+              {notInSession.factions.length > 0 ? (
+                <div>
+                  <div style={{ color: "#9ca3af", fontSize: 10, marginBottom: 3 }}>Factions</div>
+                  <div className="session-not-in-list">
+                    {notInSession.factions.map((f) => (
+                      <button
+                        key={`pool-faction-${f.id}`}
+                        type="button"
+                        className="session-not-in-chip"
+                        disabled={saving}
+                        aria-label={`Add ${f.name} to session`}
+                        onClick={() => addFactionToSession(f.id)}
+                      >
+                        + {f.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              {notInSession.npcs.length > 0 ? (
+                <div>
+                  <div style={{ color: "#9ca3af", fontSize: 10, marginBottom: 3 }}>NPCs</div>
+                  <div className="session-not-in-list">
+                    {notInSession.npcs.map((n) => (
+                      <button
+                        key={`pool-npc-${n.id}`}
+                        type="button"
+                        className="session-not-in-chip"
+                        disabled={saving}
+                        aria-label={`Add ${n.name} to session`}
+                        title={npcIsVisibleToPlayers(n) ? undefined : "Hidden from players"}
+                        onClick={() => addNpcToSession(n.id, { useTargetFaction: false })}
+                      >
+                        + {n.name}
+                        {npcIsVisibleToPlayers(n) ? "" : " (hidden)"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </div>
+      ) : null}
+
+      {factionRemovePrompt ? (
+        <div
+          role="presentation"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setFactionRemovePrompt(null);
+          }}
+          style={{
+            alignItems: "center",
+            background: "rgba(0, 0, 0, 0.55)",
+            display: "flex",
+            inset: 0,
+            justifyContent: "center",
+            padding: 16,
+            position: "fixed",
+            zIndex: 1000,
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Remove faction from session"
+            style={{ ...S.card, maxWidth: 380, width: "100%", boxSizing: "border-box" }}
+          >
+            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>
+              Remove {factionRemovePrompt.name} from this session?
+            </div>
+            <div style={{ color: "#9ca3af", fontSize: 11, marginBottom: 12 }}>
+              {factionRemovePrompt.npcCount} of its NPC
+              {factionRemovePrompt.npcCount === 1 ? " is" : "s are"} in this session.
+              Their faction doesn't change either way.
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                style={{ ...S.btnGhost, fontSize: 11 }}
+                onClick={() => setFactionRemovePrompt(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                style={{ ...S.btnGhost, fontSize: 11 }}
+                disabled={saving}
+                onClick={() => removeFactionFromSession(factionRemovePrompt.id, false)}
+              >
+                Remove faction only
+              </button>
+              <button
+                type="button"
+                style={{ ...S.btnDanger, fontSize: 11 }}
+                disabled={saving}
+                onClick={() => removeFactionFromSession(factionRemovePrompt.id, true)}
+              >
+                Take NPCs out too
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
 
       {rosterShowPc ? (

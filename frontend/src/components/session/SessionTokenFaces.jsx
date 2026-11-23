@@ -44,6 +44,34 @@ function factionStatusLabel(rep) {
  * Session faction face — Home `.f-card` markup + NPC strip / DnD / expand.
  * No home Edit/Delete.
  */
+/** GM-only: one click hides or shows an NPC to players. */
+function NpcVisibilityButton({ npc, visible, onToggle, compact = false }) {
+  const name = npc?.name || "NPC";
+  const label = visible ? `Hide ${name} from players` : `Show ${name} to players`;
+  const px = compact ? 10 : 14;
+  return (
+    <button
+      type="button"
+      className={`session-npc-eye${compact ? " is-compact" : ""}${visible ? "" : " is-off"}`}
+      aria-label={label}
+      aria-pressed={!visible}
+      title={label}
+      draggable={false}
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle?.(npc, !visible);
+      }}
+      onKeyDown={(e) => e.stopPropagation()}
+    >
+      <svg width={px} height={px} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+        <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z" />
+        <circle cx="12" cy="12" r="3" />
+        {visible ? null : <line x1="3" y1="3" x2="21" y2="21" />}
+      </svg>
+    </button>
+  );
+}
+
 export function SessionFactionToken({
   faction,
   name,
@@ -62,6 +90,10 @@ export function SessionFactionToken({
   onNpcDragBegin,
   onNpcDragEnd,
   addDisabled = false,
+  npcDraggable = true,
+  onRemoveFromSession,
+  isNpcVisible,
+  onToggleNpcVisible,
 }) {
   const resolved = resolveMediaUrl(faction?.image || faction?.image_url || "");
   const { hasImage, safeSrc, onError } = useHomeCardImage(resolved);
@@ -147,11 +179,13 @@ export function SessionFactionToken({
               key={`strip-${npc.id}`}
               npc={npc}
               compact
-              draggable
+              draggable={npcDraggable}
               sourceFactionKey={dropKey}
               onOpen={() => onNpcThumbClick?.(npc)}
               onDragBegin={onNpcDragBegin}
               onDragEnd={onNpcDragEnd}
+              visibleToPlayers={isNpcVisible ? isNpcVisible(npc) : undefined}
+              onToggleVisible={onToggleNpcVisible}
             />
           ))}
           {onAddNpc ? (
@@ -186,6 +220,19 @@ export function SessionFactionToken({
               Delete
             </button>
           ) : null}
+          {typeof onRemoveFromSession === "function" ? (
+            <button
+              type="button"
+              className="f-card-btn f-card-btn-delete"
+              aria-label={`Remove ${displayName} from session`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onRemoveFromSession();
+              }}
+            >
+              Remove
+            </button>
+          ) : null}
           <button
             type="button"
             className="f-card-btn f-card-btn-edit"
@@ -214,7 +261,11 @@ export function SessionNpcToken({
   onOpen,
   onDragBegin,
   onDragEnd,
+  visibleToPlayers,
+  onToggleVisible,
 }) {
+  const showEye = typeof onToggleVisible === "function";
+  const hiddenFromPlayers = showEye && visibleToPlayers === false;
   const portraitSrc = getCharacterPortraitSrc(npc);
   const { hasImage, safeSrc, onError } = useHomeCardImage(portraitSrc);
   const name = npc?.name || "NPC";
@@ -231,7 +282,7 @@ export function SessionNpcToken({
 
   if (compact) {
     return (
-      <div className="session-npc-strip-cell">
+      <div className={`session-npc-strip-cell${hiddenFromPlayers ? " is-hidden-npc" : ""}`}>
         <button
           type="button"
           className={`session-npc-strip-thumb${selected ? " is-selected" : ""}`}
@@ -259,6 +310,14 @@ export function SessionNpcToken({
             }}
           />
         </button>
+        {showEye ? (
+          <NpcVisibilityButton
+            npc={npc}
+            compact
+            visible={visibleToPlayers !== false}
+            onToggle={onToggleVisible}
+          />
+        ) : null}
       </div>
     );
   }
@@ -267,6 +326,7 @@ export function SessionNpcToken({
     "npc-card",
     hasImage ? "npc-card-has-image" : "",
     selected ? "is-selected" : "",
+    hiddenFromPlayers ? "is-hidden-npc" : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -289,6 +349,13 @@ export function SessionNpcToken({
       title={draggable ? "Drag to another faction" : undefined}
     >
       {hasImage && <HomeFullBleedBg src={safeSrc} onError={onError} />}
+      {showEye ? (
+        <NpcVisibilityButton
+          npc={npc}
+          visible={visibleToPlayers !== false}
+          onToggle={onToggleVisible}
+        />
+      ) : null}
       <div className="npc-card-stripe" />
       <div className="p-card-media">
         {!hasImage && (
@@ -306,6 +373,7 @@ export function SessionNpcToken({
           <div className="npc-card-meta">
             <span className="p-tag">Lv {npc?.level ?? "—"}</span>
             <span className="p-tag">{npc?.role || "NPC"}</span>
+            {hiddenFromPlayers ? <span className="p-tag">Hidden</span> : null}
           </div>
         </div>
       </div>
