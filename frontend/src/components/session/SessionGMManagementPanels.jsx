@@ -5823,8 +5823,8 @@ export default function SessionGMManagementPanels({
               Remove {factionRemovePrompt.name} from this session?
             </div>
             <div style={{ color: "#9ca3af", fontSize: 11, marginBottom: 12 }}>
-              {factionRemovePrompt.npcCount} of its NPC
-              {factionRemovePrompt.npcCount === 1 ? " is" : "s are"} in this session.
+              {factionRemovePrompt.npcCount} of its NPCs{" "}
+              {factionRemovePrompt.npcCount === 1 ? "is" : "are"} in this session.
               Their faction doesn't change either way.
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, justifyContent: "flex-end" }}>
