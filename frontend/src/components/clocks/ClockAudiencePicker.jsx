@@ -1,13 +1,14 @@
 import React from "react";
 
-const chip = (on) => ({
+const segment = (on) => ({
   background: on ? "var(--sheet-label, #1e3a5f)" : "transparent",
-  border: "1px solid var(--border, #374151)",
-  borderRadius: "4px",
+  border: "none",
   color: on ? "var(--bg-card, #fff)" : "var(--text-primary, #e5e7eb)",
-  padding: "2px 8px",
+  flex: 1,
+  padding: "4px 8px",
   fontSize: "11px",
   cursor: "pointer",
+  whiteSpace: "nowrap",
 });
 
 /**
@@ -22,6 +23,7 @@ export default function ClockAudiencePicker({
   value = { all: false, ids: [] },
   onChange,
   noneLabel = "GM only",
+  allLabel = "All players",
   disabled = false,
   idPrefix = "clock-audience",
 }) {
@@ -41,58 +43,65 @@ export default function ClockAudiencePicker({
     <div
       role="group"
       aria-label="Who sees this clock"
-      style={{
-        display: "flex",
-        flexWrap: "wrap",
-        gap: "6px",
-        alignItems: "center",
-        fontSize: "11px",
-      }}
+      style={{ display: "grid", gap: "5px", fontSize: "11px", minWidth: 0 }}
     >
-      <span style={{ color: "var(--text-muted, #9ca3af)" }}>Who sees it:</span>
-      <button
-        type="button"
-        style={chip(none)}
-        aria-pressed={none}
-        disabled={disabled}
-        onClick={() => set({ all: false, ids: [] })}
+      <span style={{ color: "var(--text-muted, #9ca3af)" }}>Who sees it</span>
+      <div
+        style={{
+          border: "1px solid var(--border, #374151)",
+          borderRadius: "4px",
+          display: "flex",
+          overflow: "hidden",
+        }}
       >
-        {noneLabel}
-      </button>
-      <button
-        type="button"
-        style={chip(all)}
-        aria-pressed={all}
-        disabled={disabled}
-        onClick={() => set({ all: true, ids: [] })}
-      >
-        All players
-      </button>
-      {players.map((p) => (
-        <label
-          key={p.id}
-          htmlFor={`${idPrefix}-${p.id}`}
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "4px",
-            cursor: disabled ? "default" : "pointer",
-          }}
+        <button
+          type="button"
+          style={segment(none)}
+          aria-pressed={none}
+          disabled={disabled}
+          onClick={() => set({ all: false, ids: [] })}
         >
-          <input
-            id={`${idPrefix}-${p.id}`}
-            type="checkbox"
-            disabled={disabled}
-            checked={all || ids.has(p.id)}
-            onChange={() =>
-              all
-                ? set({ all: false, ids: players.filter((x) => x.id !== p.id).map((x) => x.id) })
-                : toggle(p.id)
-            }
-          />
-          {p.label}
-        </label>
-      ))}
+          {noneLabel}
+        </button>
+        <button
+          type="button"
+          style={{ ...segment(all), borderLeft: "1px solid var(--border, #374151)" }}
+          aria-pressed={all}
+          disabled={disabled}
+          onClick={() => set({ all: true, ids: [] })}
+        >
+          {allLabel}
+        </button>
+      </div>
+      {players.length > 0 ? (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 10px" }}>
+          {players.map((p) => (
+            <label
+              key={p.id}
+              htmlFor={`${idPrefix}-${p.id}`}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "4px",
+                cursor: disabled ? "default" : "pointer",
+              }}
+            >
+              <input
+                id={`${idPrefix}-${p.id}`}
+                type="checkbox"
+                disabled={disabled}
+                checked={all || ids.has(p.id)}
+                onChange={() =>
+                  all
+                    ? set({ all: false, ids: players.filter((x) => x.id !== p.id).map((x) => x.id) })
+                    : toggle(p.id)
+                }
+              />
+              {p.label}
+            </label>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

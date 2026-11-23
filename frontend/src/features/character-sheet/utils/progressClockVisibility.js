@@ -91,3 +91,50 @@ export function clockPlayerOptions(campaign, excludeUserId = null) {
   }
   return out;
 }
+
+/** Who made a clock, for its card: "YOU", "GM", or the player's name. */
+export function clockCreatorLabel(clk, campaignGmId, userId) {
+  if (!clk) return null;
+  const creator = clk.created_by;
+  const gm = normalizeCampaignGmId(campaignGmId);
+  if (creator == null || creator === "") return "GM";
+  if (gm != null && Number(creator) === gm) {
+    return userId != null && Number(userId) === gm ? "YOU" : "GM";
+  }
+  if (userId != null && Number(creator) === Number(userId)) return "YOU";
+  return clk.created_by_username || "Player";
+}
+
+/** Short "who sees it" label for a clock card. */
+export function clockAudienceBadge({ all = false, ids = [] } = {}, noneTitle = "Private") {
+  if (all) return { icon: "👥", text: "All", title: "All players see this" };
+  const n = ids?.length || 0;
+  if (n > 0) {
+    return {
+      icon: "👥",
+      text: String(n),
+      title: `${n} picked player${n === 1 ? "" : "s"} see this`,
+    };
+  }
+  return { icon: "🔒", text: "", title: noneTitle };
+}
+
+/**
+ * Players who can be picked on an NPC clock: the NPC's crew, or every player
+ * with a PC in the campaign when it has no crew.
+ */
+export function npcClockPlayerOptions(campaignCharacters, crewId, campaignGmId) {
+  const gm = normalizeCampaignGmId(campaignGmId);
+  const hasCrew = crewId != null && crewId !== "";
+  const out = [];
+  const seen = new Set();
+  for (const ch of campaignCharacters || []) {
+    const id = Number(ch?.user_id);
+    if (!Number.isFinite(id) || id === gm || seen.has(id)) continue;
+    if (hasCrew && Number(ch?.crew_id) !== Number(crewId)) continue;
+    seen.add(id);
+    const username = ch?.username || `Player ${id}`;
+    out.push({ id, label: ch?.true_name ? `${username} (${ch.true_name})` : username });
+  }
+  return out;
+}

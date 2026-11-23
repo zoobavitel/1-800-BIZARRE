@@ -7,6 +7,8 @@ import React, {
   useMemo,
 } from "react";
 import ClockAudiencePicker from "../components/clocks/ClockAudiencePicker";
+import ClockCard from "../components/clocks/ClockCard";
+import ClockEditPopover from "../components/clocks/ClockEditPopover";
 import {
   GRADE,
   GRADE_INDEX,
@@ -113,6 +115,10 @@ import {
 import { computeAbilityHeritageRollBonuses } from "../features/character-sheet/utils/rollAbilityHeritageModifiers";
 import { defaultPositionEffectFromSessionDetail } from "../features/character-sheet/utils/sessionPositionEffectDefaults";
 import {
+  clockAudience,
+  clockAudienceBadge,
+  clockAudiencePatch,
+  clockCreatorLabel,
   clockPlayerOptions,
   isGmManagedProgressClock,
   normalizeCampaignGmId,
@@ -3161,6 +3167,38 @@ const CharacterSheetWrapper = ({
       }
     },
     [markDirtyIntent, bumpClocksHydrateGuard],
+  );
+  const [editingClockKey, setEditingClockKey] = useState(null);
+  const closeClockEditor = useCallback(() => setEditingClockKey(null), []);
+  const editingClock = useMemo(
+    () =>
+      editingClockKey == null
+        ? null
+        : (clocks || []).find((c) => progressClockClientKey(c) === editingClockKey) ?? null,
+    [clocks, editingClockKey],
+  );
+  const saveClockEdit = useCallback(
+    (clk, { name, segments, audience }) => {
+      const segs = clampClockSegments(segments);
+      markDirtyIntent();
+      bumpClocksHydrateGuard();
+      setClocks((p) =>
+        p.map((c) => {
+          if (c.id !== clk.id) return c;
+          const filled = clampClockFilled(c.filled ?? c.filled_segments, segs);
+          return {
+            ...c,
+            ...clockAudiencePatch(c, charCampaign?.gm, audience),
+            name,
+            segments: segs,
+            max_segments: segs,
+            filled,
+            filled_segments: filled,
+          };
+        }),
+      );
+    },
+    [markDirtyIntent, bumpClocksHydrateGuard, charCampaign?.gm],
   );
   const dismissAllCompletedClocks = useCallback(async () => {
     const done = (clocks || []).filter(
@@ -10052,35 +10090,6 @@ const CharacterSheetWrapper = ({
     setClockEditorOpen(false);
   };
 
-  const resizeClockSegments = useCallback((clockId, rawSegments) => {
-    const nextSegs = clampClockSegments(rawSegments);
-    let filledForApi = 0;
-    markDirtyIntent();
-    bumpClocksHydrateGuard();
-    setClocks((p) =>
-      p.map((c) => {
-        if (c.id !== clockId) return c;
-        const filled = clampClockFilled(c.filled ?? c.filled_segments, nextSegs);
-        filledForApi = filled;
-        return {
-          ...c,
-          segments: nextSegs,
-          max_segments: nextSegs,
-          filled,
-          filled_segments: filled,
-        };
-      }),
-    );
-    if (isPersistedProgressClockId(clockId)) {
-      progressClockAPI
-        .updateProgressClock(clockId, {
-          max_segments: nextSegs,
-          filled_segments: filledForApi,
-        })
-        .catch(() => {});
-    }
-  }, [markDirtyIntent, bumpClocksHydrateGuard]);
-
   const addPerfectOrganismEntityClock = useCallback((sizeLabel, segments) => {
     const segs = clampClockSegments(segments);
     const stamp = Date.now();
@@ -14450,184 +14459,68 @@ const CharacterSheetWrapper = ({
                       }}
                     >
                       {visibleClocks.map((clk) => {
-                        const gmManaged = isGmManagedProgressClock(
-                          clk,
-                          charCampaign?.gm,
-                        );
-                        const gmShared =
-                          gmManaged &&
-                          (!!clk.visible_to_players || !!clk.visible_to_party);
                         const segs = clockWedgeCount(clk.segments);
                         const fill = clampClockFilled(clk.filled, segs);
-                        const canResizeClock =
-                          canEditSheet && (!gmManaged || isGM);
-                        const gmLabel = gmShared
-                          ? "Shared by the GM"
-                          : "GM clock (private)";
+                        const canEditClock =
+                          canEditSheet &&
+                          (isGM ||
+                            !isPersistedProgressClockId(clk.id) ||
+                            Number(clk.created_by) === Number(user?.id));
                         return (
-                        <div
-                          key={progressClockClientKey(clk)}
-                          style={{
-                            background: clk.completed ? "#1f2937" : "#374151",
-                            padding: "4px",
-                            borderRadius: "4px",
-                            textAlign: "center",
-                            minWidth: 0,
-                            opacity: clk.completed ? 0.75 : 1,
-                          }}
-                        >
-                          <input
-                            value={clk.name}
-                            onChange={(e) => {
-                              markDirtyIntent();
-                              bumpClocksHydrateGuard();
-                              const name = e.target.value;
-                              setClocks((p) =>
-                                p.map((c) =>
-                                  c.id === clk.id ? { ...c, name } : c,
-                                ),
-                              );
-                            }}
-                            style={{
-                              ...S.inp,
-                              textAlign: "center",
-                              fontSize: "10px",
-                              width: "100%",
-                              boxSizing: "border-box",
-                              marginBottom: "2px",
-                              padding: "2px 3px",
-                            }}
+                          <ClockCard
+                            key={progressClockClientKey(clk)}
+                            name={clk.name}
+                            segments={segs}
+                            filled={fill}
+                            completed={clk.completed === true}
+                            creator={clockCreatorLabel(clk, charCampaign?.gm, user?.id)}
+                            audience={clockAudienceBadge(
+                              clockAudience(clk, charCampaign?.gm),
+                              isGmManagedProgressClock(clk, charCampaign?.gm)
+                                ? "GM only"
+                                : "Only its maker and the GM",
+                            )}
+                            canTick={canEditSheet}
+                            onTick={(f) => setClockFilled(clk.id, f, segs)}
+                            canEdit={canEditClock}
+                            onEdit={() => setEditingClockKey(progressClockClientKey(clk))}
                           />
-                          <div
-                            style={{
-                              display: "flex",
-                              justifyContent: "center",
-                              minWidth: 0,
-                            }}
-                          >
-                            <ProgressClock
-                              size={32}
-                              segments={segs}
-                              filled={fill}
-                              interactive={canEditSheet}
-                              onClick={(f) => setClockFilled(clk.id, f, segs)}
-                            />
-                          </div>
-                          <div style={{ fontSize: "9px", color: "#6b7280" }}>
-                            {fill}/{segs}
-                          </div>
-                          {canResizeClock ? (
-                            <label
-                              style={{
-                                display: "flex",
-                                justifyContent: "center",
-                                alignItems: "center",
-                                gap: "2px",
-                                fontSize: "9px",
-                                color: "#9ca3af",
-                                marginTop: "2px",
-                              }}
-                            >
-                              Size
-                              <input
-                                type="number"
-                                min={1}
-                                max={12}
-                                title="Clock segments (1–12). −/+ ticks fill, not size."
-                                value={segs}
-                                onChange={(e) =>
-                                  resizeClockSegments(clk.id, e.target.value)
-                                }
-                                style={{
-                                  ...S.inp,
-                                  width: "28px",
-                                  fontSize: "9px",
-                                  textAlign: "center",
-                                  padding: "1px 2px",
-                                }}
-                              />
-                            </label>
-                          ) : null}
-                          {gmManaged ? (
-                            <div
-                              title={
-                                gmShared
-                                  ? "The GM shared this clock with everyone at the table."
-                                  : "GM clock — not shown to players until the GM marks it visible."
-                              }
-                              style={{
-                                fontSize: "8px",
-                                color: gmShared ? "#6ee7b7" : "#9ca3af",
-                                marginTop: "2px",
-                                lineHeight: 1.2,
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                              }}
-                            >
-                              {gmLabel}
-                            </div>
-                          ) : (
-                          <label
-                            title="Shared party"
-                            style={{
-                              display: "flex",
-                              justifyContent: "center",
-                              alignItems: "center",
-                              gap: "2px",
-                              fontSize: "8px",
-                              color: "#9ca3af",
-                              marginTop: "2px",
-                              overflow: "hidden",
-                            }}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={!!clk.visible_to_party}
-                              onChange={(e) => {
-                                markDirtyIntent();
-                                bumpClocksHydrateGuard();
-                                const visible_to_party = e.target.checked;
-                                setClocks((p) =>
-                                  p.map((c) =>
-                                    c.id === clk.id
-                                      ? { ...c, visible_to_party }
-                                      : c,
-                                  ),
-                                );
-                              }}
-                            />
-                            {!clk.visible_to_party &&
-                            Array.isArray(clk.visible_to) &&
-                            clk.visible_to.length > 0
-                              ? `${clk.visible_to.length} player${clk.visible_to.length === 1 ? "" : "s"}`
-                              : "Shared"}
-                          </label>
-                          )}
-                          <button
-                            onClick={() => {
-                              removeOrDismissClock(clk);
-                            }}
-                            style={{
-                              color: "#f87171",
-                              background: "none",
-                              border: "none",
-                              cursor: "pointer",
-                              fontSize: "10px",
-                              padding: "0",
-                            }}
-                            title={
-                              clk.completed
-                                ? "Dismiss completed clock from sheet"
-                                : "Remove clock"
-                            }
-                          >
-                            ✕
-                          </button>
-                        </div>
                         );
                       })}
                     </div>
+                    {editingClock ? (
+                      <ClockEditPopover
+                        key={progressClockClientKey(editingClock)}
+                        clock={{
+                          ...editingClock,
+                          segments: clockWedgeCount(editingClock.segments),
+                        }}
+                        audience={clockAudience(editingClock, charCampaign?.gm)}
+                        players={clockPlayerOptions(
+                          charCampaign,
+                          isGmManagedProgressClock(editingClock, charCampaign?.gm)
+                            ? null
+                            : editingClock.created_by,
+                        )}
+                        noneLabel={
+                          isGmManagedProgressClock(editingClock, charCampaign?.gm)
+                            ? "GM only"
+                            : Number(editingClock.created_by) === Number(user?.id)
+                              ? "Only me"
+                              : "Maker and GM"
+                        }
+                        deleteLabel={editingClock.completed ? "Dismiss" : "Delete"}
+                        onSave={(edit) => {
+                          saveClockEdit(editingClock, edit);
+                          setEditingClockKey(null);
+                        }}
+                        onDelete={() => {
+                          setEditingClockKey(null);
+                          removeOrDismissClock(editingClock);
+                        }}
+                        onCancel={closeClockEditor}
+                      />
+                    ) : null}
                     {!clockEditorOpen ? (
                       <button
                         onClick={() => setClockEditorOpen(true)}

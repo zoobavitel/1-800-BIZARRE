@@ -29,6 +29,12 @@ import { SessionHelpTip } from "../components/session/sessionShellUi";
 import { getCharacterPortraitSrc } from "../utils/homeAvatar";
 import { clockWedgeFillColor } from "../features/character-sheet/utils/progressClockSegments";
 import {
+  clockAudienceBadge,
+  npcClockPlayerOptions,
+} from "../features/character-sheet/utils/progressClockVisibility";
+import ClockCard from "../components/clocks/ClockCard";
+import ClockEditPopover from "../components/clocks/ClockEditPopover";
+import {
   compressImageForUpload,
   PORTRAIT_MAX_BYTES,
 } from "../utils/compressImageForUpload";
@@ -405,6 +411,9 @@ function normalizeNpcClockEntry(c) {
     segments,
     filled,
     show_to_players,
+    visible_to: Array.isArray(c.visible_to)
+      ? c.visible_to.map(Number).filter(Number.isFinite)
+      : [],
   };
 }
 
@@ -426,6 +435,7 @@ function npcClockListsSemanticallyEqual(rawA, rawB) {
     if (x.segments !== y.segments) return false;
     if (x.filled !== y.filled) return false;
     if (x.show_to_players !== y.show_to_players) return false;
+    if (x.visible_to.join() !== y.visible_to.join()) return false;
   }
   return true;
 }
@@ -792,44 +802,6 @@ const npcClockAddCardInputStyle = {
 };
 
 const NPC_CLOCK_SEGMENT_OPTIONS = [4, 6, 8, 12];
-
-/** Edit segments on an existing conflict/alt clock (clamps filled in parent setter). */
-function NpcClockSegmentsSelect({ value, onChange, color = "#9ca3af" }) {
-  return (
-    <label
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: "6px",
-        marginTop: "4px",
-        fontSize: "10px",
-        color,
-        cursor: "pointer",
-        userSelect: "none",
-      }}
-    >
-      Segments
-      <select
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        style={{
-          ...npcClockAddCardInputStyle,
-          width: "auto",
-          padding: "2px 4px",
-          fontSize: "10px",
-          cursor: "pointer",
-        }}
-      >
-        {NPC_CLOCK_SEGMENT_OPTIONS.map((n) => (
-          <option key={n} value={n}>
-            {n}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
 
 /** Inline add-clock form (avoids browser prompt / modal feel). */
 function NpcClockAddCard({
@@ -2631,31 +2603,45 @@ const NPCSheet = ({
     setConflictClocks((p) =>
       p.map((c) => (npcClockIdsMatch(c.id, id) ? { ...c, filled } : c)),
     );
-  const setConflictClockSegments = (id, segments) =>
-    setConflictClocks((p) =>
-      p.map((c) => {
-        if (!npcClockIdsMatch(c.id, id)) return c;
-        const segs = NPC_CLOCK_SEGMENT_OPTIONS.includes(segments)
-          ? segments
-          : c.segments;
-        return { ...c, segments: segs, filled: Math.min(c.filled ?? 0, segs) };
-      }),
+  const [npcClockEdit, setNpcClockEdit] = useState(null);
+  const closeNpcClockEdit = useCallback(() => setNpcClockEdit(null), []);
+  const npcClockBeingEdited = npcClockEdit
+    ? (npcClockEdit.kind === "alt" ? altClocks : conflictClocks).find((c) =>
+        npcClockIdsMatch(c.id, npcClockEdit.id),
+      ) ?? null
+    : null;
+  const npcClockPlayers = npcClockPlayerOptions(
+    campaignPlayerCharacters,
+    currentCrewId,
+    activeCampaign?.gm,
+  );
+  const npcClockBadge = (clk) =>
+    clk.show_to_players
+      ? { icon: "👁", text: "Session", title: "Shown when revealed in the session" }
+      : clockAudienceBadge({ ids: clk.visible_to || [] }, "GM only");
+  const saveNpcClockEdit = ({ name, segments, audience }) => {
+    const setList = npcClockEdit.kind === "alt" ? setAltClocks : setConflictClocks;
+    setList((p) =>
+      p.map((c) =>
+        npcClockIdsMatch(c.id, npcClockEdit.id)
+          ? {
+              ...c,
+              name,
+              segments,
+              filled: Math.min(c.filled ?? 0, segments),
+              show_to_players: !!audience.all,
+              visible_to: audience.all ? [] : audience.ids,
+            }
+          : c,
+      ),
     );
+    setNpcClockEdit(null);
+  };
   const deleteConflictClock = (id) =>
     setConflictClocks((p) => p.filter((c) => !npcClockIdsMatch(c.id, id)));
   const updateAltClock = (id, filled) =>
     setAltClocks((p) =>
       p.map((c) => (npcClockIdsMatch(c.id, id) ? { ...c, filled } : c)),
-    );
-  const setAltClockSegments = (id, segments) =>
-    setAltClocks((p) =>
-      p.map((c) => {
-        if (!npcClockIdsMatch(c.id, id)) return c;
-        const segs = NPC_CLOCK_SEGMENT_OPTIONS.includes(segments)
-          ? segments
-          : c.segments;
-        return { ...c, segments: segs, filled: Math.min(c.filled ?? 0, segs) };
-      }),
     );
   const deleteAltClock = (id) =>
     setAltClocks((p) => p.filter((c) => !npcClockIdsMatch(c.id, id)));
@@ -4179,112 +4165,21 @@ const NPCSheet = ({
                           >
                             {altClocks.map((clk, cidx) => (
                               <div
-                                key={
-                                  clk.id != null
-                                    ? String(clk.id)
-                                    : `alt-${cidx}`
-                                }
-                                style={{
-                                  textAlign: "center",
-                                  position: "relative",
-                                }}
+                                key={clk.id != null ? String(clk.id) : `alt-${cidx}`}
+                                style={{ width: "130px" }}
                               >
-                                <ProgressClock
-                                  size={90}
+                                <ClockCard
+                                  size={72}
+                                  name={clk.name}
                                   segments={clk.segments}
                                   filled={clk.filled}
-                                  onClick={(f) => updateAltClock(clk.id, f)}
-                                  label={clk.name}
-                                  sublabel={`${clk.segments}-segment clock`}
+                                  completed={clk.filled >= clk.segments}
+                                  audience={readOnly ? null : npcClockBadge(clk)}
+                                  canTick={!readOnly}
+                                  onTick={(f) => updateAltClock(clk.id, f)}
+                                  canEdit={!readOnly}
+                                  onEdit={() => setNpcClockEdit({ kind: "alt", id: clk.id })}
                                 />
-                                <button
-                                  type="button"
-                                  onClick={() => deleteAltClock(clk.id)}
-                                  style={{
-                                    position: "absolute",
-                                    top: "-4px",
-                                    right: "-4px",
-                                    color: "#f87171",
-                                    background: "#1a0000",
-                                    border: "1px solid #7f1d1d",
-                                    borderRadius: "50%",
-                                    width: "16px",
-                                    height: "16px",
-                                    cursor: "pointer",
-                                    fontSize: "10px",
-                                    padding: 0,
-                                    lineHeight: 1,
-                                  }}
-                                >
-                                  ×
-                                </button>
-                                <NpcClockSegmentsSelect
-                                  value={clk.segments}
-                                  onChange={(segs) =>
-                                    setAltClockSegments(clk.id, segs)
-                                  }
-                                  color="#86efac"
-                                />
-                                <label
-                                  style={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                    gap: "6px",
-                                    marginTop: "4px",
-                                    fontSize: "10px",
-                                    color: "#86efac",
-                                    cursor: "pointer",
-                                    userSelect: "none",
-                                  }}
-                                >
-                                  <input
-                                    type="checkbox"
-                                    checked={!!clk.show_to_players}
-                                    onChange={(e) =>
-                                      setAltClocks((p) =>
-                                        p.map((c) =>
-                                          npcClockIdsMatch(c.id, clk.id)
-                                            ? {
-                                                ...c,
-                                                show_to_players:
-                                                  e.target.checked,
-                                              }
-                                            : c,
-                                        ),
-                                      )
-                                    }
-                                  />
-                                  Players see
-                                </label>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const newName = prompt(
-                                      "Rename clock:",
-                                      clk.name,
-                                    );
-                                    if (newName)
-                                      setAltClocks((p) =>
-                                        p.map((c) =>
-                                          npcClockIdsMatch(c.id, clk.id)
-                                            ? { ...c, name: newName }
-                                            : c,
-                                        ),
-                                      );
-                                  }}
-                                  style={{
-                                    display: "block",
-                                    margin: "2px auto 0",
-                                    color: "#6b7280",
-                                    background: "none",
-                                    border: "none",
-                                    cursor: "pointer",
-                                    fontSize: "10px",
-                                  }}
-                                >
-                                  rename
-                                </button>
                               </div>
                             ))}
                           </div>
@@ -4492,139 +4387,49 @@ const NPCSheet = ({
                         visibleConflictClocks.length <= 2 ? "center" : "flex-start",
                     }}
                   >
-                    {visibleConflictClocks.map((clk, cidx) => {
-                      const isComplete = clk.filled >= clk.segments;
-                      return (
-                        <div
-                          key={
-                            clk.id != null ? String(clk.id) : `conf-${cidx}`
-                          }
-                          style={{
-                            textAlign: "center",
-                            position: "relative",
-                            background: isComplete ? "#0a1a0a" : "transparent",
-                            border: isComplete ? "1px solid #16a34a" : "none",
-                            borderRadius: "6px",
-                            padding: isComplete ? "6px" : "0",
-                          }}
-                        >
-                          {isComplete && (
-                            <div
-                              style={{
-                                fontSize: "10px",
-                                color: "#22c55e",
-                                fontWeight: "bold",
-                                marginBottom: "4px",
-                              }}
-                            >
-                              ✓ COMPLETE
-                            </div>
-                          )}
-                          <ProgressClock
-                            size={90}
-                            segments={clk.segments}
-                            filled={clk.filled}
-                            onClick={(f) => updateConflictClock(clk.id, f)}
-                            label={clk.name}
-                            sublabel={`${clk.segments}-seg`}
-                          />
-                          <div
-                            style={{
-                              marginTop: "6px",
-                              display: "flex",
-                              flexDirection: "column",
-                              alignItems: "center",
-                              gap: "4px",
-                            }}
-                          >
-                            <NpcClockSegmentsSelect
-                              value={clk.segments}
-                              onChange={(segs) =>
-                                setConflictClockSegments(clk.id, segs)
-                              }
-                              color="#a78bfa"
-                            />
-                            <label
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "6px",
-                                fontSize: "10px",
-                                color: "#a78bfa",
-                                cursor: "pointer",
-                                userSelect: "none",
-                              }}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={!!clk.show_to_players}
-                                onChange={(e) =>
-                                  setConflictClocks((p) =>
-                                    p.map((c) =>
-                                      npcClockIdsMatch(c.id, clk.id)
-                                        ? {
-                                            ...c,
-                                            show_to_players: e.target.checked,
-                                          }
-                                        : c,
-                                    ),
-                                  )
-                                }
-                              />
-                              Players see
-                            </label>
-                            <div
-                              style={{
-                                display: "flex",
-                                gap: "4px",
-                                justifyContent: "center",
-                              }}
-                            >
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const newName = prompt(
-                                    "Rename clock:",
-                                    clk.name,
-                                  );
-                                  if (newName)
-                                    setConflictClocks((p) =>
-                                      p.map((c) =>
-                                        npcClockIdsMatch(c.id, clk.id)
-                                          ? { ...c, name: newName }
-                                          : c,
-                                      ),
-                                    );
-                                }}
-                                style={{
-                                  color: "#6b7280",
-                                  background: "none",
-                                  border: "none",
-                                  cursor: "pointer",
-                                  fontSize: "10px",
-                                }}
-                              >
-                                rename
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => deleteConflictClock(clk.id)}
-                                style={{
-                                  color: "#f87171",
-                                  background: "none",
-                                  border: "none",
-                                  cursor: "pointer",
-                                  fontSize: "10px",
-                                }}
-                              >
-                                delete
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
+                    {visibleConflictClocks.map((clk, cidx) => (
+                      <div
+                        key={clk.id != null ? String(clk.id) : `conf-${cidx}`}
+                        style={{ width: "130px" }}
+                      >
+                        <ClockCard
+                          size={72}
+                          name={clk.name}
+                          segments={clk.segments}
+                          filled={clk.filled}
+                          completed={clk.filled >= clk.segments}
+                          audience={readOnly ? null : npcClockBadge(clk)}
+                          canTick={!readOnly}
+                          onTick={(f) => updateConflictClock(clk.id, f)}
+                          canEdit={!readOnly}
+                          onEdit={() => setNpcClockEdit({ kind: "conflict", id: clk.id })}
+                        />
+                      </div>
+                    ))}
                   </div>
+
+                  {npcClockBeingEdited ? (
+                    <ClockEditPopover
+                      key={`${npcClockEdit.kind}-${npcClockEdit.id}`}
+                      clock={npcClockBeingEdited}
+                      audience={{
+                        all: !!npcClockBeingEdited.show_to_players,
+                        ids: npcClockBeingEdited.show_to_players
+                          ? []
+                          : npcClockBeingEdited.visible_to || [],
+                      }}
+                      players={npcClockPlayers}
+                      allLabel="Session reveal"
+                      customSize={false}
+                      onSave={saveNpcClockEdit}
+                      onDelete={() => {
+                        if (npcClockEdit.kind === "alt") deleteAltClock(npcClockEdit.id);
+                        else deleteConflictClock(npcClockEdit.id);
+                        setNpcClockEdit(null);
+                      }}
+                      onCancel={closeNpcClockEdit}
+                    />
+                  ) : null}
 
                   {/* Effect tick reference */}
                   <div
