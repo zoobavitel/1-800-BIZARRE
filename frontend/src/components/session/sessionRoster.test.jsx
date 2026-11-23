@@ -6,7 +6,7 @@ import React from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 
 import { filterRosterToInSession, notInSessionPool } from "./sessionShellUi";
-import { SessionNpcToken } from "./SessionTokenFaces";
+import { SessionFactionToken, SessionNpcToken } from "./SessionTokenFaces";
 
 describe("filterRosterToInSession", () => {
   const a1 = { id: 1, name: "A1" };
@@ -81,5 +81,39 @@ describe("NPC card eye", () => {
   it("a card that can't be dragged has no drag tooltip", () => {
     const { container } = render(<SessionNpcToken npc={npc} draggable={false} />);
     expect(container.querySelector(".npc-card")).not.toHaveAttribute("title");
+  });
+});
+
+describe("faction card eye", () => {
+  const faction = { id: 5, name: "Passione" };
+
+  it("shows a hidden faction without expanding its card", () => {
+    const onToggle = jest.fn();
+    const onExpand = jest.fn();
+    render(
+      <SessionFactionToken
+        faction={faction}
+        visibleToPlayers={false}
+        onToggleVisible={onToggle}
+        onToggleExpand={onExpand}
+      />,
+    );
+    expect(screen.getByText("Hidden")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Show Passione to players" }));
+    expect(onToggle).toHaveBeenCalledWith(faction, true);
+    expect(onExpand).not.toHaveBeenCalled();
+  });
+
+  it("hides a visible faction", () => {
+    const onToggle = jest.fn();
+    render(<SessionFactionToken faction={faction} visibleToPlayers onToggleVisible={onToggle} />);
+    fireEvent.click(screen.getByRole("button", { name: "Hide Passione from players" }));
+    expect(onToggle).toHaveBeenCalledWith(faction, false);
+  });
+
+  it("players get no faction eye", () => {
+    render(<SessionFactionToken faction={faction} />);
+    expect(screen.queryByRole("button", { name: /from players|to players/ })).not.toBeInTheDocument();
+    expect(screen.queryByText("Hidden")).not.toBeInTheDocument();
   });
 });

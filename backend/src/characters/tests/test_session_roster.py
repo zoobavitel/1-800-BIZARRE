@@ -171,3 +171,19 @@ class SessionRosterTests(TestCase):
         migration = import_module("characters.migrations.0140_backfill_session_factions")
         migration.backfill_session_factions(global_apps, None)
         self.assertEqual(self._session_factions(), {self.fac_a.id})
+
+    def test_hidden_faction_sends_players_no_picture(self):
+        self.fac_a.image_url = "https://example.com/secret.png"
+        self.fac_a.visible_to_players = False
+        self.fac_a.save()
+        data = self._as(self.p1).get(f"/api/factions/{self.fac_a.id}/").data
+        self.assertEqual(data["name"], "")
+        self.assertFalse(data["image"])
+        self.assertFalse(data["image_url"])
+
+    def test_shown_faction_keeps_its_picture_for_players(self):
+        self.fac_a.image_url = "https://example.com/open.png"
+        self.fac_a.visible_to_players = True
+        self.fac_a.save()
+        data = self._as(self.p1).get(f"/api/factions/{self.fac_a.id}/").data
+        self.assertEqual(data["image_url"], "https://example.com/open.png")

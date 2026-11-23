@@ -40,13 +40,8 @@ function factionStatusLabel(rep) {
   return "Friendly";
 }
 
-/**
- * Session faction face — Home `.f-card` markup + NPC strip / DnD / expand.
- * No home Edit/Delete.
- */
-/** GM-only: one click hides or shows an NPC to players. */
-function NpcVisibilityButton({ npc, visible, onToggle, compact = false }) {
-  const name = npc?.name || "NPC";
+/** GM-only: one click hides or shows an NPC or faction to players. */
+function PlayerVisibilityButton({ name, visible, onToggle, compact = false }) {
   const label = visible ? `Hide ${name} from players` : `Show ${name} to players`;
   const px = compact ? 10 : 14;
   return (
@@ -59,7 +54,7 @@ function NpcVisibilityButton({ npc, visible, onToggle, compact = false }) {
       draggable={false}
       onClick={(e) => {
         e.stopPropagation();
-        onToggle?.(npc, !visible);
+        onToggle?.(!visible);
       }}
       onKeyDown={(e) => e.stopPropagation()}
     >
@@ -72,6 +67,10 @@ function NpcVisibilityButton({ npc, visible, onToggle, compact = false }) {
   );
 }
 
+/**
+ * Session faction face — Home `.f-card` markup + NPC strip / DnD / expand.
+ * No home Edit/Delete.
+ */
 export function SessionFactionToken({
   faction,
   name,
@@ -94,7 +93,11 @@ export function SessionFactionToken({
   onRemoveFromSession,
   isNpcVisible,
   onToggleNpcVisible,
+  visibleToPlayers,
+  onToggleVisible,
 }) {
+  const showEye = typeof onToggleVisible === "function";
+  const hiddenFromPlayers = showEye && visibleToPlayers === false;
   const resolved = resolveMediaUrl(faction?.image || faction?.image_url || "");
   const { hasImage, safeSrc, onError } = useHomeCardImage(resolved);
   const typeLabel = String(faction?.faction_type || "").trim() || "—";
@@ -106,6 +109,7 @@ export function SessionFactionToken({
     hasImage ? "f-card-has-image" : "",
     isExpanded ? "is-expanded" : "",
     isDragOver ? "session-token-drag-over" : "",
+    hiddenFromPlayers ? "is-hidden-faction" : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -132,6 +136,13 @@ export function SessionFactionToken({
       onDrop={(e) => onDrop?.(e)}
     >
       {hasImage && <HomeFullBleedBg src={safeSrc} onError={onError} />}
+      {showEye ? (
+        <PlayerVisibilityButton
+          name={displayName}
+          visible={visibleToPlayers !== false}
+          onToggle={(next) => onToggleVisible(faction, next)}
+        />
+      ) : null}
       <div className="f-card-stripe" />
       <div className="f-card-media">
         {!hasImage && (
@@ -158,6 +169,7 @@ export function SessionFactionToken({
               {rep}
             </span>
           )}
+          {hiddenFromPlayers ? <span className="p-tag">Hidden</span> : null}
         </div>
         {faction?.reputation != null && faction?.reputation !== "" ? (
           <div
@@ -311,11 +323,11 @@ export function SessionNpcToken({
           />
         </button>
         {showEye ? (
-          <NpcVisibilityButton
-            npc={npc}
+          <PlayerVisibilityButton
+            name={name}
             compact
             visible={visibleToPlayers !== false}
-            onToggle={onToggleVisible}
+            onToggle={(next) => onToggleVisible(npc, next)}
           />
         ) : null}
       </div>
@@ -350,10 +362,10 @@ export function SessionNpcToken({
     >
       {hasImage && <HomeFullBleedBg src={safeSrc} onError={onError} />}
       {showEye ? (
-        <NpcVisibilityButton
-          npc={npc}
+        <PlayerVisibilityButton
+          name={name}
           visible={visibleToPlayers !== false}
-          onToggle={onToggleVisible}
+          onToggle={(next) => onToggleVisible(npc, next)}
         />
       ) : null}
       <div className="npc-card-stripe" />

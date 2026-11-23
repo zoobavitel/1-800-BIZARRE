@@ -3288,6 +3288,9 @@ class FactionSerializer(serializers.ModelSerializer):
         if self._viewer_is_gm_or_staff(instance):
             return data
         show = bool(getattr(instance, "visible_to_players", False))
+        if not show:
+            data["image"] = None
+            data["image_url"] = ""
         if not show or not getattr(instance, "players_see_identity", True):
             data["name"] = ""
             data["faction_type"] = ""

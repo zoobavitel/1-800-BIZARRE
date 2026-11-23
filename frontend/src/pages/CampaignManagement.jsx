@@ -1482,7 +1482,26 @@ function CampaignDetail({
               }
             : p,
         );
-        onRefresh();
+        await onRefresh();
+      } catch (err) {
+        setFactionError(err.message);
+      }
+    },
+    [onRefresh],
+  );
+
+  const toggleFactionVisibleToPlayers = useCallback(
+    async (factionId, visible) => {
+      setFactionError(null);
+      try {
+        await factionAPI.patchFaction(factionId, { visible_to_players: !!visible });
+        // An open editor must not save the old value back.
+        setFactionForm((p) =>
+          p && Number(p.id) === Number(factionId)
+            ? { ...p, visible_to_players: !!visible }
+            : p,
+        );
+        await onRefresh();
       } catch (err) {
         setFactionError(err.message);
       }
@@ -2172,6 +2191,7 @@ function CampaignDetail({
             handleAddNpcToFaction={handleAddNpcToFaction}
             handleRemoveNpcFromFaction={handleRemoveNpcFromFaction}
             handleToggleNpcVisibleToPlayers={toggleNpcVisibleToPlayers}
+            handleToggleFactionVisibleToPlayers={toggleFactionVisibleToPlayers}
             handleBulkSetFactionNpcsVisibleToPlayers={
               bulkSetFactionNpcsVisibleToPlayers
             }

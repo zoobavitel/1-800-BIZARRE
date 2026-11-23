@@ -399,7 +399,10 @@
 
 .session-roster-tokens .npc-card.is-hidden-npc .p-card-media,
 .session-roster-tokens .npc-card.is-hidden-npc .npc-card-body,
-.session-npc-strip-cell.is-hidden-npc .session-npc-strip-thumb {
+.session-npc-strip-cell.is-hidden-npc .session-npc-strip-thumb,
+.session-roster-tokens .f-card.is-hidden-faction .f-card-media,
+.session-roster-tokens .f-card.is-hidden-faction .f-card-name,
+.session-roster-tokens .f-card.is-hidden-faction .f-card-type {
   opacity: 0.5;
 }
 

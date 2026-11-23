@@ -37,6 +37,7 @@ export default function RosterNpcColumn({
   handleRemoveNpcFromFaction,
   handleToggleNpcVisibleToPlayers,
   handleBulkSetFactionNpcsVisibleToPlayers,
+  handleToggleFactionVisibleToPlayers,
   factionForm,
   setFactionForm,
   factionError,
@@ -77,6 +78,34 @@ export default function RosterNpcColumn({
   const [stripCreatePlaybook, setStripCreatePlaybook] = useState("STAND");
   const [stripCreateBusy, setStripCreateBusy] = useState(false);
   const stripChooserRef = useRef(null);
+  // Eye state until the refreshed roster arrives; a failed save falls back.
+  const [pendingVisible, setPendingVisible] = useState({});
+
+  const toggleVisible = async (key, save, id, visible) => {
+    setPendingVisible((p) => ({ ...p, [key]: visible }));
+    try {
+      await save(id, visible);
+    } finally {
+      setPendingVisible((p) => {
+        const next = { ...p };
+        delete next[key];
+        return next;
+      });
+    }
+  };
+  const npcIsVisible = (npc) =>
+    (pendingVisible[`npc-${npc?.id}`] ?? npc?.visible_to_players) === true;
+  const toggleNpcVisible = (npc, visible) =>
+    toggleVisible(`npc-${npc.id}`, handleToggleNpcVisibleToPlayers, npc.id, visible);
+  const factionIsVisible = (faction) =>
+    (pendingVisible[`faction-${faction?.id}`] ?? faction?.visible_to_players) === true;
+  const toggleFactionVisible = (faction, visible) =>
+    toggleVisible(
+      `faction-${faction.id}`,
+      handleToggleFactionVisibleToPlayers,
+      faction.id,
+      visible,
+    );
 
   useEffect(() => {
     if (stripAddFactionId == null) return undefined;
@@ -254,6 +283,10 @@ export default function RosterNpcColumn({
                     readOnly ? undefined : () => setNpcDragging(true)
                   }
                   onNpcDragEnd={readOnly ? undefined : clearNpcDrag}
+                  isNpcVisible={readOnly ? undefined : npcIsVisible}
+                  onToggleNpcVisible={readOnly ? undefined : toggleNpcVisible}
+                  visibleToPlayers={readOnly ? undefined : factionIsVisible(faction)}
+                  onToggleVisible={readOnly ? undefined : toggleFactionVisible}
                 />
                 {!readOnly && chooserOpen ? (
                   <div
@@ -732,6 +765,8 @@ export default function RosterNpcColumn({
                       readOnly ? undefined : () => setNpcDragging(true)
                     }
                     onDragEnd={readOnly ? undefined : clearNpcDrag}
+                    visibleToPlayers={readOnly ? undefined : npcIsVisible(npc)}
+                    onToggleVisible={readOnly ? undefined : toggleNpcVisible}
                   />
                 </div>
               ))}

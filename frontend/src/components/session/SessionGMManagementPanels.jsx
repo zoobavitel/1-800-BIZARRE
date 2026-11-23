@@ -3850,6 +3850,29 @@ export default function SessionGMManagementPanels({
     [patchNpcExpandFields],
   );
 
+  const factionIsVisibleToPlayers = useCallback(
+    (faction) =>
+      (factionDraftById[faction?.id]?.visible_to_players ??
+        faction?.visible_to_players) === true,
+    [factionDraftById],
+  );
+
+  // Goes through the faction draft so it can't race the expand panel's autosave.
+  const toggleFactionVisible = useCallback(
+    (faction, visible) => {
+      if (faction?.id == null) return;
+      setFactionDraftById((prev) => ({
+        ...prev,
+        [faction.id]: {
+          ...(prev[faction.id] || sessionFactionDraft(faction)),
+          visible_to_players: !!visible,
+        },
+      }));
+      scheduleFactionAutosave(faction.id);
+    },
+    [scheduleFactionAutosave],
+  );
+
   const handleNpcStandStep = (npc, key, delta) => {
     if (!canEditNpcStandCoin(user, campaign, npc)) return;
     const base = localNpcStandById[npc.id]
@@ -4975,6 +4998,10 @@ export default function SessionGMManagementPanels({
                   }
                   isNpcVisible={isGmUser ? npcIsVisibleToPlayers : undefined}
                   onToggleNpcVisible={isGmUser ? toggleNpcVisible : undefined}
+                  visibleToPlayers={
+                    isGmUser ? factionIsVisibleToPlayers(fac) : undefined
+                  }
+                  onToggleVisible={isGmUser ? toggleFactionVisible : undefined}
                 />
               </div>
             );
