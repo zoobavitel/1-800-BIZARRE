@@ -102,6 +102,41 @@ NPC_PLAYER_NEVER_TEXT_FIELDS = (
 )
 
 
+def npc_clock_picks(clock):
+    """User ids a JSON NPC clock is limited to. Empty: the usual reveal rules."""
+    raw = clock.get("visible_to") if isinstance(clock, dict) else None
+    if not isinstance(raw, list):
+        return set()
+    picks = set()
+    for value in raw:
+        try:
+            picks.add(int(value))
+        except (TypeError, ValueError):
+            continue
+    return picks
+
+
+def npc_clocks_for_player(all_clocks, revealed, npc, user):
+    """The NPC clocks one player sees, without the list of who was picked.
+
+    A clock with picks goes only to those players while the NPC's See is on.
+    Any other clock follows the session reveal (``revealed``).
+    """
+    user_id = getattr(user, "id", None)
+    see_on = bool(getattr(npc, "visible_to_players", True))
+    out = []
+    for clock in all_clocks or []:
+        picks = npc_clock_picks(clock)
+        shown = (see_on and user_id in picks) if picks else clock in revealed
+        if shown:
+            out.append(
+                {k: v for k, v in clock.items() if k != "visible_to"}
+                if isinstance(clock, dict)
+                else clock
+            )
+    return out
+
+
 def player_session_reveals(npc, inv):
     """Clocks and Stand coin a player may see for one session involvement.
 
@@ -173,7 +208,7 @@ def active_session_involvement(npc):
     return SessionNPCInvolvement.objects.filter(session_id=active_sid, npc=npc).first()
 
 
-def redact_npc_hidden_fields_for_player(data, npc):
+def redact_npc_hidden_fields_for_player(data, npc, user=None):
     """Strip NPC data with no player section, or not revealed this session. Mutates data."""
     for field in NPC_PLAYER_NEVER_TEXT_FIELDS:
         if field in data:
@@ -182,8 +217,12 @@ def redact_npc_hidden_fields_for_player(data, npc):
         data["relationships"] = {}
     rev = player_session_reveals(npc, active_session_involvement(npc))
     data["stand_coin_stats"] = rev["stand_coin_stats"]
-    data["conflict_clocks"] = rev["conflict_clocks"]
-    data["alt_clocks"] = rev["alt_clocks"]
+    data["conflict_clocks"] = npc_clocks_for_player(
+        npc.conflict_clocks, rev["conflict_clocks"], npc, user
+    )
+    data["alt_clocks"] = npc_clocks_for_player(
+        npc.alt_clocks, rev["alt_clocks"], npc, user
+    )
     if not rev["show_vulnerability"]:
         # None (not 0): S-Durability NPCs legitimately have a 0-segment clock.
         data["vulnerability_clock_current"] = None

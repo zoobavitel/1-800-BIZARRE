@@ -1262,7 +1262,7 @@ const NPCSheet = ({
   );
   const [hideCompletedClocks, setHideCompletedClocks] = useState(false);
   const [npcVisibleToPlayers, setNpcVisibleToPlayers] = useState(
-    () => npc?.visible_to_players !== false,
+    () => npc?.visible_to_players === true,
   );
   const [playersSeeInventory, setPlayersSeeInventory] = useState(
     () => npc?.players_see_inventory !== false,
@@ -1349,7 +1349,7 @@ const NPCSheet = ({
     setPlaybookAbilitiesExpanded(
       readNpcSheetBool(npc?.id, "playbookAbilities", false),
     );
-    setNpcVisibleToPlayers(npc?.visible_to_players !== false);
+    setNpcVisibleToPlayers(npc?.visible_to_players === true);
     setPlayersSeeInventory(npc?.players_see_inventory !== false);
     setPlayersSee(normalizeNpcPlayersSee(npc?.players_see));
     setVisibilityEditMode(false);

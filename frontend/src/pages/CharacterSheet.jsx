@@ -3045,6 +3045,8 @@ const CharacterSheetWrapper = ({
   const [clocks, setClocks] = useState(character?.clocks || []);
   /** Block poll/hydrate snap-back for a beat after local clock edits (rapid +/− flicker). */
   const clocksHydrateGuardUntilRef = useRef(0);
+  /** Clocks deleted from this tab; an older copy of the sheet can't bring them back. */
+  const deletedClockIdsRef = useRef(new Set());
   useEffect(() => {
     // Protect mid-edit: prop isDirty lags one frame; dirtyIntentRef covers the gap
     // so poll/hydrate cannot snap filled wedges back (flicker on rapid +/−).
@@ -3056,7 +3058,9 @@ const CharacterSheetWrapper = ({
       return;
     }
     const incoming = Array.isArray(character?.clocks)
-      ? character.clocks.map((c) => normalizeSheetProgressClock(c)).filter(Boolean)
+      ? character.clocks
+          .map((c) => normalizeSheetProgressClock(c))
+          .filter((c) => c && !deletedClockIdsRef.current.has(Number(c.id)))
       : [];
     setClocks((prev) => {
       const merged = mergeSheetProgressClocks(prev, incoming);
@@ -3144,6 +3148,17 @@ const CharacterSheetWrapper = ({
         return;
       }
       setClocks((p) => p.filter((c) => c.id !== clk.id));
+      if (!isPersistedProgressClockId(clk?.id)) return;
+      const clockId = Number(clk.id);
+      deletedClockIdsRef.current.add(clockId);
+      try {
+        await progressClockAPI.deleteProgressClock(clockId);
+      } catch (err) {
+        deletedClockIdsRef.current.delete(clockId);
+        setClocks((p) => (p.some((c) => c.id === clk.id) ? p : [...p, clk]));
+        setSaveStatus("error");
+        setSaveErrorMessage(err?.message || "Could not delete this clock.");
+      }
     },
     [markDirtyIntent, bumpClocksHydrateGuard],
   );

@@ -6,6 +6,7 @@ import {
   isPersistedProgressClockId,
   mergeSheetProgressClocks,
   serializeSheetProgressClocks,
+  withSavedProgressClocks,
 } from "./progressClockSegments";
 
 describe("clampClockSegments", () => {
@@ -97,5 +98,22 @@ describe("serializeSheetProgressClocks", () => {
     expect(rows[0].max_segments).toBe(7);
     expect(rows[0].segments).toBe(7);
     expect(rows[0].id).toBeUndefined();
+  });
+});
+
+describe("withSavedProgressClocks", () => {
+  const tabs = [
+    { tabId: 1, characterId: 1, character: { id: 1, clocks: [{ id: 5 }, { id: 6 }] } },
+    { tabId: 2, characterId: 2, character: { id: 2, clocks: [{ id: 7 }] } },
+  ];
+
+  it("replaces the clock list on that character's tab only", () => {
+    const next = withSavedProgressClocks(tabs, 1, [{ id: 5 }]);
+    expect(next[0].character.clocks).toEqual([{ id: 5 }]);
+    expect(next[1]).toBe(tabs[1]);
+  });
+
+  it("leaves tabs alone when the reply has no clock list", () => {
+    expect(withSavedProgressClocks(tabs, 1, undefined)).toBe(tabs);
   });
 });

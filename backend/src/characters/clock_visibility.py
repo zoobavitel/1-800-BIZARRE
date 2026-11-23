@@ -90,6 +90,16 @@ def campaign_player_ids(campaign):
     return ids
 
 
+def npc_clock_player_ids(campaign, crew=None):
+    """Users who can be picked on an NPC clock: its crew's players, else the campaign's."""
+    if crew is None:
+        return campaign_player_ids(campaign)
+    ids = set(crew.members.values_list("user_id", flat=True))
+    if campaign is not None:
+        ids.discard(campaign.gm_id)
+    return ids
+
+
 def can_change_visibility(user, clock):
     """The GM can change who sees any clock; a player only their own clocks."""
     campaign = getattr(clock, "campaign", None)

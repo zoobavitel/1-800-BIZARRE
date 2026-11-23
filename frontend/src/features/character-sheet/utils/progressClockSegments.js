@@ -143,6 +143,20 @@ export function mergeSheetProgressClocks(prev, incoming) {
   return result;
 }
 
+/**
+ * Put a save reply's clocks on the open tabs for this character. Used when the
+ * rest of the reply is dropped as superseded: the tab's old list would
+ * otherwise re-add a clock that save just deleted.
+ */
+export function withSavedProgressClocks(tabs, characterId, savedClocks) {
+  if (!Array.isArray(savedClocks)) return tabs;
+  return (tabs || []).map((t) =>
+    t?.character && Number(t.characterId) === Number(characterId)
+      ? { ...t, character: { ...t.character, clocks: savedClocks } }
+      : t,
+  );
+}
+
 export function serializeSheetProgressClocks(clocks) {
   if (!Array.isArray(clocks)) return [];
   return clocks
