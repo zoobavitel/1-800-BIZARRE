@@ -109,6 +109,14 @@ function formatRollLineBody(r) {
   return `${action} · ${diceStr} → ${outcomeStr}`;
 }
 
+function OutOfSessionTag() {
+  return (
+    <span style={{ color: "#9ca3af", fontSize: 9, marginLeft: 6 }}>
+      · Out of session
+    </span>
+  );
+}
+
 /** XP line without leading character name. */
 function formatXpLineBody(row) {
   const trig = String(row.trigger || row.source || row.kind || "XP").trim();
@@ -182,8 +190,9 @@ export default function CampaignShellPanels({
     }
   }, [scope, activeId]);
 
+  const outOfSession = scope === "none";
   const resolvedSessionId = useMemo(() => {
-    if (scope === "all") return null;
+    if (scope === "all" || scope === "none") return null;
     if (scope === "active") return activeId;
     const n = Number(scope);
     return Number.isFinite(n) ? n : null;
@@ -206,7 +215,10 @@ export default function CampaignShellPanels({
         const params =
           resolvedSessionId != null
             ? { session: resolvedSessionId }
-            : { campaign: campaign.id };
+            : {
+                campaign: campaign.id,
+                ...(outOfSession ? { out_of_session: 1 } : {}),
+              };
         const data = await rollAPI.getRolls(params);
         if (isCurrent()) setRolls(normalizeListResponse(data));
       } else if (shellTab === "xp") {
@@ -235,6 +247,8 @@ export default function CampaignShellPanels({
           flat = flat.filter(
             (r) => Number(r.session) === Number(resolvedSessionId),
           );
+        } else if (outOfSession) {
+          flat = flat.filter((r) => r.session == null);
         }
         flat.sort((a, b) => {
           const ta = new Date(a.created_at || a.timestamp || 0).getTime();
@@ -251,7 +265,7 @@ export default function CampaignShellPanels({
     } finally {
       if (isCurrent()) setLedgerBusy(false);
     }
-  }, [campaign?.id, characters, resolvedSessionId, shellTab]);
+  }, [campaign?.id, characters, outOfSession, resolvedSessionId, shellTab]);
 
   useEffect(() => {
     void loadLedgers();
@@ -338,7 +352,8 @@ export default function CampaignShellPanels({
         {activeId != null ? (
           <option value="active">Active session</option>
         ) : null}
-        <option value="all">All sessions</option>
+        <option value="all">All rolls</option>
+        <option value="none">Out of session</option>
         {(sessions || []).map((s) => (
           <option key={s.id} value={String(s.id)}>
             {s.name || `Session ${s.id}`}
@@ -426,7 +441,7 @@ export default function CampaignShellPanels({
         <div style={S.card}>
           <span style={S.sectionLbl}>Rolls</span>
           <p style={{ fontSize: 11, color: "#6b7280", margin: "4px 0 10px" }}>
-            Dice history for the selected session scope. Open a session for live
+            Dice history, in or out of a live session. Open a session for live
             PE defaults and manual rolls.
           </p>
           {scopeSelect}
@@ -454,6 +469,7 @@ export default function CampaignShellPanels({
                           }}
                         >
                           {formatRollLineBody(r)}
+                          {r.session == null ? <OutOfSessionTag /> : null}
                         </div>
                       ))
                     )}
@@ -472,6 +488,7 @@ export default function CampaignShellPanels({
                       }}
                     >
                       {formatRollLineBody(r)}
+                          {r.session == null ? <OutOfSessionTag /> : null}
                     </div>
                   ))}
                 </PcColumnCard>

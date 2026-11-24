@@ -36,6 +36,7 @@ class RollViewSet(viewsets.ModelViewSet):
                 "character",
                 "session",
                 "session__campaign",
+                "history_entry__campaign",
                 "rolled_by",
                 "recovery_target",
             )
@@ -46,7 +47,12 @@ class RollViewSet(viewsets.ModelViewSet):
         character_id = self.request.query_params.get('character')
         group_action_id = self.request.query_params.get('group_action')
         if campaign_id:
-            qs = qs.filter(session__campaign_id=campaign_id)
+            qs = qs.filter(
+                models.Q(session__campaign_id=campaign_id) |
+                models.Q(session__isnull=True, history_entry__campaign_id=campaign_id)
+            )
+        if self.request.query_params.get('out_of_session'):
+            qs = qs.filter(session__isnull=True)
         if session_id:
             qs = qs.filter(session_id=session_id)
         if character_id:
@@ -58,6 +64,9 @@ class RollViewSet(viewsets.ModelViewSet):
             models.Q(session__campaign__gm=user) |
             models.Q(session__campaign__characters__user=user) |
             models.Q(session__campaign__players=user) |
+            # Rolls made outside a live session belong to the campaign log.
+            models.Q(history_entry__campaign__gm=user) |
+            models.Q(history_entry__campaign__players=user) |
             # A PC's own rolls, including ones whose campaign was deleted.
             models.Q(character__user=user)
         ).distinct()
@@ -66,9 +75,9 @@ class RollViewSet(viewsets.ModelViewSet):
     def partial_update(self, request, *args, **kwargs):
         """GM-only: update roll fields (position/effect/fortune + manual corrections)."""
         roll = self.get_object()
-        # A roll whose campaign was deleted has no session: nobody edits it on
-        # the site (Django admin can).
-        campaign = roll.session.campaign if roll.session_id else None
+        # A roll whose campaign was deleted has no campaign log: nobody edits
+        # it on the site (Django admin can).
+        campaign = roll.log_campaign
         if campaign is None or campaign.gm_id != request.user.id:
             return Response(
                 {'error': 'Only the GM can edit roll records.'},
@@ -146,7 +155,11 @@ class RollViewSet(viewsets.ModelViewSet):
                 setattr(roll, k, v)
             roll.save(update_fields=list(updates.keys()))
         # GM set position → desperate after the fact: award if not already granted.
-        if became_desperate and (roll.roll_type or "").upper() == "ACTION":
+        if (
+            roll.session_id
+            and became_desperate
+            and (roll.roll_type or "").upper() == "ACTION"
+        ):
             action_name = roll.action_name or ""
             if action_name:
                 award_desperate_action_xp(
@@ -227,25 +240,35 @@ class RollViewSet(viewsets.ModelViewSet):
         })
 
     def create(self, request, *args, **kwargs):
-        """Create a manual roll (offline dice) for a character in a session.
+        """Create a manual roll (offline dice) for a character.
 
+        With no session it goes on the campaign log and earns no XP.
         Allowed for campaign GM/staff, or the owner of the target character.
         """
         session_id = request.data.get('session')
         character_id = request.data.get('character')
-        if not session_id or not character_id:
+        if not character_id:
             return Response(
-                {'error': 'character and session are required.'},
+                {'error': 'character is required.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        session = get_object_or_404(Session, pk=session_id)
         character = get_object_or_404(Character, pk=character_id)
-        if character.campaign_id != session.campaign_id:
-            return Response(
-                {'error': 'Character must belong to session campaign.'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        is_gm_or_staff = session.campaign.gm_id == request.user.id
+        if session_id:
+            session = get_object_or_404(Session, pk=session_id)
+            if character.campaign_id != session.campaign_id:
+                return Response(
+                    {'error': 'Character must belong to session campaign.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            campaign = session.campaign
+        else:
+            campaign = character.campaign
+            if campaign is None:
+                return Response(
+                    {'error': 'Character must be in a campaign to log a roll.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        is_gm_or_staff = campaign.gm_id == request.user.id
         is_character_owner = character.user_id == request.user.id
         if not is_gm_or_staff and not is_character_owner:
             return Response(
@@ -257,9 +280,9 @@ class RollViewSet(viewsets.ModelViewSet):
     def destroy(self, request, *args, **kwargs):
         """GM-only: remove a roll record from history."""
         roll = self.get_object()
-        # A roll whose campaign was deleted has no session: nobody edits it on
-        # the site (Django admin can).
-        campaign = roll.session.campaign if roll.session_id else None
+        # A roll whose campaign was deleted has no campaign log: nobody edits
+        # it on the site (Django admin can).
+        campaign = roll.log_campaign
         if campaign is None or campaign.gm_id != request.user.id:
             return Response(
                 {'error': 'Only the GM can remove roll records.'},
@@ -276,8 +299,15 @@ class RollViewSet(viewsets.ModelViewSet):
             roll.save(update_fields=['outcome'])
         RollHistory.objects.get_or_create(
             roll=roll,
-            defaults={'campaign': roll.session.campaign},
+            defaults={
+                'campaign': (
+                    roll.session.campaign if roll.session_id else roll.character.campaign
+                )
+            },
         )
+        # No live session: logged only, so no XP and no server stress charge.
+        if not roll.session_id:
+            return
         raw_hb = self.request.data.get("heritage_bonuses")
         if roll.roll_type == "ACTION":
             award_heritage_expression_xp(

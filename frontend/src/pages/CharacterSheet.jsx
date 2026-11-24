@@ -9987,6 +9987,29 @@ const CharacterSheetWrapper = ({
         }
       }
     }
+    // No live session: log it for the campaign. Stress stays with the sheet.
+    if (isResistance && characterId && !activeSessionId && charCampaign?.id) {
+      rollAPI
+        .createRoll({
+          character: characterId,
+          roll_type: "RESISTANCE",
+          action_name: durabilityStandResistance
+            ? "stand_durability"
+            : String(actionName || "").toLowerCase(),
+          dice_pool: diceCount,
+          results: dice,
+          outcome: isCritical
+            ? "CRITICAL_SUCCESS"
+            : highest >= 6
+              ? "FULL_SUCCESS"
+              : highest >= 4
+                ? "PARTIAL_SUCCESS"
+                : "FAILURE",
+          description: `Resistance ${String(actionName || "").toLowerCase()} roll (out of session)`,
+          roller_stress_spent: Math.max(0, Number(resistanceTotalStressCost) || 0),
+        })
+        .catch(() => {});
+    }
   };
 
   const openResistanceRollPreview = (attr, actions) => {

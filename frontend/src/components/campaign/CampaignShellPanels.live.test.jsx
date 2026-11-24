@@ -57,6 +57,16 @@ describe("campaign Rolls tab live updates", () => {
     expect(await screen.findByText(/wreck/i)).toBeInTheDocument();
   });
 
+  it("marks and filters rolls made outside a session", async () => {
+    rollAPI.getRolls.mockResolvedValue([{ ...roll(1, "wreck"), session: null }]);
+    await openRolls();
+    expect(await screen.findByText(/· Out of session/)).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "none" } });
+    await waitFor(() =>
+      expect(rollAPI.getRolls).toHaveBeenLastCalledWith({ campaign: 9, out_of_session: 1 }),
+    );
+  });
+
   it("ignores events that don't change the list", async () => {
     rollAPI.getRolls.mockResolvedValue([]);
     await openRolls();
