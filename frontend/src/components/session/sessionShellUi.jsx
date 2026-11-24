@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 import HomeCardThumb from "../home/HomeCardThumb";
 import { resolveMediaUrl } from "../../features/character-sheet/services/api";
 import { getCharacterPortraitSrc } from "../../utils/homeAvatar";
+import { canEditRosterPc } from "../roster/rosterShared";
 
 export const SESSION_SHELL_TABS = [
   { id: "rosters", label: "Rosters" },
@@ -10,6 +11,26 @@ export const SESSION_SHELL_TABS = [
   { id: "rolls", label: "Rolls" },
   { id: "rep", label: "Rep" },
 ];
+
+/** PCs this user can log a manual roll for: all for the GM, else their own. */
+export function manualRollCharacters(roster, fullCharacters, user, isGM) {
+  return (roster || []).filter((ch) => {
+    const full = (fullCharacters || []).find((c) => Number(c?.id) === Number(ch?.id));
+    return canEditRosterPc(full || ch, user, isGM);
+  });
+}
+
+/** The goal a PC is rolling for: their own label, else the session's. */
+export function rollGoalForCharacter(session, characterId) {
+  const own = session?.roll_goal_by_character?.[characterId];
+  return String(own || "").trim() || String(session?.roll_goal_label || "").trim();
+}
+
+/** Goal saved on a manual roll: what was typed, else the PC's current goal. */
+export function manualRollGoal(typed, session, characterId) {
+  const goal = String(typed || "").trim() || rollGoalForCharacter(session, characterId);
+  return goal.slice(0, 300);
+}
 
 export const NPC_DRAG_MIME = "application/x-hftf-npc-id";
 export const NPC_DRAG_SOURCE_MIME = "application/x-hftf-npc-source-faction";
@@ -433,6 +454,37 @@ export function sessionInvolvedNpcIds(npcInvolvements) {
       .map((raw) => Number(raw))
       .filter((id) => Number.isFinite(id)),
   );
+}
+
+/**
+ * GM roster: only factions In session get a tile. An NPC whose faction isn't
+ * In session stays on the roster with the NPCs that have no tile.
+ */
+export function filterRosterToInSession(groups, inSessionFactionIds) {
+  const keep = inSessionFactionIds || new Set();
+  const factionPairs = [];
+  const moved = [];
+  for (const [fid, list] of groups?.factionPairs || []) {
+    if (keep.has(Number(fid))) factionPairs.push([fid, list]);
+    else moved.push(...(list || []));
+  }
+  return { factionPairs, ungrouped: [...moved, ...(groups?.ungrouped || [])] };
+}
+
+/** Campaign factions and NPCs that are not In session. */
+export function notInSessionPool(factions, npcs, inSessionFactionIds, involvedNpcIds) {
+  const byName = (a, b) =>
+    String(a?.name ?? "").localeCompare(String(b?.name ?? ""), undefined, {
+      sensitivity: "base",
+    });
+  return {
+    factions: (factions || [])
+      .filter((f) => f?.id != null && !inSessionFactionIds.has(Number(f.id)))
+      .sort(byName),
+    npcs: (npcs || [])
+      .filter((n) => n?.id != null && !involvedNpcIds.has(Number(n.id)))
+      .sort(byName),
+  };
 }
 
 /**

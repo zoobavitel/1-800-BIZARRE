@@ -31,11 +31,12 @@ import {
   SESSION_PANEL_HEAVY_REASONS,
 } from "../features/character-sheet/services/sessionPanelSseRouting.mjs";
 import SessionGMManagementPanels from "../components/session/SessionGMManagementPanels";
-import { SessionHelpTip } from "../components/session/sessionShellUi";
+import { manualRollGoal, SessionHelpTip } from "../components/session/sessionShellUi";
 import ProgressClock from "../components/ProgressClock";
 import AvatarCropModal from "../components/AvatarCropModal";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import CampaignRosterPanels from "../components/campaign/CampaignRosterPanels";
+import { newFactionFields } from "../components/roster/rosterShared";
 import CampaignShellPanels from "../components/campaign/CampaignShellPanels";
 import HomeCardThumb from "../components/home/HomeCardThumb";
 import { compressImageForUpload } from "../utils/compressImageForUpload";
@@ -1106,6 +1107,12 @@ function CampaignDetail({
           ch.campaign?.id !== campaign?.id,
       )
     : myCharacters.filter((ch) => !ch.campaign && ch.id);
+  const ownCharacterInCampaign =
+    myCharacters.find(
+      (ch) =>
+        (ch.campaign?.id ?? ch.campaign) === campaign?.id &&
+        (ch.user?.id ?? ch.user ?? user?.id) === user?.id,
+    ) || null;
   const npcsThatCanBeAdded = allNPCs.filter((n) => !n.campaign);
   const campaignNPCs = allNPCs.filter(
     (n) => n.campaign === campaign?.id || n.campaign?.id === campaign?.id,
@@ -1357,22 +1364,7 @@ function CampaignDetail({
 
   const startFactionCreate = () =>
     setFactionForm({
-      name: "",
-      faction_type: "",
-      level: 0,
-      hold: "weak",
-      reputation: 0,
-      notes: "",
-      visible_to_players: true,
-      players_see_tier: true,
-      players_see_hold: true,
-      players_see_reputation: true,
-      players_see_notes: true,
-      players_see_npcs: true,
-      players_see_identity: true,
-      players_see_inventory: true,
-      players_see_contacts: true,
-      players_see_faction_status: true,
+      ...newFactionFields(),
       image: null,
       imageFile: null,
     });
@@ -1482,7 +1474,26 @@ function CampaignDetail({
               }
             : p,
         );
-        onRefresh();
+        await onRefresh();
+      } catch (err) {
+        setFactionError(err.message);
+      }
+    },
+    [onRefresh],
+  );
+
+  const toggleFactionVisibleToPlayers = useCallback(
+    async (factionId, visible) => {
+      setFactionError(null);
+      try {
+        await factionAPI.patchFaction(factionId, { visible_to_players: !!visible });
+        // An open editor must not save the old value back.
+        setFactionForm((p) =>
+          p && Number(p.id) === Number(factionId)
+            ? { ...p, visible_to_players: !!visible }
+            : p,
+        );
+        await onRefresh();
       } catch (err) {
         setFactionError(err.message);
       }
@@ -1598,8 +1609,7 @@ function CampaignDetail({
       hold: f.hold === "strong" ? "strong" : "weak",
       reputation: Number(f.reputation) || 0,
       notes: f.notes || "",
-      visible_to_players:
-        f.visible_to_players !== undefined ? !!f.visible_to_players : true,
+      visible_to_players: !!f.visible_to_players,
       players_see_tier: f.players_see_tier !== false,
       players_see_hold: f.players_see_hold !== false,
       players_see_reputation: f.players_see_reputation !== false,
@@ -2172,6 +2182,13 @@ function CampaignDetail({
             handleAddNpcToFaction={handleAddNpcToFaction}
             handleRemoveNpcFromFaction={handleRemoveNpcFromFaction}
             handleToggleNpcVisibleToPlayers={toggleNpcVisibleToPlayers}
+            handleToggleFactionVisibleToPlayers={toggleFactionVisibleToPlayers}
+            canAddCharacter={
+              isGM || !!campaign.players?.some((p) => p.id === user?.id)
+            }
+            charactersToAssign={availableToAssign}
+            ownCharacterInCampaign={ownCharacterInCampaign}
+            onAssignCharacter={handleAssignCharacter}
             handleBulkSetFactionNpcsVisibleToPlayers={
               bulkSetFactionNpcsVisibleToPlayers
             }
@@ -2197,50 +2214,6 @@ function CampaignDetail({
           />
         )}
       </CampaignShellPanels>
-
-      {/* Assign / create character (GM or player in the campaign) */}
-      {(isGM || campaign.players?.some((p) => p.id === user?.id)) && (
-          <div style={S.card}>
-            <span style={S.sectionLbl}>Assign a Character</span>
-            <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-              {availableToAssign.length > 0 ? (
-                <select
-                  style={{ ...S.select, flex: 1, minWidth: 160 }}
-                  defaultValue=""
-                  onChange={(e) =>
-                    e.target.value &&
-                    handleAssignCharacter(parseInt(e.target.value, 10))
-                  }
-                >
-                  <option value="" disabled>
-                    Select a character...
-                  </option>
-                  {availableToAssign.map((ch) => (
-                    <option key={ch.id} value={ch.id}>
-                      {ch.true_name || ch.alias || `Character #${ch.id}`}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <span style={{ fontSize: 12, color: "var(--text-muted)", flex: 1 }}>
-                  No unassigned characters available to link.
-                </span>
-              )}
-              {typeof onNavigateToCharacter === "function" ? (
-                <button
-                  type="button"
-                  style={S.btnPrimary}
-                  onClick={() =>
-                    onNavigateToCharacter(null, { campaignId: campaign.id })
-                  }
-                >
-                  Create character
-                </button>
-              ) : null}
-            </div>
-          </div>
-        )}
-
 
       {/* Showcased NPCs (GM only) — opposition in Entanglement/All-Out-Brawl; GM can share clocks with party */}
       {isGM && (campaign.showcased_npcs || []).length > 0 && (
@@ -4411,6 +4384,7 @@ function SessionDetail({
     setError(null);
     const kind = String(manualRoll.rollKind || "ACTION").toUpperCase();
     const peDefaults = defaultPositionEffectFromSessionDetail(cid, sessionData);
+    const loggedBy = isGM ? "GM" : "player";
     const base = {
       character: cid,
       session: session.id,
@@ -4419,6 +4393,7 @@ function SessionDetail({
       outcome: manualRoll.outcome,
       position: peDefaults.position,
       effect: peDefaults.effect,
+      goal_label: manualRollGoal(manualRoll.goalLabel, sessionData, cid),
     };
     try {
       if (kind === "RESISTANCE") {
@@ -4426,7 +4401,7 @@ function SessionDetail({
           ...base,
           roll_type: "RESISTANCE",
           action_name: (manualRoll.resistanceAttr || "resolve").toLowerCase(),
-          description: "Manual / offline resistance (GM)",
+          description: `Manual / offline resistance (${loggedBy})`,
         });
       } else if (kind === "CLEAR_STRESS" || kind === "CLEAR_STRESS_IN_PLAY") {
         const note = String(manualRoll.viceNote || "").trim();
@@ -4437,20 +4412,21 @@ function SessionDetail({
           action_name: inPlayRecovery ? "recover" : "vice",
           description: note
             ? inPlayRecovery
-              ? `Manual recovery in play (offline dice, GM). ${note}`
-              : `Manual vice (offline dice, GM). ${note}`
+              ? `Manual recovery in play (offline dice, ${loggedBy}). ${note}`
+              : `Manual vice (offline dice, ${loggedBy}). ${note}`
             : inPlayRecovery
-              ? "Manual recovery in play (offline dice, GM)"
-              : "Manual vice (offline dice, GM)",
+              ? `Manual recovery in play (offline dice, ${loggedBy})`
+              : `Manual vice (offline dice, ${loggedBy})`,
         });
       } else {
         await rollAPI.createRoll({
           ...base,
           roll_type: "ACTION",
           action_name: (manualRoll.actionName || "action").toLowerCase(),
-          description: "Manual / offline action (GM)",
+          description: `Manual / offline action (${loggedBy})`,
         });
       }
+      setManualRoll((p) => ({ ...p, goalLabel: "" }));
       const next = await rollAPI.getRolls({ session: session.id });
       setRolls(next || []);
       onRefresh();

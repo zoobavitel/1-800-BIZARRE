@@ -1049,6 +1049,18 @@ export const sessionAPI = {
       body: JSON.stringify(sessionData),
     }),
 
+  addSessionFaction: (id, factionId) =>
+    apiRequest(`/sessions/${id}/add-faction/`, {
+      method: "POST",
+      body: JSON.stringify({ faction: factionId }),
+    }),
+
+  removeSessionFaction: (id, factionId, removeNpcs = false) =>
+    apiRequest(`/sessions/${id}/remove-faction/`, {
+      method: "POST",
+      body: JSON.stringify({ faction: factionId, remove_npcs: removeNpcs }),
+    }),
+
   deleteSession: (id) =>
     apiRequest(`/sessions/${id}/`, { method: "DELETE" }),
 };

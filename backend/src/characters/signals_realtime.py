@@ -111,8 +111,14 @@ def _character_saved_broadcast(sender, instance, **kwargs):
 
 
 @receiver(post_save, sender=Roll)
+@receiver(post_delete, sender=Roll)
 def _roll_saved_broadcast(sender, instance, **kwargs):
-    cid = _campaign_id_for_session(instance.session_id)
+    # A roll made outside a live session has no session to name its campaign.
+    cid = _campaign_id_for_session(instance.session_id) or (
+        Character.objects.filter(pk=instance.character_id)
+        .values_list("campaign_id", flat=True)
+        .first()
+    )
     if cid:
         _broadcast_after_commit(
             cid,

@@ -992,9 +992,37 @@ def _ensure_npc_belongs_to_session_campaign(npc, session_campaign_id):
             "Each NPC in session npc_involvements must belong to this session's campaign."
         )
 
+def _hide_session_factions_from_players(serializer, instance, data):
+    """The In session faction list is GM only. Mutates data."""
+    request = serializer.context.get("request")
+    user = getattr(request, "user", None)
+    if not user or instance.campaign.gm_id != user.id:
+        data.pop("factions_involved", None)
+    return data
+
+
+def _add_factions_of_new_npcs(session, npc_ids_before):
+    """An NPC joining a session brings its faction, but no other members."""
+    new_npc_ids = set(session.npcs_involved.values_list("id", flat=True)) - npc_ids_before
+    if not new_npc_ids:
+        return
+    faction_ids = (
+        NPC.objects.filter(
+            id__in=new_npc_ids,
+            faction__isnull=False,
+            faction__campaign_id=session.campaign_id,
+        )
+        .values_list("faction_id", flat=True)
+        .distinct()
+    )
+    session.factions_involved.add(*faction_ids)
+
+
 class SessionSerializer(serializers.ModelSerializer):
     npcs_involved = serializers.SerializerMethodField()
     npc_involvements = serializers.SerializerMethodField()
+    # Changed through the add-faction / remove-faction session actions.
+    factions_involved = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
     characters_involved = serializers.PrimaryKeyRelatedField(
         many=True, queryset=Character.objects.all(), required=False
     )
@@ -1035,6 +1063,10 @@ class SessionSerializer(serializers.ModelSerializer):
                     }
                 )
         return attrs
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        return _hide_session_factions_from_players(self, instance, data)
 
     def get_npcs_involved(self, obj):
         """Return list of NPC ids for backward compatibility."""
@@ -1098,6 +1130,7 @@ class SessionSerializer(serializers.ModelSerializer):
                     merged[str(char_key)] = new_entry
             validated_data["loadout_by_character"] = merged
 
+        npc_ids_before = set(instance.npcs_involved.values_list("id", flat=True))
         # A many-to-many can't be assigned with setattr; set it after saving.
         characters_involved = validated_data.pop("characters_involved", None)
         for attr, value in validated_data.items():
@@ -1155,6 +1188,7 @@ class SessionSerializer(serializers.ModelSerializer):
                 if npc_id not in new_ids:
                     instance.npc_involvements.filter(npc_id=npc_id).delete()
 
+        _add_factions_of_new_npcs(instance, npc_ids_before)
         setattr(instance, "_skip_encoded_xp_settlement", skip)
         return instance
 
@@ -1201,6 +1235,7 @@ class SessionSerializer(serializers.ModelSerializer):
                         "revealed_ability_names": [],
                     },
                 )
+        _add_factions_of_new_npcs(instance, set())
         return instance
 
 class XPHistorySerializer(serializers.ModelSerializer):
@@ -1363,9 +1398,9 @@ class RollSerializer(serializers.ModelSerializer):
             "recovery_target_character_name",
         ]
         read_only_fields = ["timestamp", "rolled_by"]
-        # Old rolls may lose their session when a campaign is deleted, but a
-        # new roll always needs one.
-        extra_kwargs = {"session": {"required": True, "allow_null": False}}
+        # A roll made outside a live session has none, and old rolls lose
+        # theirs when a campaign is deleted. Clients can't send an explicit null.
+        extra_kwargs = {"session": {"required": False, "allow_null": False}}
 
     def get_recovery_target_character_name(self, obj):
         t = getattr(obj, "recovery_target", None)
@@ -1472,7 +1507,7 @@ class RollSerializer(serializers.ModelSerializer):
         is_gm = bool(
             user
             and getattr(user, "is_authenticated", False)
-            and bool(instance.session_id and instance.session.campaign.gm_id == user.id)
+            and getattr(instance.log_campaign, "gm_id", None) == user.id
         )
         if (
             (instance.roll_type or "").upper() == "FORTUNE"
@@ -1507,6 +1542,7 @@ class SessionRecordsSerializer(serializers.ModelSerializer):
 
     npcs_involved = serializers.SerializerMethodField()
     npc_involvements = serializers.SerializerMethodField()
+    factions_involved = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
     characters_involved = serializers.PrimaryKeyRelatedField(
         many=True, queryset=Character.objects.all(), required=False
     )
@@ -1536,6 +1572,7 @@ class SessionRecordsSerializer(serializers.ModelSerializer):
             "status",
             "npcs_involved",
             "npc_involvements",
+            "factions_involved",
             "characters_involved",
             "proposed_score_target",
             "proposed_score_description",
@@ -1556,6 +1593,10 @@ class SessionRecordsSerializer(serializers.ModelSerializer):
             "devils_bargain_by_character",
             "ripple_breathing_free_push_claimed_by_character",
         ]
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        return _hide_session_factions_from_players(self, instance, data)
 
     def get_npcs_involved(self, obj):
         return list(obj.npcs_involved.values_list("id", flat=True))
@@ -3247,6 +3288,9 @@ class FactionSerializer(serializers.ModelSerializer):
         if self._viewer_is_gm_or_staff(instance):
             return data
         show = bool(getattr(instance, "visible_to_players", False))
+        if not show:
+            data["image"] = None
+            data["image_url"] = ""
         if not show or not getattr(instance, "players_see_identity", True):
             data["name"] = ""
             data["faction_type"] = ""
