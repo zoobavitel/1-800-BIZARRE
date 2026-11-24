@@ -8,6 +8,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import {
   filterRosterToInSession,
   manualRollCharacters,
+  manualRollGoal,
   notInSessionPool,
   rollGoalForCharacter,
 } from "./sessionShellUi";
@@ -157,5 +158,22 @@ describe("manualRollCharacters", () => {
 
   it("gives a player with no PC nothing", () => {
     expect(manualRollCharacters(roster, full, { id: 9 }, false)).toEqual([]);
+  });
+});
+
+describe("manualRollGoal", () => {
+  const session = { roll_goal_label: "Open the door", roll_goal_by_character: { 2: "Watch the hall" } };
+
+  it("uses what the player typed", () => {
+    expect(manualRollGoal("  Pick the lock ", session, 2)).toBe("Pick the lock");
+  });
+
+  it("falls back to the PC's current goal", () => {
+    expect(manualRollGoal("", session, 2)).toBe("Watch the hall");
+    expect(manualRollGoal(undefined, session, 1)).toBe("Open the door");
+  });
+
+  it("caps at the field length", () => {
+    expect(manualRollGoal("x".repeat(400), session, 1)).toHaveLength(300);
   });
 });

@@ -2641,6 +2641,30 @@ export default function SessionGMManagementPanels({
                 <option value="BOTCH">Botch</option>
               </select>
             </div>
+            <div style={{ flex: "1 1 180px", minWidth: 150 }}>
+              <span
+                style={{
+                  color: "#9ca3af",
+                  display: "block",
+                  marginBottom: "2px",
+                }}
+              >
+                Goal
+              </span>
+              <input
+                aria-label="Roll goal"
+                maxLength={300}
+                style={{ ...S.inp, width: "100%" }}
+                value={manualRoll.goalLabel ?? ""}
+                onChange={(e) =>
+                  setManualRoll((p) => ({ ...p, goalLabel: e.target.value }))
+                }
+                placeholder={
+                  rollGoalForCharacter(sessionData, cid) ||
+                  "What is this roll for?"
+                }
+              />
+            </div>
             <button
               type="button"
               onClick={() => onManualRollCreate(cid)}
@@ -7984,8 +8008,9 @@ export default function SessionGMManagementPanels({
               marginBottom: "10px",
             }}
           >
-            Log table results. Action rolls use session default position / effect
-            from Position & effect (below).
+            {isGmUser
+              ? "Log table results. Action rolls use session default position / effect from Position & effect (below)."
+              : "Log physical dice for your PC. Action rolls use your current position and effect."}
           </div>
           <div
             style={{
@@ -8191,6 +8216,30 @@ export default function SessionGMManagementPanels({
                 <option value="FAILURE">Failure</option>
                 <option value="BOTCH">Botch</option>
               </select>
+            </div>
+            <div style={{ flex: "1 1 180px", minWidth: 150 }}>
+              <span
+                style={{
+                  color: "#9ca3af",
+                  display: "block",
+                  marginBottom: "2px",
+                }}
+              >
+                Goal
+              </span>
+              <input
+                aria-label="Roll goal"
+                maxLength={300}
+                style={{ ...S.inp, width: "100%" }}
+                value={manualRoll.goalLabel ?? ""}
+                onChange={(e) =>
+                  setManualRoll((p) => ({ ...p, goalLabel: e.target.value }))
+                }
+                placeholder={
+                  rollGoalForCharacter(sessionData, manualRollCharacterId) ||
+                  "What is this roll for?"
+                }
+              />
             </div>
             <button
               type="button"

@@ -31,7 +31,7 @@ import {
   SESSION_PANEL_HEAVY_REASONS,
 } from "../features/character-sheet/services/sessionPanelSseRouting.mjs";
 import SessionGMManagementPanels from "../components/session/SessionGMManagementPanels";
-import { SessionHelpTip } from "../components/session/sessionShellUi";
+import { manualRollGoal, SessionHelpTip } from "../components/session/sessionShellUi";
 import ProgressClock from "../components/ProgressClock";
 import AvatarCropModal from "../components/AvatarCropModal";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
@@ -4408,6 +4408,7 @@ function SessionDetail({
       outcome: manualRoll.outcome,
       position: peDefaults.position,
       effect: peDefaults.effect,
+      goal_label: manualRollGoal(manualRoll.goalLabel, sessionData, cid),
     };
     try {
       if (kind === "RESISTANCE") {
@@ -4440,6 +4441,7 @@ function SessionDetail({
           description: `Manual / offline action (${loggedBy})`,
         });
       }
+      setManualRoll((p) => ({ ...p, goalLabel: "" }));
       const next = await rollAPI.getRolls({ session: session.id });
       setRolls(next || []);
       onRefresh();

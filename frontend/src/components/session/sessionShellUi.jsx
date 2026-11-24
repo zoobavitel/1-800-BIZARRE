@@ -26,6 +26,12 @@ export function rollGoalForCharacter(session, characterId) {
   return String(own || "").trim() || String(session?.roll_goal_label || "").trim();
 }
 
+/** Goal saved on a manual roll: what was typed, else the PC's current goal. */
+export function manualRollGoal(typed, session, characterId) {
+  const goal = String(typed || "").trim() || rollGoalForCharacter(session, characterId);
+  return goal.slice(0, 300);
+}
+
 export const NPC_DRAG_MIME = "application/x-hftf-npc-id";
 export const NPC_DRAG_SOURCE_MIME = "application/x-hftf-npc-source-faction";
 export const NO_FACTION_DROP_KEY = "none";
