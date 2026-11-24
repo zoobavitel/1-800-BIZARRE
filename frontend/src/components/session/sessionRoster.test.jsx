@@ -5,7 +5,7 @@ import "@testing-library/jest-dom";
 import React from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 
-import { filterRosterToInSession, notInSessionPool } from "./sessionShellUi";
+import { filterRosterToInSession, notInSessionPool, rollGoalForCharacter } from "./sessionShellUi";
 import { SessionFactionToken, SessionNpcToken } from "./SessionTokenFaces";
 
 describe("filterRosterToInSession", () => {
@@ -115,5 +115,25 @@ describe("faction card eye", () => {
     render(<SessionFactionToken faction={faction} />);
     expect(screen.queryByRole("button", { name: /from players|to players/ })).not.toBeInTheDocument();
     expect(screen.queryByText("Hidden")).not.toBeInTheDocument();
+  });
+});
+
+describe("rollGoalForCharacter", () => {
+  const session = {
+    roll_goal_label: "Open the door",
+    roll_goal_by_character: { 2: "Watch the hall" },
+  };
+
+  it("uses a PC's own goal first", () => {
+    expect(rollGoalForCharacter(session, 2)).toBe("Watch the hall");
+  });
+
+  it("falls back to the session goal", () => {
+    expect(rollGoalForCharacter(session, 1)).toBe("Open the door");
+  });
+
+  it("is empty with no goal", () => {
+    expect(rollGoalForCharacter({ roll_goal_by_character: { 1: "  " } }, 1)).toBe("");
+    expect(rollGoalForCharacter(null, 1)).toBe("");
   });
 });

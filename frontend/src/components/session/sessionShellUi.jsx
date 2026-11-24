@@ -11,6 +11,12 @@ export const SESSION_SHELL_TABS = [
   { id: "rep", label: "Rep" },
 ];
 
+/** The goal a PC is rolling for: their own label, else the session's. */
+export function rollGoalForCharacter(session, characterId) {
+  const own = session?.roll_goal_by_character?.[characterId];
+  return String(own || "").trim() || String(session?.roll_goal_label || "").trim();
+}
+
 export const NPC_DRAG_MIME = "application/x-hftf-npc-id";
 export const NPC_DRAG_SOURCE_MIME = "application/x-hftf-npc-source-faction";
 export const NO_FACTION_DROP_KEY = "none";

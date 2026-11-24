@@ -73,6 +73,7 @@ import {
   NestedTabBar,
   SessionHelpTip,
   filterRosterToInSession,
+  rollGoalForCharacter,
   groupSessionNpcsByFaction,
   notInSessionPool,
   npcIdsEqual,
@@ -7737,7 +7738,7 @@ export default function SessionGMManagementPanels({
         </div>
         {!bulkPeSectionCollapsed ? (
           <>
-        {sessionShellTab === "rolls" ? (
+        {sessionShellTab === "rolls" && isGmUser ? (
           <>
         <p style={{ fontSize: 11, color: "#6b7280", marginTop: 0 }}>
           Overrides session defaults for these PCs on action rolls. Use{" "}
@@ -9439,6 +9440,15 @@ export default function SessionGMManagementPanels({
                     </button>
                   </div>
                 </div>
+                {!peCollapsed &&
+                !isGmUser &&
+                sessionShellTab === "rolls" &&
+                rollGoalForCharacter(sessionData, id) ? (
+                  <div style={{ fontSize: 11, color: "#d1d5db", marginBottom: 8 }}>
+                    <span style={{ color: "#9ca3af" }}>Goal: </span>
+                    {rollGoalForCharacter(sessionData, id)}
+                  </div>
+                ) : null}
                 {!peCollapsed ? (
                   sessionShellTab === "harm" ? (
                     <div style={{ minWidth: 220, display: "grid", gap: 10 }}>
