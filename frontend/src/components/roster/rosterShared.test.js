@@ -1,6 +1,7 @@
 import {
   filterFactionRosterForPlayerView,
   filterSessionFactionPairsForPlayer,
+  newFactionFields,
 } from "./rosterShared.js";
 
 describe("filterFactionRosterForPlayerView", () => {
@@ -100,5 +101,17 @@ describe("filterSessionFactionPairsForPlayer", () => {
     );
     expect(factionPairs).toEqual([[10, [{ id: 1, visible_to_players: true }]]]);
     expect(ungrouped.map((n) => n.id).sort()).toEqual([2, 3]);
+  });
+});
+
+describe("newFactionFields", () => {
+  it("starts hidden from players", () => {
+    expect(newFactionFields().visible_to_players).toBe(false);
+  });
+
+  it("keeps the section toggles on for when the GM reveals it", () => {
+    const f = newFactionFields();
+    expect(f.players_see_identity).toBe(true);
+    expect(f.players_see_npcs).toBe(true);
   });
 });

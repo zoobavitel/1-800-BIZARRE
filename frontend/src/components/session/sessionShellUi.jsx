@@ -436,6 +436,37 @@ export function sessionInvolvedNpcIds(npcInvolvements) {
 }
 
 /**
+ * GM roster: only factions In session get a tile. An NPC whose faction isn't
+ * In session stays on the roster with the NPCs that have no tile.
+ */
+export function filterRosterToInSession(groups, inSessionFactionIds) {
+  const keep = inSessionFactionIds || new Set();
+  const factionPairs = [];
+  const moved = [];
+  for (const [fid, list] of groups?.factionPairs || []) {
+    if (keep.has(Number(fid))) factionPairs.push([fid, list]);
+    else moved.push(...(list || []));
+  }
+  return { factionPairs, ungrouped: [...moved, ...(groups?.ungrouped || [])] };
+}
+
+/** Campaign factions and NPCs that are not In session. */
+export function notInSessionPool(factions, npcs, inSessionFactionIds, involvedNpcIds) {
+  const byName = (a, b) =>
+    String(a?.name ?? "").localeCompare(String(b?.name ?? ""), undefined, {
+      sensitivity: "base",
+    });
+  return {
+    factions: (factions || [])
+      .filter((f) => f?.id != null && !inSessionFactionIds.has(Number(f.id)))
+      .sort(byName),
+    npcs: (npcs || [])
+      .filter((n) => n?.id != null && !involvedNpcIds.has(Number(n.id)))
+      .sort(byName),
+  };
+}
+
+/**
  * Group session-involved NPCs under campaign factions (faction.npcs first,
  * npc.faction fallback) and keep empty factions visible in the roster grid.
  */

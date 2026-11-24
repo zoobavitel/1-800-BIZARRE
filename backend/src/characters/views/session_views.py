@@ -1,6 +1,6 @@
 import logging
 
-from django.db import models
+from django.db import models, transaction
 from django.db.models import Prefetch
 from django.core.exceptions import PermissionDenied
 from rest_framework import viewsets, status, permissions
@@ -8,8 +8,9 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.decorators import action
 
-from ..models import ExperienceTracker, Session, Roll, Character
+from ..models import ExperienceTracker, Faction, Session, Roll, Character
 from ..serializers import SessionSerializer, SessionRecordsSerializer
+from ..signals_realtime import _broadcast_after_commit
 
 logger = logging.getLogger(__name__)
 
@@ -197,6 +198,47 @@ class SessionViewSet(viewsets.ModelViewSet):
                 instance.id,
             )
         super().perform_destroy(instance)
+
+    def _session_faction_from_request(self, session, request):
+        """The campaign faction named in the body, or None."""
+        try:
+            faction_id = int(request.data.get("faction"))
+        except (TypeError, ValueError):
+            return None
+        return Faction.objects.filter(pk=faction_id, campaign_id=session.campaign_id).first()
+
+    def _session_roster_response(self, session):
+        _broadcast_after_commit(session.campaign_id, "session", session_id=session.id)
+        return Response(SessionSerializer(session, context=self.get_serializer_context()).data)
+
+    @action(detail=True, methods=['post'], url_path='add-faction')
+    def add_faction(self, request, pk=None):
+        """GM: put a campaign faction In session. Changes no NPC."""
+        session = self.get_object()
+        faction = self._session_faction_from_request(session, request)
+        if faction is None:
+            return Response(
+                {"faction": "Choose a faction from this campaign."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        session.factions_involved.add(faction)
+        return self._session_roster_response(session)
+
+    @action(detail=True, methods=['post'], url_path='remove-faction')
+    def remove_faction(self, request, pk=None):
+        """GM: take a faction out of this session, and optionally its NPCs."""
+        session = self.get_object()
+        faction = self._session_faction_from_request(session, request)
+        if faction is None:
+            return Response(
+                {"faction": "Choose a faction from this campaign."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        with transaction.atomic():
+            session.factions_involved.remove(faction)
+            if request.data.get("remove_npcs") is True:
+                session.npc_involvements.filter(npc__faction=faction).delete()
+        return self._session_roster_response(session)
 
     @action(detail=True, methods=['post'], url_path='propose-score')
     def propose_score(self, request, pk=None):
