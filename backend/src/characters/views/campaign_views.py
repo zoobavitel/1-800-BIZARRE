@@ -244,8 +244,11 @@ class CampaignViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        invitation = CampaignInvitation.objects.create(
-            campaign=campaign, invited_user=invited_user, invited_by=request.user
+        # One row per player and campaign: a declined or used invite is reopened.
+        invitation, _ = CampaignInvitation.objects.update_or_create(
+            campaign=campaign,
+            invited_user=invited_user,
+            defaults={"invited_by": request.user, "status": "pending"},
         )
         return Response(
             CampaignInvitationSerializer(invitation).data,
