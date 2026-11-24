@@ -238,6 +238,7 @@ class SheetExportServiceTests(TestCase):
             creator=self.user,
             campaign=campaign,
             name="Noriaki Kakyoin",
+            visible_to_players=True,
         )
         self.character.campaign = campaign
         self.character.crew = crew
@@ -320,6 +321,7 @@ class SheetExportAPITests(TestCase):
             creator=self.gm,
             campaign=self.campaign,
             name="Dio Brando",
+            visible_to_players=True,
             stand_name="The World",
         )
 
@@ -398,6 +400,7 @@ class SheetExportHiddenFactionTests(TestCase):
             creator=self.gm,
             campaign=self.campaign,
             name="Visible Giorno",
+            visible_to_players=True,
             faction=self.hidden,
         )
         self.character = Character.objects.create(

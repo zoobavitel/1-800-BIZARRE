@@ -39,6 +39,7 @@ import { isCampaignSseHealthy } from "../features/character-sheet/services/campa
 import { subscribeCampaignEventsShared } from "../features/character-sheet/services/campaignEventsShared";
 import { routeSheetEvents } from "../features/character-sheet/services/sheetSseRouting.mjs";
 import { shouldDropSupersededSaveResult } from "../features/character-sheet/utils/pcAutosaveQueue";
+import { withSavedProgressClocks } from "../features/character-sheet/utils/progressClockSegments";
 import {
   SupersededSaveError,
   isSameOrNewerVersion,
@@ -1205,6 +1206,14 @@ export default function CharacterPage({
         // echo). The reply's version is already held above. A create is never
         // dropped: its reply carries the new id.
         if (shouldDropSupersededSaveResult(payload.id, options?.isSuperseded)) {
+          // Clocks are replaced as a list, so keep this save's list even when
+          // the rest of the reply is dropped.
+          if (sentField("progress_clocks")) {
+            const savedClocks = transformBackendToFrontend(saved).clocks;
+            setCharTabs((prev) =>
+              withSavedProgressClocks(prev, payload.id, savedClocks),
+            );
+          }
           throw new SupersededSaveError();
         }
         if (!payload.id && saved.id && typeof window !== "undefined")

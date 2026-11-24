@@ -585,7 +585,7 @@ class NPC(models.Model):
     image = models.FileField(upload_to="npc_images/", null=True, blank=True)
     image_url = models.URLField(max_length=500, blank=True, default="")
     visible_to_players = models.BooleanField(
-        default=True,
+        default=False,
         help_text=(
             "When True, players may see this NPC on standing/roster views even "
             "if its faction is hidden. Faction membership nesting still requires "
@@ -2237,6 +2237,14 @@ class ProgressClock(models.Model):
     visible_to_party = models.BooleanField(
         default=False,
         help_text="For player clocks: when True, other players in campaign can see it",
+    )
+    # Players picked to see this clock, on top of the creator and the GM.
+    # "All players" stays the flags above; this is for "some players".
+    visible_to = models.ManyToManyField(
+        User,
+        blank=True,
+        related_name="visible_progress_clocks",
+        help_text="Players chosen to see this clock (the GM and creator always do).",
     )
     created_by = models.ForeignKey(
         User,

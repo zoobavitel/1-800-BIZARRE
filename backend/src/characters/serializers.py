@@ -5,6 +5,12 @@ from rest_framework.validators import UniqueValidator
 
 from .media_urls import own_media_file_name
 from django.contrib.auth.models import User
+from .clock_visibility import (
+    campaign_player_ids,
+    can_change_visibility,
+    npc_clock_player_ids,
+    visible_clocks_q,
+)
 from .models import (
     other_pc_in_campaign,
     _default_stash_slots,
@@ -64,6 +70,8 @@ from .services.faction_status_visibility import (
 )
 from .services.npc_section_visibility import (
     normalize_npc_players_see,
+    npc_clock_picks,
+    npc_clocks_for_player,
     npc_section_visible,
     player_session_reveals,
     redact_npc_hidden_fields_for_player,
@@ -275,6 +283,27 @@ def _sync_character_progress_clocks(character, raw_clocks, user):
                     ).first()
             except Campaign.DoesNotExist:
                 pass
+    # A player's sheet save only touches clocks they can see. Private clocks
+    # on their PC (GM only, or for other players) aren't in the payload, so
+    # they must not be edited, copied or deleted by omission.
+    camp_gm_id = (
+        Campaign.objects.filter(pk=campaign_id).values_list("gm_id", flat=True).first()
+        if campaign_id
+        else None
+    )
+    is_gm = bool(camp_gm_id) and camp_gm_id == getattr(user, "id", None)
+    hidden_ids = set()
+    if not is_gm:
+        all_ids = set(
+            ProgressClock.objects.filter(character_id=character.id).values_list("id", flat=True)
+        )
+        seen_ids = set(
+            ProgressClock.objects.filter(character_id=character.id)
+            .filter(visible_clocks_q(user))
+            .values_list("id", flat=True)
+        )
+        hidden_ids = all_ids - seen_ids
+    pickable = None
     kept_ids = []
     with transaction.atomic():
         for item in raw_clocks:
@@ -326,6 +355,27 @@ def _sync_character_progress_clocks(character, raw_clocks, user):
             # Date.now() temp ids overflow 32-bit PK; treat as new rows.
             if pk is not None and pk > 2147483647:
                 pk = None
+            if pk and pk in hidden_ids:
+                # Not theirs to see: skip it, and don't make a copy.
+                continue
+            wants_visible_to = "visible_to" in item and isinstance(
+                item.get("visible_to"), list
+            )
+            if wants_visible_to and pickable is None:
+                pickable = campaign_player_ids(
+                    Campaign.objects.filter(pk=campaign_id).first()
+                    if campaign_id
+                    else None
+                )
+            picked = []
+            if wants_visible_to:
+                for raw in item.get("visible_to"):
+                    try:
+                        uid = int(raw)
+                    except (TypeError, ValueError):
+                        continue
+                    if uid in pickable:
+                        picked.append(uid)
             if pk and pk > 0:
                 existing = ProgressClock.objects.filter(
                     id=pk, character_id=character.id
@@ -334,12 +384,24 @@ def _sync_character_progress_clocks(character, raw_clocks, user):
                     # Stale tab must not mutate or revive dismissed clocks.
                     if existing.dismissed_at is not None:
                         continue
+                    # Someone else's clock on this PC: a player can only tick it.
+                    if not is_gm and existing.created_by_id != getattr(user, "id", None):
+                        existing.filled_segments = min(filled, existing.max_segments)
+                        existing.save(active_session=active_session)
+                        kept_ids.append(existing.id)
+                        continue
                     existing.name = name
                     existing.clock_type = ct
                     existing.max_segments = max_segments
                     existing.filled_segments = filled
-                    existing.visible_to_party = vis_party
-                    existing.visible_to_players = vis_players
+                    # Only the GM or the clock's creator chooses who sees it.
+                    may_share = is_gm or existing.created_by_id == getattr(user, "id", None)
+                    if may_share:
+                        existing.visible_to_party = vis_party
+                        if is_gm:
+                            existing.visible_to_players = vis_players
+                        if wants_visible_to:
+                            existing.visible_to.set(picked)
                     existing.description = desc
                     if session_id is not None:
                         existing.session_id = session_id
@@ -348,6 +410,9 @@ def _sync_character_progress_clocks(character, raw_clocks, user):
                     existing.save(active_session=active_session)
                     kept_ids.append(existing.id)
                     continue
+                # A real id with no row: it was deleted. An old copy of the
+                # sheet must not bring it back as a new clock.
+                continue
             created_by_id = (
                 user.id if getattr(user, "is_authenticated", False) else None
             )
@@ -361,14 +426,23 @@ def _sync_character_progress_clocks(character, raw_clocks, user):
                 campaign_id=campaign_id,
                 session_id=session_id,
                 visible_to_party=vis_party,
-                visible_to_players=vis_players,
+                # Only the GM shares a clock with "all players" this way.
+                visible_to_players=vis_players if is_gm else False,
                 created_by_id=created_by_id,
             )
             nu.save(active_session=active_session)
+            if picked:
+                nu.visible_to.set(picked)
             kept_ids.append(nu.id)
         qs = ProgressClock.objects.filter(character_id=character.id)
-        # Never hard-delete dismissed or completed via sheet omission.
-        deletable = qs.filter(dismissed_at__isnull=True, completed=False)
+        # Never hard-delete dismissed or completed via sheet omission, nor
+        # clocks the saver can't see.
+        deletable = qs.filter(dismissed_at__isnull=True, completed=False).exclude(
+            id__in=hidden_ids
+        )
+        # A player can only delete clocks they made.
+        if not is_gm:
+            deletable = deletable.filter(created_by_id=getattr(user, "id", None))
         if kept_ids:
             deletable.exclude(id__in=kept_ids).delete()
         else:
@@ -1969,9 +2043,14 @@ class CharacterSerializer(serializers.ModelSerializer):
         rejected = getattr(self, "_rejected_sheet_fields", None)
         if rejected:
             data["rejected_fields"] = rejected
-        clocks = list(
-            instance.progress_clocks.filter(dismissed_at__isnull=True).order_by("id")
-        )
+        clock_qs = instance.progress_clocks.filter(dismissed_at__isnull=True)
+        request = self.context.get("request")
+        viewer = getattr(request, "user", None)
+        camp = getattr(instance, "campaign", None)
+        if viewer is not None and not (camp is not None and camp.gm_id == viewer.id):
+            # Private clocks (GM only, or picked players) stay hidden.
+            clock_qs = clock_qs.filter(visible_clocks_q(viewer)).distinct()
+        clocks = list(clock_qs.prefetch_related("visible_to").order_by("id"))
         data["progress_clocks"] = [
             {
                 "id": c.id,
@@ -1984,6 +2063,7 @@ class CharacterSerializer(serializers.ModelSerializer):
                 "description": c.description or "",
                 "visible_to_party": c.visible_to_party,
                 "visible_to_players": c.visible_to_players,
+                "visible_to": [u.id for u in c.visible_to.all()],
                 "session": c.session_id,
                 "campaign": c.campaign_id,
                 "completed": c.completed,
@@ -3288,8 +3368,15 @@ class ShowcasedNPCSerializer(serializers.ModelSerializer):
         if obj.show_clocks_to_party:
             data["vulnerability_clock_current"] = obj.npc.vulnerability_clock_current
             data["vulnerability_clock_max"] = obj.npc.vulnerability_clock_max
-            data["conflict_clocks"] = obj.npc.conflict_clocks or []
-            data["alt_clocks"] = obj.npc.alt_clocks or []
+            conflict = obj.npc.conflict_clocks or []
+            alt = obj.npc.alt_clocks or []
+            if self._viewer_is_gm(obj):
+                data["conflict_clocks"] = conflict
+                data["alt_clocks"] = alt
+            else:
+                viewer = getattr(self.context.get("request"), "user", None)
+                data["conflict_clocks"] = npc_clocks_for_player(conflict, conflict, obj.npc, viewer)
+                data["alt_clocks"] = npc_clocks_for_player(alt, alt, obj.npc, viewer)
             clocks = list(
                 obj.npc.progress_clocks.all().values(
                     "id",
@@ -3315,6 +3402,11 @@ class ProgressClockSerializer(serializers.ModelSerializer):
     completed_at = serializers.DateTimeField(read_only=True, allow_null=True)
     completed_session = serializers.PrimaryKeyRelatedField(read_only=True, allow_null=True)
     dismissed_at = serializers.DateTimeField(read_only=True, allow_null=True)
+    # Players picked to see this clock (PC private clocks). Empty with the
+    # "all players" flag off means GM only (plus the creator).
+    visible_to = serializers.PrimaryKeyRelatedField(
+        many=True, queryset=User.objects.all(), required=False
+    )
 
     def to_internal_value(self, data):
         if hasattr(data, "copy"):
@@ -3349,6 +3441,14 @@ class ProgressClockSerializer(serializers.ModelSerializer):
             filled = 0
         if filled > max_seg:
             attrs["filled_segments"] = max_seg
+        if "visible_to" in attrs:
+            campaign = attrs.get("campaign") or getattr(self.instance, "campaign", None)
+            allowed = campaign_player_ids(campaign)
+            bad = [u.pk for u in attrs["visible_to"] if u.pk not in allowed]
+            if bad:
+                raise serializers.ValidationError(
+                    {"visible_to": "Only players in this campaign can be picked."}
+                )
         return attrs
 
     def update(self, instance, validated_data):
@@ -3359,9 +3459,12 @@ class ProgressClockSerializer(serializers.ModelSerializer):
             "dismissed_at",
         ):
             validated_data.pop(key, None)
+        visible_to = validated_data.pop("visible_to", None)
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
+        if visible_to is not None:
+            instance.visible_to.set(visible_to)
         return instance
 
     def create(self, validated_data):
@@ -3372,7 +3475,11 @@ class ProgressClockSerializer(serializers.ModelSerializer):
             "dismissed_at",
         ):
             validated_data.pop(key, None)
-        return ProgressClock.objects.create(**validated_data)
+        visible_to = validated_data.pop("visible_to", None)
+        clock = ProgressClock.objects.create(**validated_data)
+        if visible_to:
+            clock.visible_to.set(visible_to)
+        return clock
 
     class Meta:
         model = ProgressClock
@@ -3392,6 +3499,7 @@ class ProgressClockSerializer(serializers.ModelSerializer):
             "npc",
             "visible_to_players",
             "visible_to_party",
+            "visible_to",
             "created_by",
             "created_by_username",
             "created_by_character_name",
@@ -3636,8 +3744,13 @@ class CampaignSerializer(serializers.ModelSerializer):
             progress_clocks = [
                 c for c in base_progress if int(c.get("id") or 0) in revealed_progress_ids
             ]
-        conflict_clocks = rev["conflict_clocks"]
-        alt_clocks = rev["alt_clocks"]
+        viewer = getattr(self.context.get("request"), "user", None)
+        conflict_clocks = npc_clocks_for_player(
+            npc.conflict_clocks, rev["conflict_clocks"], npc, viewer
+        )
+        alt_clocks = npc_clocks_for_player(
+            npc.alt_clocks, rev["alt_clocks"], npc, viewer
+        )
         stand_stats = rev["stand_coin_stats"]
         abilities = []
         campaign_abilities = npc_section_visible(
@@ -3803,47 +3916,12 @@ class CampaignSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         if not request or not request.user:
             return []
-        is_gm = obj.gm_id == request.user.id
         clocks = obj.progress_clocks.all()
-        if is_gm:
-            return ProgressClockSerializer(clocks, many=True).data
-        user = request.user
-        clocks = clocks.filter(
-            Q(npc__isnull=True) | Q(npc__campaign_id=obj.id)
-        )
-        showcased_npc_ids = list(obj.showcased_npcs.values_list("npc_id", flat=True))
-        campaign_player_ids = list(obj.players.values_list("id", flat=True)) + list(
-            obj.characters.values_list("user_id", flat=True).distinct()
-        )
-        active_sid = getattr(obj, "active_session_id", None)
-        gm_public_session = Q(session__isnull=True)
-        if active_sid:
-            gm_public_session |= Q(session_id=active_sid)
-        legacy_gm_session_visible = (
-            Q(
-                created_by__isnull=True,
-                visible_to_players=True,
-                session_id=active_sid,
-            )
-            if active_sid
-            else Q(pk__in=[])
-        )
-        clocks = clocks.filter(
-            Q(
-                Q(created_by__isnull=True, visible_to_players=True)
-                & (Q(npc__isnull=True) | Q(npc_id__in=showcased_npc_ids))
-            )
-            | Q(created_by_id=user.id)
-            | Q(visible_to_party=True, created_by_id__in=campaign_player_ids)
-            | (
-                Q(created_by_id=obj.gm_id, visible_to_players=True)
-                & gm_public_session
-            )
-            | legacy_gm_session_visible
-        )
-        # A See-off NPC's clocks never reach players.
-        clocks = clocks.exclude(npc__visible_to_players=False)
-        return ProgressClockSerializer(clocks, many=True).data
+        if obj.gm_id != request.user.id:
+            clocks = clocks.filter(visible_clocks_q(request.user)).distinct()
+        return ProgressClockSerializer(
+            clocks.prefetch_related("visible_to"), many=True
+        ).data
 
 class NPCSerializer(serializers.ModelSerializer):
     creator = serializers.PrimaryKeyRelatedField(
@@ -3990,7 +4068,7 @@ class NPCSerializer(serializers.ModelSerializer):
                 attrs.get("stand_consciousness")
             )
 
-        return attrs
+        return self._clean_npc_clock_picks(attrs)
 
     def get_level(self, obj):
         return _compute_npc_level(obj.stand_coin_stats)
@@ -4084,11 +4162,32 @@ class NPCSerializer(serializers.ModelSerializer):
             data["inventory"] = []
             data["items"] = []
             data["inventory_notes"] = ""
-        redact_npc_hidden_fields_for_player(data, instance)
+        viewer = getattr(self.context.get("request"), "user", None)
+        redact_npc_hidden_fields_for_player(data, instance, viewer)
         return redact_npc_player_payload(data, instance)
 
     def validate_players_see(self, value):
         return normalize_npc_players_see(value)
+
+    def _clean_npc_clock_picks(self, attrs):
+        """NPC clock picks: keep only players the clock can be limited to."""
+        keys = [k for k in ("conflict_clocks", "alt_clocks") if isinstance(attrs.get(k), list)]
+        if keys:
+            inst = self.instance
+            campaign = attrs.get("campaign", getattr(inst, "campaign", None))
+            crew = attrs.get("crew", getattr(inst, "crew", None))
+            allowed = npc_clock_player_ids(campaign, crew)
+            for key in keys:
+                cleaned = []
+                for clock in attrs[key]:
+                    if isinstance(clock, dict) and "visible_to" in clock:
+                        kept = sorted(npc_clock_picks(clock) & allowed)
+                        clock = {k: v for k, v in clock.items() if k != "visible_to"}
+                        if kept:
+                            clock["visible_to"] = kept
+                    cleaned.append(clock)
+                attrs[key] = cleaned
+        return attrs
 
     def create(self, validated_data):
         hamon_ids = validated_data.pop("hamon_ability_ids", [])
