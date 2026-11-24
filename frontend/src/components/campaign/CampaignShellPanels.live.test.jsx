@@ -6,7 +6,7 @@ import React from "react";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import CampaignShellPanels from "./CampaignShellPanels";
-import { rollAPI } from "../../features/character-sheet/services/api";
+import { rollAPI, sessionAPI } from "../../features/character-sheet/services/api";
 import { subscribeCampaignEventsShared } from "../../features/character-sheet/services/campaignEventsShared";
 
 jest.mock("../../features/character-sheet/services/api", () => ({
@@ -31,6 +31,7 @@ describe("campaign Rolls tab live updates", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    sessionAPI.getSessions.mockResolvedValue([]);
     subscribeCampaignEventsShared.mockImplementation((_id, h) => {
       onUpdate = h.onUpdate;
       return unsubscribe;
