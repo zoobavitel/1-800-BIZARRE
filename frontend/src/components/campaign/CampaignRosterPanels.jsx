@@ -11,6 +11,7 @@ import { SessionPcToken } from "../session/SessionTokenFaces";
 import { groupCampaignNpcsByFaction, SessionHelpTip } from "../session/sessionShellUi";
 import {
   filterFactionRosterForPlayerView,
+  newFactionFields,
 } from "../roster/rosterShared";
 import "../../styles/Home.css";
 import "../../styles/SessionTokenCards.css";
@@ -211,22 +212,8 @@ export default function CampaignRosterPanels({
     setQuickFactionBusy(true);
     try {
       await factionAPI.createFaction({
+        ...newFactionFields(),
         name,
-        faction_type: "",
-        level: 0,
-        hold: "weak",
-        reputation: 0,
-        notes: "",
-        visible_to_players: true,
-        players_see_tier: true,
-        players_see_hold: true,
-        players_see_reputation: true,
-        players_see_notes: true,
-        players_see_npcs: true,
-        players_see_identity: true,
-        players_see_inventory: true,
-        players_see_contacts: true,
-        players_see_faction_status: true,
         campaign: campaign.id,
       });
       setQuickFactionName("");

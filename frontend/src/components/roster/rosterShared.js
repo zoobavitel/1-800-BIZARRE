@@ -142,6 +142,28 @@ export function sanitizeFactionFieldsForPlayer(faction) {
 }
 
 /** Own PC or GM may edit session/campaign PC expand. */
+/** Blank faction. Hidden from players until the GM reveals it. */
+export function newFactionFields() {
+  return {
+    name: "",
+    faction_type: "",
+    level: 0,
+    hold: "weak",
+    reputation: 0,
+    notes: "",
+    visible_to_players: false,
+    players_see_tier: true,
+    players_see_hold: true,
+    players_see_reputation: true,
+    players_see_notes: true,
+    players_see_npcs: true,
+    players_see_identity: true,
+    players_see_inventory: true,
+    players_see_contacts: true,
+    players_see_faction_status: true,
+  };
+}
+
 export function canEditRosterPc(character, user, isGM) {
   if (isGM) return true;
   if (!user?.id || !character) return false;

@@ -36,6 +36,7 @@ import ProgressClock from "../components/ProgressClock";
 import AvatarCropModal from "../components/AvatarCropModal";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import CampaignRosterPanels from "../components/campaign/CampaignRosterPanels";
+import { newFactionFields } from "../components/roster/rosterShared";
 import CampaignShellPanels from "../components/campaign/CampaignShellPanels";
 import HomeCardThumb from "../components/home/HomeCardThumb";
 import { compressImageForUpload } from "../utils/compressImageForUpload";
@@ -1363,22 +1364,7 @@ function CampaignDetail({
 
   const startFactionCreate = () =>
     setFactionForm({
-      name: "",
-      faction_type: "",
-      level: 0,
-      hold: "weak",
-      reputation: 0,
-      notes: "",
-      visible_to_players: true,
-      players_see_tier: true,
-      players_see_hold: true,
-      players_see_reputation: true,
-      players_see_notes: true,
-      players_see_npcs: true,
-      players_see_identity: true,
-      players_see_inventory: true,
-      players_see_contacts: true,
-      players_see_faction_status: true,
+      ...newFactionFields(),
       image: null,
       imageFile: null,
     });
@@ -1623,8 +1609,7 @@ function CampaignDetail({
       hold: f.hold === "strong" ? "strong" : "weak",
       reputation: Number(f.reputation) || 0,
       notes: f.notes || "",
-      visible_to_players:
-        f.visible_to_players !== undefined ? !!f.visible_to_players : true,
+      visible_to_players: !!f.visible_to_players,
       players_see_tier: f.players_see_tier !== false,
       players_see_hold: f.players_see_hold !== false,
       players_see_reputation: f.players_see_reputation !== false,
