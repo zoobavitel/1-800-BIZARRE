@@ -1,3 +1,4 @@
+import { shouldClearNpcCrew } from "../utils/npcCrewGuard";
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   referenceAPI,
@@ -1394,14 +1395,13 @@ const NPCSheet = ({
 
   // Drop crew if campaign changed and crew is not in the new campaign.
   useEffect(() => {
-    if (currentCrewId == null) return;
-    if (campaignId == null || campaignId === "") {
+    // S21: an unloaded campaign list must not clear the crew (it saves as null).
+    if (
+      shouldClearNpcCrew({ currentCrewId, campaignId, activeCampaign })
+    ) {
       setCrew("");
-      return;
     }
-    const ok = campaignCrews.some((c) => Number(c.id) === Number(currentCrewId));
-    if (!ok) setCrew("");
-  }, [campaignId, campaignCrews, currentCrewId]);
+  }, [campaignId, activeCampaign, currentCrewId]);
 
   const currentFactionId = useMemo(() => {
     if (faction === "" || faction == null) return null;
@@ -2275,6 +2275,9 @@ const NPCSheet = ({
   const pendingSaveRef = useRef(false);
   /** Skip autosave when payload matches last successful save (avoids prop-churn loops). */
   const lastSavedPayloadHashRef = useRef(null);
+  /** S21: a saved NPC autosaves only after the user acts in this sheet. */
+  const userActedRef = useRef(false);
+  const userActedNpcIdRef = useRef(npc?.id ?? null);
   const buildPayloadRef = useRef(null);
   const nameRef = useRef(name);
   const onSaveRef = useRef(onSave);
@@ -2760,6 +2763,11 @@ const NPCSheet = ({
     if (hashSkip) {
       return;
     }
+    // S21: load-time state changes are not edits. Track them as the baseline.
+    if (npcIdRef.current && !userActedRef.current) {
+      lastSavedPayloadHashRef.current = payloadHash;
+      return;
+    }
     // Don't auto-save a brand-new NPC that has never been persisted and
     // still has no name — this prevents spurious creates when a blank tab
     // mounts and init effects fire state changes before the user types.
@@ -2833,6 +2841,25 @@ const NPCSheet = ({
       }
     }
   }, []);
+
+  // Runs in the capture phase, before the event's own handler changes state.
+  const noteUserAction = useCallback(() => {
+    if (userActedRef.current) return;
+    userActedRef.current = true;
+    if (npcIdRef.current && lastSavedPayloadHashRef.current == null) {
+      lastSavedPayloadHashRef.current = npcAutosavePayloadFingerprint(
+        buildPayloadRef.current(),
+      );
+    }
+  }, []);
+
+  useEffect(() => {
+    const id = npc?.id ?? null;
+    const prev = userActedNpcIdRef.current;
+    userActedNpcIdRef.current = id;
+    // A first save gives a new NPC its id; that is not a different NPC.
+    if (prev != null && id !== prev) userActedRef.current = false;
+  }, [npc?.id]);
 
   // Debounced auto-save
   useEffect(() => {
@@ -3006,7 +3033,17 @@ const NPCSheet = ({
   // ── Render ────────────────────────────────────────────────────────────────────
 
   return (
-    <div className="npc-sheet" style={S.page}>
+    <div
+      className="npc-sheet"
+      style={S.page}
+      onPointerDownCapture={noteUserAction}
+      onKeyDownCapture={noteUserAction}
+      onChangeCapture={noteUserAction}
+      onInputCapture={noteUserAction}
+      onClickCapture={noteUserAction}
+      onContextMenuCapture={noteUserAction}
+      onDropCapture={noteUserAction}
+    >
       {/* ── Header ── */}
       <div style={S.hdr}>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
