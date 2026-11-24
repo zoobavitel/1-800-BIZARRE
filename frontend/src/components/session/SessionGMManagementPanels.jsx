@@ -45,6 +45,8 @@ import {
 import NpcsStandCoin from "../NpcsStandCoin";
 import ProgressClock from "../ProgressClock";
 import { PositionStack, EffectShapes } from "../position-effect/PositionEffectIndicators";
+import HomeCardThumb from "../home/HomeCardThumb";
+import { getCharacterPortraitSrc } from "../../utils/homeAvatar";
 import {
   getPositionEffectModifierHints,
   peModifierBucketLabel,
@@ -2430,6 +2432,7 @@ export default function SessionGMManagementPanels({
                                 </span>
                               ))}
                             </div>
+                            {isGmUser ? (
                             <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
                               <button
                                 type="button"
@@ -2448,6 +2451,7 @@ export default function SessionGMManagementPanels({
                                 Del
                               </button>
                             </div>
+                            ) : null}
                           </div>
                           );
                         })
@@ -9414,7 +9418,7 @@ export default function SessionGMManagementPanels({
                         Reset harm
                       </button>
                     ) : null}
-                    {sessionShellTab === "rolls" ? (
+                    {sessionShellTab === "rolls" && isGmUser ? (
                       <button
                         type="button"
                         onClick={() => mergePosEffect({ [id]: null })}
@@ -9489,6 +9493,23 @@ export default function SessionGMManagementPanels({
                       alignItems: "flex-start",
                     }}
                   >
+                  <HomeCardThumb
+                    src={getCharacterPortraitSrc(fullCharacter)}
+                    label={ch.true_name || ch.name || `PC ${id}`}
+                    style={{
+                      background: "#111827",
+                      border: "1px solid #374151",
+                      borderRadius: 6,
+                      boxSizing: "border-box",
+                      color: "#6b7280",
+                      flexShrink: 0,
+                      fontSize: 28,
+                      fontWeight: "bold",
+                      height: 128,
+                      overflow: "hidden",
+                      width: 96,
+                    }}
+                  />
                   <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
                     <div
                       style={{
@@ -9500,7 +9521,7 @@ export default function SessionGMManagementPanels({
                     >
                       <PositionStack
                         activePosition={pos}
-                        readOnly={saving}
+                        readOnly={saving || !isGmUser}
                         onSelect={(value) =>
                           mergePosEffect({
                             [id]: { position: value, effect: eff },
@@ -9552,7 +9573,7 @@ export default function SessionGMManagementPanels({
                     >
                       <EffectShapes
                         activeEffect={eff}
-                        readOnly={saving}
+                        readOnly={saving || !isGmUser}
                         onSelect={(value) =>
                           mergePosEffect({
                             [id]: { position: pos, effect: value },
@@ -9813,6 +9834,7 @@ export default function SessionGMManagementPanels({
                                 </div>
                               </details>
                             </div>
+                            {isGmUser ? (
                             <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
                               <button
                                 type="button"
@@ -9831,6 +9853,7 @@ export default function SessionGMManagementPanels({
                                 Del
                               </button>
                             </div>
+                            ) : null}
                           </div>
                           );
                         })

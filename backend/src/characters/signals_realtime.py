@@ -111,6 +111,7 @@ def _character_saved_broadcast(sender, instance, **kwargs):
 
 
 @receiver(post_save, sender=Roll)
+@receiver(post_delete, sender=Roll)
 def _roll_saved_broadcast(sender, instance, **kwargs):
     cid = _campaign_id_for_session(instance.session_id)
     if cid:
