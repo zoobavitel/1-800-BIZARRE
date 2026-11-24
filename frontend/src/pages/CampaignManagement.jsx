@@ -4399,6 +4399,7 @@ function SessionDetail({
     setError(null);
     const kind = String(manualRoll.rollKind || "ACTION").toUpperCase();
     const peDefaults = defaultPositionEffectFromSessionDetail(cid, sessionData);
+    const loggedBy = isGM ? "GM" : "player";
     const base = {
       character: cid,
       session: session.id,
@@ -4414,7 +4415,7 @@ function SessionDetail({
           ...base,
           roll_type: "RESISTANCE",
           action_name: (manualRoll.resistanceAttr || "resolve").toLowerCase(),
-          description: "Manual / offline resistance (GM)",
+          description: `Manual / offline resistance (${loggedBy})`,
         });
       } else if (kind === "CLEAR_STRESS" || kind === "CLEAR_STRESS_IN_PLAY") {
         const note = String(manualRoll.viceNote || "").trim();
@@ -4425,18 +4426,18 @@ function SessionDetail({
           action_name: inPlayRecovery ? "recover" : "vice",
           description: note
             ? inPlayRecovery
-              ? `Manual recovery in play (offline dice, GM). ${note}`
-              : `Manual vice (offline dice, GM). ${note}`
+              ? `Manual recovery in play (offline dice, ${loggedBy}). ${note}`
+              : `Manual vice (offline dice, ${loggedBy}). ${note}`
             : inPlayRecovery
-              ? "Manual recovery in play (offline dice, GM)"
-              : "Manual vice (offline dice, GM)",
+              ? `Manual recovery in play (offline dice, ${loggedBy})`
+              : `Manual vice (offline dice, ${loggedBy})`,
         });
       } else {
         await rollAPI.createRoll({
           ...base,
           roll_type: "ACTION",
           action_name: (manualRoll.actionName || "action").toLowerCase(),
-          description: "Manual / offline action (GM)",
+          description: `Manual / offline action (${loggedBy})`,
         });
       }
       const next = await rollAPI.getRolls({ session: session.id });

@@ -5,7 +5,12 @@ import "@testing-library/jest-dom";
 import React from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 
-import { filterRosterToInSession, notInSessionPool, rollGoalForCharacter } from "./sessionShellUi";
+import {
+  filterRosterToInSession,
+  manualRollCharacters,
+  notInSessionPool,
+  rollGoalForCharacter,
+} from "./sessionShellUi";
 import { SessionFactionToken, SessionNpcToken } from "./SessionTokenFaces";
 
 describe("filterRosterToInSession", () => {
@@ -135,5 +140,22 @@ describe("rollGoalForCharacter", () => {
   it("is empty with no goal", () => {
     expect(rollGoalForCharacter({ roll_goal_by_character: { 1: "  " } }, 1)).toBe("");
     expect(rollGoalForCharacter(null, 1)).toBe("");
+  });
+});
+
+describe("manualRollCharacters", () => {
+  const roster = [{ id: 1, true_name: "Mine" }, { id: 2, true_name: "Theirs" }];
+  const full = [{ id: 1, user: 7 }, { id: 2, user: 8 }];
+
+  it("gives the GM every PC", () => {
+    expect(manualRollCharacters(roster, full, { id: 3 }, true).map((c) => c.id)).toEqual([1, 2]);
+  });
+
+  it("gives a player only their own PC", () => {
+    expect(manualRollCharacters(roster, full, { id: 7 }, false).map((c) => c.id)).toEqual([1]);
+  });
+
+  it("gives a player with no PC nothing", () => {
+    expect(manualRollCharacters(roster, full, { id: 9 }, false)).toEqual([]);
   });
 });
