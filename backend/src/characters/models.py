@@ -2915,6 +2915,14 @@ class Roll(models.Model):
         help_text="Patient when another PC rolls recovery treatment for them.",
     )
 
+    @property
+    def log_campaign(self):
+        """Campaign whose roll log holds this roll, with or without a session."""
+        if self.session_id:
+            return self.session.campaign
+        entry = getattr(self, "history_entry", None)
+        return entry.campaign if entry else None
+
     def __str__(self):
         return f"{self.character.true_name} - {self.action_name} ({self.outcome})"
 

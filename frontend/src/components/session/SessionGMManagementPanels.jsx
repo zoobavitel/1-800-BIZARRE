@@ -45,6 +45,8 @@ import {
 import NpcsStandCoin from "../NpcsStandCoin";
 import ProgressClock from "../ProgressClock";
 import { PositionStack, EffectShapes } from "../position-effect/PositionEffectIndicators";
+import HomeCardThumb from "../home/HomeCardThumb";
+import { getCharacterPortraitSrc } from "../../utils/homeAvatar";
 import {
   getPositionEffectModifierHints,
   peModifierBucketLabel,
@@ -71,6 +73,8 @@ import {
   NestedTabBar,
   SessionHelpTip,
   filterRosterToInSession,
+  manualRollCharacters,
+  rollGoalForCharacter,
   groupSessionNpcsByFaction,
   notInSessionPool,
   npcIdsEqual,
@@ -2430,6 +2434,7 @@ export default function SessionGMManagementPanels({
                                 </span>
                               ))}
                             </div>
+                            {isGmUser ? (
                             <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
                               <button
                                 type="button"
@@ -2448,6 +2453,7 @@ export default function SessionGMManagementPanels({
                                 Del
                               </button>
                             </div>
+                            ) : null}
                           </div>
                           );
                         })
@@ -2455,6 +2461,21 @@ export default function SessionGMManagementPanels({
                     </div>
                     </div>
   );
+
+  const manualRollChars = manualRollCharacters(
+    campaignChars,
+    characters,
+    user,
+    isGmUser,
+  );
+  // A player with one PC doesn't have to pick it.
+  const manualRollCharacterId = manualRollChars.some(
+    (ch) => String(ch.id) === String(manualRoll?.characterId),
+  )
+    ? String(manualRoll.characterId)
+    : !isGmUser && manualRollChars.length === 1
+      ? String(manualRollChars[0].id)
+      : "";
 
   /** Compact manual dice form locked to one PC (expand Roll tab). */
   const renderPcLockedManualRollForm = (characterId) => {
@@ -2619,6 +2640,30 @@ export default function SessionGMManagementPanels({
                 <option value="FAILURE">Failure</option>
                 <option value="BOTCH">Botch</option>
               </select>
+            </div>
+            <div style={{ flex: "1 1 180px", minWidth: 150 }}>
+              <span
+                style={{
+                  color: "#9ca3af",
+                  display: "block",
+                  marginBottom: "2px",
+                }}
+              >
+                Goal
+              </span>
+              <input
+                aria-label="Roll goal"
+                maxLength={300}
+                style={{ ...S.inp, width: "100%" }}
+                value={manualRoll.goalLabel ?? ""}
+                onChange={(e) =>
+                  setManualRoll((p) => ({ ...p, goalLabel: e.target.value }))
+                }
+                placeholder={
+                  rollGoalForCharacter(sessionData, cid) ||
+                  "What is this roll for?"
+                }
+              />
             </div>
             <button
               type="button"
@@ -7307,8 +7352,12 @@ export default function SessionGMManagementPanels({
                           </div>
                         );
                       })()}
-                      <div style={lbl}>Manual dice (offline)</div>
-                      {renderPcLockedManualRollForm(full.id)}
+                      {canEditRosterPc(full, user, isGmUser) ? (
+                        <>
+                          <div style={lbl}>Manual dice (offline)</div>
+                          {renderPcLockedManualRollForm(full.id)}
+                        </>
+                      ) : null}
                       {renderCharacterRecentRollsLog(full.id, { maxHeight: 160 })}
                     </div>
                   </RosterPcExpandPanel>
@@ -7735,6 +7784,8 @@ export default function SessionGMManagementPanels({
           <>
         {sessionShellTab === "rolls" ? (
           <>
+        {isGmUser ? (
+          <>
         <p style={{ fontSize: 11, color: "#6b7280", marginTop: 0 }}>
           Overrides session defaults for these PCs on action rolls. Use{" "}
           <strong>PE default</strong> next to a name to clear that PC&apos;s
@@ -7900,6 +7951,8 @@ export default function SessionGMManagementPanels({
             </div>
           )}
         </div>
+          </>
+        ) : null}
         <div
           style={{
             marginBottom: 12,
@@ -7955,8 +8008,9 @@ export default function SessionGMManagementPanels({
               marginBottom: "10px",
             }}
           >
-            Log table results. Action rolls use session default position / effect
-            from Position & effect (below).
+            {isGmUser
+              ? "Log table results. Action rolls use session default position / effect from Position & effect (below)."
+              : "Log physical dice for your PC. Action rolls use your current position and effect."}
           </div>
           <div
             style={{
@@ -8004,7 +8058,7 @@ export default function SessionGMManagementPanels({
               </span>
               <select
                 style={S.select}
-                value={manualRoll.characterId}
+                value={manualRollCharacterId}
                 onChange={(e) =>
                   setManualRoll((p) => ({
                     ...p,
@@ -8013,7 +8067,7 @@ export default function SessionGMManagementPanels({
                 }
               >
                 <option value="">—</option>
-                {campaignChars.map((ch) => (
+                {manualRollChars.map((ch) => (
                   <option key={ch.id} value={ch.id}>
                     {ch.true_name || ch.name || `PC ${ch.id}`}
                   </option>
@@ -8163,9 +8217,33 @@ export default function SessionGMManagementPanels({
                 <option value="BOTCH">Botch</option>
               </select>
             </div>
+            <div style={{ flex: "1 1 180px", minWidth: 150 }}>
+              <span
+                style={{
+                  color: "#9ca3af",
+                  display: "block",
+                  marginBottom: "2px",
+                }}
+              >
+                Goal
+              </span>
+              <input
+                aria-label="Roll goal"
+                maxLength={300}
+                style={{ ...S.inp, width: "100%" }}
+                value={manualRoll.goalLabel ?? ""}
+                onChange={(e) =>
+                  setManualRoll((p) => ({ ...p, goalLabel: e.target.value }))
+                }
+                placeholder={
+                  rollGoalForCharacter(sessionData, manualRollCharacterId) ||
+                  "What is this roll for?"
+                }
+              />
+            </div>
             <button
               type="button"
-              onClick={onManualRollCreate}
+              onClick={() => onManualRollCreate(manualRollCharacterId)}
               style={S.btnPrimary}
               disabled={manualRollSaving}
             >
@@ -9414,7 +9492,7 @@ export default function SessionGMManagementPanels({
                         Reset harm
                       </button>
                     ) : null}
-                    {sessionShellTab === "rolls" ? (
+                    {sessionShellTab === "rolls" && isGmUser ? (
                       <button
                         type="button"
                         onClick={() => mergePosEffect({ [id]: null })}
@@ -9435,6 +9513,15 @@ export default function SessionGMManagementPanels({
                     </button>
                   </div>
                 </div>
+                {!peCollapsed &&
+                !isGmUser &&
+                sessionShellTab === "rolls" &&
+                rollGoalForCharacter(sessionData, id) ? (
+                  <div style={{ fontSize: 11, color: "#d1d5db", marginBottom: 8 }}>
+                    <span style={{ color: "#9ca3af" }}>Goal: </span>
+                    {rollGoalForCharacter(sessionData, id)}
+                  </div>
+                ) : null}
                 {!peCollapsed ? (
                   sessionShellTab === "harm" ? (
                     <div style={{ minWidth: 220, display: "grid", gap: 10 }}>
@@ -9489,6 +9576,23 @@ export default function SessionGMManagementPanels({
                       alignItems: "flex-start",
                     }}
                   >
+                  <HomeCardThumb
+                    src={getCharacterPortraitSrc(fullCharacter)}
+                    label={ch.true_name || ch.name || `PC ${id}`}
+                    style={{
+                      background: "#111827",
+                      border: "1px solid #374151",
+                      borderRadius: 6,
+                      boxSizing: "border-box",
+                      color: "#6b7280",
+                      flexShrink: 0,
+                      fontSize: 28,
+                      fontWeight: "bold",
+                      height: 128,
+                      overflow: "hidden",
+                      width: 96,
+                    }}
+                  />
                   <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
                     <div
                       style={{
@@ -9500,7 +9604,7 @@ export default function SessionGMManagementPanels({
                     >
                       <PositionStack
                         activePosition={pos}
-                        readOnly={saving}
+                        readOnly={saving || !isGmUser}
                         onSelect={(value) =>
                           mergePosEffect({
                             [id]: { position: value, effect: eff },
@@ -9552,7 +9656,7 @@ export default function SessionGMManagementPanels({
                     >
                       <EffectShapes
                         activeEffect={eff}
-                        readOnly={saving}
+                        readOnly={saving || !isGmUser}
                         onSelect={(value) =>
                           mergePosEffect({
                             [id]: { position: pos, effect: value },
@@ -9813,6 +9917,7 @@ export default function SessionGMManagementPanels({
                                 </div>
                               </details>
                             </div>
+                            {isGmUser ? (
                             <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
                               <button
                                 type="button"
@@ -9831,6 +9936,7 @@ export default function SessionGMManagementPanels({
                                 Del
                               </button>
                             </div>
+                            ) : null}
                           </div>
                           );
                         })

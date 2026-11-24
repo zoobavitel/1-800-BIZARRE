@@ -392,7 +392,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="roll-action")
     def roll_action(self, request, pk=None):
-        """Roll dice for a character action. Supports position, effect, push (stress), and persists to Roll when session_id provided."""
+        """Roll dice for a character action. Supports position, effect, push (stress), and persists to Roll for a PC in a campaign, with or without a live session."""
         character = self.get_object()
         # get_object() only proves the caller can see this PC (any campaign
         # member can). Rolling writes its stress, XP and roll log, so it
@@ -1320,7 +1320,8 @@ class CharacterViewSet(viewsets.ModelViewSet):
         roll = None
         xp_awarded = 0
         xp_track = None
-        if session:
+        # No live session: still logged to the campaign, but it earns no XP.
+        if session or character.campaign_id:
             desc = f"{action_name} roll"
             if devil_bargain_note:
                 desc += f" [Devil's bargain: {devil_bargain_note}]"
@@ -1363,7 +1364,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
                     except (TypeError, ValueError):
                         pnid = 0
                     if pnid > 0:
-                        if not session.npcs_involved.filter(pk=pnid).exists():
+                        if session and not session.npcs_involved.filter(pk=pnid).exists():
                             return Response(
                                 {
                                     "error": (
@@ -1408,7 +1409,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 except (TypeError, ValueError):
                     pass
             ga_obj = None
-            if group_action_id:
+            if group_action_id and session:
                 ga_obj = GroupAction.objects.filter(
                     id=group_action_id, session=session, status="OPEN"
                 ).first()
@@ -1489,9 +1490,12 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 recovery_target=recovery_roll_target,
                 recovery_context=recovery_ctx_for_roll,
             )
-            RollHistory.objects.create(campaign=session.campaign, roll=roll)
+            RollHistory.objects.create(
+                campaign=session.campaign if session else character.campaign,
+                roll=roll,
+            )
 
-            if ripple_mark_character_key:
+            if session and ripple_mark_character_key:
                 cmap = getattr(
                     session, "ripple_breathing_free_push_claimed_by_character", None
                 )
@@ -1505,7 +1509,8 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 session.ripple_breathing_free_push_claimed_by_character = cmap
 
             if (
-                position == "desperate"
+                session
+                and position == "desperate"
                 and roll_type.upper() == "ACTION"
                 and action_name
             ):
@@ -1523,7 +1528,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 if innate_xp:
                     xp_awarded, xp_track = innate_xp, innate_track
 
-            if roll_type.upper() == "ACTION":
+            if session and roll_type.upper() == "ACTION":
                 award_heritage_expression_xp(
                     character, session, roll, heritage_bonuses_raw
                 )

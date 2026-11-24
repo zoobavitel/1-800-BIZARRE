@@ -5,7 +5,14 @@ from unittest.mock import patch
 from django.contrib.auth.models import User
 from django.test import TestCase
 
-from characters.models import Campaign, Character, ExperienceTracker, Heritage
+from characters.models import (
+    Campaign,
+    Character,
+    ExperienceTracker,
+    Heritage,
+    Roll,
+    Session,
+)
 from characters.realtime import broadcast_campaign_update
 
 
@@ -54,6 +61,23 @@ class RealtimePayloadTests(TestCase):
         tracker_calls = [c for c in calls if c.args[1] == "experience_tracker"]
         self.assertEqual(len(tracker_calls), 1)
         self.assertEqual(tracker_calls[0].kwargs["character_id"], self.character.id)
+
+    def test_deleting_a_roll_tells_the_campaign(self):
+        session = Session.objects.create(campaign=self.campaign, name="S")
+        roll = Roll.objects.create(
+            character=self.character, session=session, roll_type="ACTION"
+        )
+        character_id, session_id = self.character.id, session.id
+        calls = self._calls_for(roll.delete)
+        self.assertTrue(
+            any(
+                c.args[:2] == (self.campaign.id, "roll")
+                and c.kwargs.get("character_id") == character_id
+                and c.kwargs.get("session_id") == session_id
+                for c in calls
+            ),
+            calls,
+        )
 
 
 class BroadcastPayloadShapeTests(TestCase):

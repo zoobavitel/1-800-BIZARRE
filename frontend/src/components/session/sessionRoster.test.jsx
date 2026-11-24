@@ -5,7 +5,13 @@ import "@testing-library/jest-dom";
 import React from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 
-import { filterRosterToInSession, notInSessionPool } from "./sessionShellUi";
+import {
+  filterRosterToInSession,
+  manualRollCharacters,
+  manualRollGoal,
+  notInSessionPool,
+  rollGoalForCharacter,
+} from "./sessionShellUi";
 import { SessionFactionToken, SessionNpcToken } from "./SessionTokenFaces";
 
 describe("filterRosterToInSession", () => {
@@ -115,5 +121,59 @@ describe("faction card eye", () => {
     render(<SessionFactionToken faction={faction} />);
     expect(screen.queryByRole("button", { name: /from players|to players/ })).not.toBeInTheDocument();
     expect(screen.queryByText("Hidden")).not.toBeInTheDocument();
+  });
+});
+
+describe("rollGoalForCharacter", () => {
+  const session = {
+    roll_goal_label: "Open the door",
+    roll_goal_by_character: { 2: "Watch the hall" },
+  };
+
+  it("uses a PC's own goal first", () => {
+    expect(rollGoalForCharacter(session, 2)).toBe("Watch the hall");
+  });
+
+  it("falls back to the session goal", () => {
+    expect(rollGoalForCharacter(session, 1)).toBe("Open the door");
+  });
+
+  it("is empty with no goal", () => {
+    expect(rollGoalForCharacter({ roll_goal_by_character: { 1: "  " } }, 1)).toBe("");
+    expect(rollGoalForCharacter(null, 1)).toBe("");
+  });
+});
+
+describe("manualRollCharacters", () => {
+  const roster = [{ id: 1, true_name: "Mine" }, { id: 2, true_name: "Theirs" }];
+  const full = [{ id: 1, user: 7 }, { id: 2, user: 8 }];
+
+  it("gives the GM every PC", () => {
+    expect(manualRollCharacters(roster, full, { id: 3 }, true).map((c) => c.id)).toEqual([1, 2]);
+  });
+
+  it("gives a player only their own PC", () => {
+    expect(manualRollCharacters(roster, full, { id: 7 }, false).map((c) => c.id)).toEqual([1]);
+  });
+
+  it("gives a player with no PC nothing", () => {
+    expect(manualRollCharacters(roster, full, { id: 9 }, false)).toEqual([]);
+  });
+});
+
+describe("manualRollGoal", () => {
+  const session = { roll_goal_label: "Open the door", roll_goal_by_character: { 2: "Watch the hall" } };
+
+  it("uses what the player typed", () => {
+    expect(manualRollGoal("  Pick the lock ", session, 2)).toBe("Pick the lock");
+  });
+
+  it("falls back to the PC's current goal", () => {
+    expect(manualRollGoal("", session, 2)).toBe("Watch the hall");
+    expect(manualRollGoal(undefined, session, 1)).toBe("Open the door");
+  });
+
+  it("caps at the field length", () => {
+    expect(manualRollGoal("x".repeat(400), session, 1)).toHaveLength(300);
   });
 });

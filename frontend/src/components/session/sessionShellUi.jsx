@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 import HomeCardThumb from "../home/HomeCardThumb";
 import { resolveMediaUrl } from "../../features/character-sheet/services/api";
 import { getCharacterPortraitSrc } from "../../utils/homeAvatar";
+import { canEditRosterPc } from "../roster/rosterShared";
 
 export const SESSION_SHELL_TABS = [
   { id: "rosters", label: "Rosters" },
@@ -10,6 +11,26 @@ export const SESSION_SHELL_TABS = [
   { id: "rolls", label: "Rolls" },
   { id: "rep", label: "Rep" },
 ];
+
+/** PCs this user can log a manual roll for: all for the GM, else their own. */
+export function manualRollCharacters(roster, fullCharacters, user, isGM) {
+  return (roster || []).filter((ch) => {
+    const full = (fullCharacters || []).find((c) => Number(c?.id) === Number(ch?.id));
+    return canEditRosterPc(full || ch, user, isGM);
+  });
+}
+
+/** The goal a PC is rolling for: their own label, else the session's. */
+export function rollGoalForCharacter(session, characterId) {
+  const own = session?.roll_goal_by_character?.[characterId];
+  return String(own || "").trim() || String(session?.roll_goal_label || "").trim();
+}
+
+/** Goal saved on a manual roll: what was typed, else the PC's current goal. */
+export function manualRollGoal(typed, session, characterId) {
+  const goal = String(typed || "").trim() || rollGoalForCharacter(session, characterId);
+  return goal.slice(0, 300);
+}
 
 export const NPC_DRAG_MIME = "application/x-hftf-npc-id";
 export const NPC_DRAG_SOURCE_MIME = "application/x-hftf-npc-source-faction";

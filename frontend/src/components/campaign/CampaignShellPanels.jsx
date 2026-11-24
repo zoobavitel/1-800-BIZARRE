@@ -1,10 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   experienceTrackerAPI,
   normalizeListResponse,
   rollAPI,
   sessionAPI,
 } from "../../features/character-sheet/services/api";
+import { subscribeCampaignEventsShared } from "../../features/character-sheet/services/campaignEventsShared";
 import {
   SESSION_SHELL_TABS,
   SessionShellTabBar,
@@ -13,6 +14,16 @@ import CampaignHarmArmorGrid from "./CampaignHarmArmorGrid";
 import ReputationStandingPanel from "./ReputationStandingPanel";
 
 const lbl = { fontSize: 10, color: "#9ca3af", textTransform: "uppercase" };
+
+/** Campaign events that can change the Rolls or XP tab. */
+const LEDGER_EVENT_REASONS = new Set([
+  "roll",
+  "group_action",
+  "experience_tracker",
+  "session",
+  "update",
+  "",
+]);
 
 const PC_COLUMN_GRID = {
   display: "grid",
@@ -98,6 +109,14 @@ function formatRollLineBody(r) {
   return `${action} · ${diceStr} → ${outcomeStr}`;
 }
 
+function OutOfSessionTag() {
+  return (
+    <span style={{ color: "#9ca3af", fontSize: 9, marginLeft: 6 }}>
+      · Out of session
+    </span>
+  );
+}
+
 /** XP line without leading character name. */
 function formatXpLineBody(row) {
   const trig = String(row.trigger || row.source || row.kind || "XP").trim();
@@ -171,26 +190,37 @@ export default function CampaignShellPanels({
     }
   }, [scope, activeId]);
 
+  const outOfSession = scope === "none";
   const resolvedSessionId = useMemo(() => {
-    if (scope === "all") return null;
+    if (scope === "all" || scope === "none") return null;
     if (scope === "active") return activeId;
     const n = Number(scope);
     return Number.isFinite(n) ? n : null;
   }, [scope, activeId]);
 
-  const loadLedgers = useCallback(async () => {
+  const ledgerRequestRef = useRef(0);
+
+  // `live` refreshes in place: no Loading flash, and a failed fetch keeps the list.
+  const loadLedgers = useCallback(async ({ live = false } = {}) => {
     if (!campaign?.id) return;
     if (shellTab !== "rolls" && shellTab !== "xp") return;
-    setLedgerBusy(true);
-    setLedgerError(null);
+    const request = ++ledgerRequestRef.current;
+    const isCurrent = () => request === ledgerRequestRef.current;
+    if (!live) {
+      setLedgerBusy(true);
+      setLedgerError(null);
+    }
     try {
       if (shellTab === "rolls") {
         const params =
           resolvedSessionId != null
             ? { session: resolvedSessionId }
-            : { campaign: campaign.id };
+            : {
+                campaign: campaign.id,
+                ...(outOfSession ? { out_of_session: 1 } : {}),
+              };
         const data = await rollAPI.getRolls(params);
-        setRolls(normalizeListResponse(data));
+        if (isCurrent()) setRolls(normalizeListResponse(data));
       } else if (shellTab === "xp") {
         const chars = (characters || []).filter((c) => c?.id != null);
         const lists = await Promise.all(
@@ -217,26 +247,52 @@ export default function CampaignShellPanels({
           flat = flat.filter(
             (r) => Number(r.session) === Number(resolvedSessionId),
           );
+        } else if (outOfSession) {
+          flat = flat.filter((r) => r.session == null);
         }
         flat.sort((a, b) => {
           const ta = new Date(a.created_at || a.timestamp || 0).getTime();
           const tb = new Date(b.created_at || b.timestamp || 0).getTime();
           return tb - ta;
         });
-        setXpRows(flat);
+        if (isCurrent()) setXpRows(flat);
       }
     } catch (e) {
+      if (live || !isCurrent()) return;
       setLedgerError(e?.message || "Could not load records.");
       setRolls([]);
       setXpRows([]);
     } finally {
-      setLedgerBusy(false);
+      if (isCurrent()) setLedgerBusy(false);
     }
-  }, [campaign?.id, characters, resolvedSessionId, shellTab]);
+  }, [campaign?.id, characters, outOfSession, resolvedSessionId, shellTab]);
 
   useEffect(() => {
     void loadLedgers();
   }, [loadLedgers]);
+
+  const loadLedgersRef = useRef(loadLedgers);
+  loadLedgersRef.current = loadLedgers;
+  const ledgerTabOpen = shellTab === "rolls" || shellTab === "xp";
+
+  useEffect(() => {
+    if (!campaign?.id || !ledgerTabOpen) return undefined;
+    let pending = null;
+    const unsubscribe = subscribeCampaignEventsShared(campaign.id, {
+      onUpdate: (reason) => {
+        if (!LEDGER_EVENT_REASONS.has(String(reason ?? ""))) return;
+        if (pending) return;
+        pending = setTimeout(() => {
+          pending = null;
+          void loadLedgersRef.current({ live: true });
+        }, 350);
+      },
+    });
+    return () => {
+      if (pending) clearTimeout(pending);
+      unsubscribe();
+    };
+  }, [campaign?.id, ledgerTabOpen]);
 
   const rollsByPc = useMemo(() => {
     const map = new Map();
@@ -296,7 +352,8 @@ export default function CampaignShellPanels({
         {activeId != null ? (
           <option value="active">Active session</option>
         ) : null}
-        <option value="all">All sessions</option>
+        <option value="all">All rolls</option>
+        <option value="none">Out of session</option>
         {(sessions || []).map((s) => (
           <option key={s.id} value={String(s.id)}>
             {s.name || `Session ${s.id}`}
@@ -384,7 +441,7 @@ export default function CampaignShellPanels({
         <div style={S.card}>
           <span style={S.sectionLbl}>Rolls</span>
           <p style={{ fontSize: 11, color: "#6b7280", margin: "4px 0 10px" }}>
-            Dice history for the selected session scope. Open a session for live
+            Dice history, in or out of a live session. Open a session for live
             PE defaults and manual rolls.
           </p>
           {scopeSelect}
@@ -412,6 +469,7 @@ export default function CampaignShellPanels({
                           }}
                         >
                           {formatRollLineBody(r)}
+                          {r.session == null ? <OutOfSessionTag /> : null}
                         </div>
                       ))
                     )}
@@ -430,6 +488,7 @@ export default function CampaignShellPanels({
                       }}
                     >
                       {formatRollLineBody(r)}
+                          {r.session == null ? <OutOfSessionTag /> : null}
                     </div>
                   ))}
                 </PcColumnCard>
