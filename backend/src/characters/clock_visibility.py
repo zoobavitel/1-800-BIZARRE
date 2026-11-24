@@ -74,7 +74,9 @@ def visible_clocks_q(user):
     keep = Q(campaign__gm_id=user.id) | as_player | no_campaign
     # A clock never shows an NPC from another campaign.
     # A See-off NPC's clocks never reach players (the GM still sees them).
-    players_may_see_npc = Q(npc__isnull=True) | Q(npc__visible_to_players=True)
+    players_may_see_npc = (
+        Q(npc__isnull=True) | Q(npc__visible_to_players=True) | Q(campaign__gm_id=user.id)
+    )
     return keep & (Q(npc__isnull=True) | Q(npc__campaign_id=F("campaign_id"))) & players_may_see_npc
 
 
